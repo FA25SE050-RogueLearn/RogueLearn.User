@@ -92,9 +92,9 @@ steps:
       K8S_REPO_URL: *k8s_repo_url
       K8S_IMAGE_NAME: *k8s_image_name
       GIT_USERNAME:
-        from_secret: GIT_USERNAME
+        from_secret: git_username
       GIT_TOKEN:
-        from_secret: GIT_TOKEN
+        from_secret: git_token
     when:
       - event: push
         branch: [main]
@@ -115,9 +115,9 @@ steps:
         fi
     environment:
       ARGOCD_SERVER:
-        from_secret: ARGOCD_SERVER
+        from_secret: argocd_server
       ARGOCD_AUTH_TOKEN:
-        from_secret: ARGOCD_AUTH_TOKEN
+        from_secret: argocd_auth_token
       ARGOCD_APP_NAME: *argocd_app_name
     when:
       - event: push
@@ -131,7 +131,7 @@ steps:
     image: plugins/github-comment
     settings:
       api_key:
-        from_secret: GITHUB_TOKEN
+        from_secret: github_token
       message: |
         {{#success build.status}}
         ## ✅ Deployment Successful!
