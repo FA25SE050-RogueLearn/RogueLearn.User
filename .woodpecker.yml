@@ -24,6 +24,7 @@ steps:
   # Build Docker image
   docker-build:
     image: plugins/docker
+    privileged: true
     settings:
       repo: *image_name
       dockerfile: *dockerfile_path
@@ -41,6 +42,7 @@ steps:
   # Push Docker image to DockerHub (only on main branch)
   docker-push:
     image: plugins/docker
+    privileged: true
     settings:
       registry: docker.io
       repo: *image_name
