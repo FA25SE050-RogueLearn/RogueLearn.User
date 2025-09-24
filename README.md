@@ -1,4 +1,4 @@
-# RogueLearn Clean Architecture Microservice Template
+# RogueLearn Clean Architecture Microservice Template bruh
 
 A comprehensive .NET 9 microservice template following Clean Architecture principles with Domain-Driven Design patterns. This template provides a solid foundation for building scalable, maintainable microservices with pre-configured dependencies and best practices.
 
