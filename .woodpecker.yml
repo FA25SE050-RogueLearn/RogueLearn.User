@@ -1,6 +1,7 @@
 variables:
-  - &image_name "roguelearn/user-api"
+  - &image_name "soybean2610/roguelearn-user-api"
   - &dockerfile_path "./src/RogueLearn.User.Api/Dockerfile"
+  - &k8s_image_name "soybean2610/roguelearn-user-api"
   - &k8s_repo_url "https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git"
   - &k8s_manifest_path "roguelearn-user-api/base"
   - &argocd_app_name "roguelearn-user-api"
@@ -89,6 +90,7 @@ steps:
       IMAGE_NAME: *image_name
       K8S_MANIFEST_PATH: *k8s_manifest_path
       K8S_REPO_URL: *k8s_repo_url
+      K8S_IMAGE_NAME: *k8s_image_name
       GIT_USERNAME:
         from_secret: GIT_USERNAME
       GIT_TOKEN:
