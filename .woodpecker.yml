@@ -64,51 +64,38 @@ steps:
   update-k8s-manifests:
     image: alpine/k8s:1.28.4
     environment:
-      IMAGE_NAME: *image_name
-      K8S_MANIFEST_PATH: *k8s_manifest_path
-      K8S_REPO_URL: *k8s_repo_url
-      K8S_IMAGE_NAME: *k8s_image_name
+      # We still need the secrets as environment variables
       GIT_USERNAME:
-        from_secret: git_username
+        from_secret: git_username # Ensure this name is correct in Woodpecker UI
       GIT_TOKEN:
-        from_secret: git_token
+        from_secret: git_token # Ensure this name is correct in Woodpecker UI
     commands:
-      # Clone the Kubernetes repository
+      # 1. Clone the repo (we will push to this URL later)
       - git clone https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git k8s-manifests
       - cd k8s-manifests
       - git config user.name "Woodpecker CI"
       - git config user.email "soybean26102004@gmail.com"
-      
-      # Update the image tag using kustomize
+
+      # 2. --- BEST PRACTICE AUTH SETUP ---
+      # Configure git to use a credential store file.
+      - git config credential.helper "store --file=/root/.git-credentials"
+      # Write the credentials to the file. Git will now use this automatically.
+      - echo "https://$(echo $GIT_USERNAME):$(echo $GIT_TOKEN)@github.com" > /root/.git-credentials
+
+      # 3. CD into the base and run kustomize
       - cd roguelearn-user-api/base
-
-      # --- DEFINITIVE DEBUGGING ---
-      # These commands will show us exactly what the pipeline sees.
-      - echo "Current directory:"
-      - pwd
-      - echo "Files in directory:"
-      - ls -la
-      # --- END DEBUGGING ---
-      
       - kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8}
+      - cd ../.. # Go back to the repo root
 
-      - echo "Updated kustomization.yaml:"
-      - cat kustomization.yaml
-      
-      # Commit and push changes
-      - cd ../..
+      # 4. Commit and push. The push command is now clean and secure.
       - git add .
       - |
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "Update soybean2610/roguelearn-user-api image to ${CI_COMMIT_SHA:0:8}
-          
-          - Updated by Woodpecker CI
-          - Source commit: ${CI_COMMIT_SHA}
-          - Branch: ${CI_COMMIT_BRANCH}
-          - Build: ${CI_BUILD_NUMBER}"
-          git push https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git
+          git commit -m "ci: Update image for roguelearn-user-api to ${CI_COMMIT_SHA:0:8}"
+          # The URL no longer needs credentials inline! Git will find them in the credential store.
+          git push
         fi
     when:
       - event: push
