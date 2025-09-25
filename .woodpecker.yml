@@ -38,7 +38,7 @@ steps:
     depends_on:
       - build-test
 
-  # Push Docker image to DockerHub (only on main branch) bruh
+  # Push Docker image to DockerHub (only on main branch)
   docker-push:
     image: plugins/docker
     settings:
@@ -61,103 +61,103 @@ steps:
       - build-test
 
   # Update Kubernetes manifests with new image tag
-  # update-k8s-manifests:
-  #   image: alpine/k8s:1.28.4
-  #   commands:
-  #     # Clone the Kubernetes repository
-  #     - git clone ${K8S_REPO_URL} k8s-manifests
-  #     - cd k8s-manifests
-  #     - git config user.name "Woodpecker CI"
-  #     - git config user.email "soybean26102004@gmail.com"
+  update-k8s-manifests:
+    image: alpine/k8s:1.28.4
+    commands:
+      # Clone the Kubernetes repository
+      - git clone ${K8S_REPO_URL} k8s-manifests
+      - cd k8s-manifests
+      - git config user.name "Woodpecker CI"
+      - git config user.email "soybean26102004@gmail.com"
       
-  #     # Update the image tag using kustomize
-  #     - cd ${K8S_MANIFEST_PATH}
-  #     - kubectl kustomize edit set image roguelearn/user-api=${IMAGE_NAME}:${CI_COMMIT_SHA:0:8}
-  #     - cat kustomization.yaml
+      # Update the image tag using kustomize
+      - cd ${K8S_MANIFEST_PATH}
+      - kubectl kustomize edit set image roguelearn/user-api=${IMAGE_NAME}:${CI_COMMIT_SHA:0:8}
+      - cat kustomization.yaml
       
-  #     # Commit and push changes
-  #     - cd ../..
-  #     - git add .
-  #     - |
-  #       if git diff --staged --quiet; then
-  #         echo "No changes to commit"
-  #       else
-  #         git commit -m "Update ${IMAGE_NAME} image to ${CI_COMMIT_SHA:0:8}
+      # Commit and push changes
+      - cd ../..
+      - git add .
+      - |
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update ${IMAGE_NAME} image to ${CI_COMMIT_SHA:0:8}
           
-  #         - Updated by Woodpecker CI
-  #         - Source commit: ${CI_COMMIT_SHA}
-  #         - Branch: ${CI_COMMIT_BRANCH}
-  #         - Build: ${CI_BUILD_NUMBER}"
-  #         git push https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git
-  #       fi
-  #   environment:
-  #     IMAGE_NAME: *image_name
-  #     K8S_MANIFEST_PATH: *k8s_manifest_path
-  #     K8S_REPO_URL: *k8s_repo_url
-  #     K8S_IMAGE_NAME: *k8s_image_name
-  #     GIT_USERNAME:
-  #       from_secret: git_username
-  #     GIT_TOKEN:
-  #       from_secret: git_token
-  #   when:
-  #     - event: push
-  #       branch: [main]
-  #   depends_on:
-  #     - docker-push
+          - Updated by Woodpecker CI
+          - Source commit: ${CI_COMMIT_SHA}
+          - Branch: ${CI_COMMIT_BRANCH}
+          - Build: ${CI_BUILD_NUMBER}"
+          git push https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git
+        fi
+    environment:
+      IMAGE_NAME: *image_name
+      K8S_MANIFEST_PATH: *k8s_manifest_path
+      K8S_REPO_URL: *k8s_repo_url
+      K8S_IMAGE_NAME: *k8s_image_name
+      GIT_USERNAME:
+        from_secret: git_username
+      GIT_TOKEN:
+        from_secret: git_token
+    when:
+      - event: push
+        branch: [main]
+    depends_on:
+      - docker-push
 
   # Optional: Trigger ArgoCD sync (if ArgoCD API is accessible)
-  # argocd-sync:
-  #   image: argoproj/argocd:v2.8.0
-  #   commands:
-  #     - |
-  #       if [ -n "${ARGOCD_SERVER}" ] && [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
-  #         argocd login ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} --insecure
-  #         argocd app sync ${ARGOCD_APP_NAME} --prune
-  #         argocd app wait ${ARGOCD_APP_NAME} --timeout 300
-  #       else
-  #         echo "ArgoCD sync skipped - credentials not provided"
-  #       fi
-  #   environment:
-  #     ARGOCD_SERVER:
-  #       from_secret: argocd_server
-  #     ARGOCD_AUTH_TOKEN:
-  #       from_secret: argocd_auth_token
-  #     ARGOCD_APP_NAME: *argocd_app_name
-  #   when:
-  #     - event: push
-  #       branch: [main]
-  #   depends_on:
-  #     - update-k8s-manifests
-  #   failure: ignore
+  argocd-sync:
+    image: argoproj/argocd:v2.8.0
+    commands:
+      - |
+        if [ -n "${ARGOCD_SERVER}" ] && [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
+          argocd login ${ARGOCD_SERVER} --auth-token ${ARGOCD_AUTH_TOKEN} --insecure
+          argocd app sync ${ARGOCD_APP_NAME} --prune
+          argocd app wait ${ARGOCD_APP_NAME} --timeout 300
+        else
+          echo "ArgoCD sync skipped - credentials not provided"
+        fi
+    environment:
+      ARGOCD_SERVER:
+        from_secret: argocd_server
+      ARGOCD_AUTH_TOKEN:
+        from_secret: argocd_auth_token
+      ARGOCD_APP_NAME: *argocd_app_name
+    when:
+      - event: push
+        branch: [main]
+    depends_on:
+      - update-k8s-manifests
+    failure: ignore
 
-  # # Notification step
-  # notify:
-  #   image: plugins/github-comment
-  #   settings:
-  #     api_key:
-  #       from_secret: github_token
-  #     message: |
-  #       {{#success build.status}}
-  #       ## ✅ Deployment Successful!
+  # Notification step
+  notify:
+    image: plugins/github-comment
+    settings:
+      api_key:
+        from_secret: github_token
+      message: |
+        {{#success build.status}}
+        ## ✅ Deployment Successful!
         
-  #       **Repository:** {{repo.name}}  
-  #       **Image Tag:** `{{build.commit | truncate 8 ""}}`  
-  #       **Branch:** `{{build.branch}}`  
-  #       **Author:** {{build.author}}  
+        **Repository:** {{repo.name}}  
+        **Image Tag:** `{{build.commit | truncate 8 ""}}`  
+        **Branch:** `{{build.branch}}`  
+        **Author:** {{build.author}}  
         
-  #       🔗 [View Build Details]({{build.link}})
-  #       {{else}}
-  #       ## ❌ Deployment Failed!
+        🔗 [View Build Details]({{build.link}})
+        {{else}}
+        ## ❌ Deployment Failed!
         
-  #       **Repository:** {{repo.name}}  
-  #       **Branch:** `{{build.branch}}`  
-  #       **Author:** {{build.author}}  
+        **Repository:** {{repo.name}}  
+        **Branch:** `{{build.branch}}`  
+        **Author:** {{build.author}}  
         
-  #       🔗 [View Build Details]({{build.link}})
-  #       {{/success}}
-  #   when:
-  #     - event: push
-  #       branch: [main]
-  #     - status: [success, failure]
-  #   depends_on:
-  #     - argocd-sync
+        🔗 [View Build Details]({{build.link}})
+        {{/success}}
+    when:
+      - event: push
+        branch: [main]
+      - status: [success, failure]
+    depends_on:
+      - argocd-sync
