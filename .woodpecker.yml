@@ -80,8 +80,8 @@ steps:
       - git config user.email "soybean26102004@gmail.com"
       
       # Update the image tag using kustomize
-      - cd ${K8S_MANIFEST_PATH}
-      - kubectl kustomize edit set image ${K8S_IMAGE_NAME}=${IMAGE_NAME}:${CI_COMMIT_SHA:0:8}
+      - cd roguelearn-user-api/base
+      - kubectl kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8}
       - cat kustomization.yaml
       
       # Commit and push changes
@@ -91,7 +91,7 @@ steps:
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "Update ${IMAGE_NAME} image to ${CI_COMMIT_SHA:0:8}
+          git commit -m "Update soybean2610/roguelearn-user-api image to ${CI_COMMIT_SHA:0:8}
           
           - Updated by Woodpecker CI
           - Source commit: ${CI_COMMIT_SHA}
