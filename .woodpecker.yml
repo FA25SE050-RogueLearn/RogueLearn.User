@@ -105,7 +105,7 @@ steps:
 
   # Optional: Trigger ArgoCD sync (if ArgoCD API is accessible)
   argocd-sync:
-    image: argoproj/argocd:v2.8.0
+    image: quay.io/argoproj/argocd:v2.8.0
     commands:
       - |
         if [ -n "${ARGOCD_SERVER}" ] && [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
@@ -130,7 +130,7 @@ steps:
 
   # Notification step
   notify:
-    image: plugins/github-comment
+    image: woodpeckerci/plugin-github-comment
     settings:
       api_key:
         from_secret: github_token
