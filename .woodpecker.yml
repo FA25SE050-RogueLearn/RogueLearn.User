@@ -1,5 +1,6 @@
 variables:
   - &image_name "soybean2610/roguelearn-user-api"
+  - &harbor_image_path "harbor.roguelearn.site/roguelearn/roguelearn-user-api"
   - &dockerfile_path "./src/RogueLearn.User.Api/Dockerfile"
   - &k8s_image_name "soybean2610/roguelearn-user-api"
   - &k8s_repo_url "https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git"
@@ -25,7 +26,7 @@ steps:
   docker-build:
     image: plugins/docker
     settings:
-      repo: *image_name
+      repo: *harbor_image_path
       dockerfile: *dockerfile_path
       context: .
       tags:
@@ -42,8 +43,8 @@ steps:
   docker-push:
     image: plugins/docker
     settings:
-      registry: docker.io
-      repo: *image_name
+      registry: harbor.roguelearn.site
+      repo: *harbor_image_path
       dockerfile: *dockerfile_path
       context: .
       tags:
@@ -51,9 +52,9 @@ steps:
         - latest
         - ${CI_COMMIT_BRANCH}
       username:
-        from_secret: docker_username
+        from_secret: harbor_username
       password:
-        from_secret: docker_password
+        from_secret: harbor_password
     when:
       - event: push
         branch: [main]
@@ -84,7 +85,7 @@ steps:
 
       # 3. CD into the base and run kustomize
       - cd roguelearn-user-api/base
-      - kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8}
+      - kustomize edit set image soybean2610/roguelearn-user-api=harbor.roguelearn.site/roguelearn/roguelearn-user-api:${CI_COMMIT_SHA:0:8}
       - cd ../.. # Go back to the repo root
 
       # 4. Commit and push. The push command is now clean and secure.
