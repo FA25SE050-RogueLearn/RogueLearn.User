@@ -74,7 +74,7 @@ steps:
         from_secret: git_token
     commands:
       # Clone the Kubernetes repository
-      - git clone https://${GIT_USERNAME}:${GIT_TOKEN}@${K8S_REPO_URL#https://} k8s-manifests
+      - git clone https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git k8s-manifests
       - cd k8s-manifests
       - git config user.name "Woodpecker CI"
       - git config user.email "soybean26102004@gmail.com"
