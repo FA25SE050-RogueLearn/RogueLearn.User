@@ -90,10 +90,7 @@ steps:
       - ls -la
       # --- END DEBUGGING ---
       
-      # --- [THE BOMBPROOF FIX] ---
-      # Replace the buggy kustomize command with a direct text replacement using sed.
-      - sed -i "s|newTag: .*|newTag: ${CI_COMMIT_SHA:0:8}|" kustomization.yaml
-      # --- [END OF FIX] ---
+      - kubectl kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8} .
 
       - echo "Updated kustomization.yaml:"
       - cat kustomization.yaml
