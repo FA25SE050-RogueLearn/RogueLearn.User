@@ -90,7 +90,7 @@ steps:
       - ls -la
       # --- END DEBUGGING ---
       
-      - kubectl kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8} .
+      - kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8} roguelearn-user-api/base
 
       - echo "Updated kustomization.yaml:"
       - cat kustomization.yaml
