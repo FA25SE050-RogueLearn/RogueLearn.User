@@ -38,7 +38,7 @@ steps:
     depends_on:
       - build-test
 
-  # Push Docker image to DockerHub (only on main branch)
+  # Push Docker image to DockerHub (only on main branch) bruh
   docker-push:
     image: plugins/docker
     settings:
