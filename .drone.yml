@@ -3,7 +3,7 @@ kind: pipeline
 type: docker
 name: roguelearn-user-api
 
-# Global environment variables (equivalent to Woodpecker variables)
+# Global environment variables (equivalent to Woodpecker variables) 
 environment:
   IMAGE_NAME: soybean2610/roguelearn-user-api
   DOCKERFILE_PATH: ./src/RogueLearn.User.Api/Dockerfile
