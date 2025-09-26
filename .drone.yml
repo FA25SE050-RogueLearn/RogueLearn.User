@@ -1,111 +1,129 @@
-variables:
-  - &image_name "soybean2610/roguelearn-user-api"
-  - &dockerfile_path "./src/RogueLearn.User.Api/Dockerfile"
-  - &k8s_image_name "soybean2610/roguelearn-user-api"
-  - &k8s_repo_url "https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git"
-  - &k8s_manifest_path "roguelearn-user-api/base"
-  - &argocd_app_name "roguelearn-user-api"
+---
+kind: pipeline
+type: docker
+name: roguelearn-user-api
 
-when:
-  - event: [push, pull_request]
-    branch: [main]
+# Global environment variables (equivalent to Woodpecker variables)
+environment:
+  IMAGE_NAME: soybean2610/roguelearn-user-api
+  DOCKERFILE_PATH: ./src/RogueLearn.User.Api/Dockerfile
+  K8S_IMAGE_NAME: soybean2610/roguelearn-user-api
+  K8S_REPO_URL: https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git
+  K8S_MANIFEST_PATH: roguelearn-user-api/base
+  ARGOCD_APP_NAME: roguelearn-user-api
+
+# Trigger conditions
+trigger:
+  branch:
+    - main
+  event:
+    - push
+    - pull_request
 
 steps:
   # Build and test the application
-  build-test:
+  - name: build-test
     image: mcr.microsoft.com/dotnet/sdk:9.0
     commands:
       - dotnet restore
       - dotnet build --configuration Release --no-restore
       - dotnet test --configuration Release --no-build --verbosity normal
-    when:
-      - event: [push, pull_request]
 
-  # Build Docker image
-  docker-build:
+  # Build Docker image (dry run for pull requests)
+  - name: docker-build
     image: plugins/docker
     settings:
-      repo: *image_name
-      dockerfile: *dockerfile_path
+      repo: ${IMAGE_NAME}
+      dockerfile: ${DOCKERFILE_PATH}
       context: .
       tags:
-        - ${CI_COMMIT_SHA:0:8}
+        - ${DRONE_COMMIT_SHA:0:8}
         - latest
-        - ${CI_COMMIT_BRANCH}
+        - ${DRONE_BRANCH}
       dry_run: true
-    when:
-      - event: pull_request
     depends_on:
       - build-test
+    when:
+      event:
+        - pull_request
 
-  # Push Docker image to DockerHub (only on main branch)
-  docker-push:
+  # Push Docker image to DockerHub (only on main branch push)
+  - name: docker-push
     image: plugins/docker
     settings:
       registry: docker.io
-      repo: *image_name
-      dockerfile: *dockerfile_path
+      repo: ${IMAGE_NAME}
+      dockerfile: ${DOCKERFILE_PATH}
       context: .
       tags:
-        - ${CI_COMMIT_SHA:0:8}
+        - ${DRONE_COMMIT_SHA:0:8}
         - latest
-        - ${CI_COMMIT_BRANCH}
+        - ${DRONE_BRANCH}
       username:
         from_secret: docker_username
       password:
         from_secret: docker_password
-    when:
-      - event: push
-        branch: [main]
     depends_on:
       - build-test
+    when:
+      branch:
+        - main
+      event:
+        - push
 
   # Update Kubernetes manifests with new image tag
-  update-k8s-manifests:
+  - name: update-k8s-manifests
     image: alpine/k8s:1.28.4
     environment:
-      # We still need the secrets as environment variables
       GIT_USERNAME:
-        from_secret: git_username # Ensure this name is correct in Woodpecker UI
+        from_secret: git_username
       GIT_TOKEN:
-        from_secret: git_token # Ensure this name is correct in Woodpecker UI
+        from_secret: git_token
     commands:
       # 1. Clone the repo (we will push to this URL later)
       - git clone https://github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git k8s-manifests
       - cd k8s-manifests
-      - git config user.name "Woodpecker CI"
-      - git config user.email "soybean26102004@gmail.com"
-
+      - git config user.name "Drone CI"
+      - git config user.email "anhphmse183496@fpt.edu.vn"
+      
       # 2. --- BEST PRACTICE AUTH SETUP ---
       # Configure git to use a credential store file.
       - git config credential.helper "store --file=/root/.git-credentials"
       # Write the credentials to the file. Git will now use this automatically.
       - echo "https://$(echo $GIT_USERNAME):$(echo $GIT_TOKEN)@github.com" > /root/.git-credentials
-
+      
       # 3. CD into the base and run kustomize
       - cd roguelearn-user-api/base
-      - kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${CI_COMMIT_SHA:0:8}
+      - kustomize edit set image soybean2610/roguelearn-user-api=soybean2610/roguelearn-user-api:${DRONE_COMMIT_SHA:0:8}
       - cd ../.. # Go back to the repo root
-
+      
       # 4. Commit and push. The push command is now clean and secure.
       - git add .
       - |
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "ci: Update image for roguelearn-user-api to ${CI_COMMIT_SHA:0:8}"
+          git commit -m "ci: Update image for roguelearn-user-api to ${DRONE_COMMIT_SHA:0:8}"
           # The URL no longer needs credentials inline! Git will find them in the credential store.
           git push
         fi
-    when:
-      - event: push
-        branch: [main]
     depends_on:
       - docker-push
+    when:
+      branch:
+        - main
+      event:
+        - push
 
   # Optional: Trigger ArgoCD sync (if ArgoCD API is accessible)
-  argocd-sync:
+  - name: argocd-sync
     image: quay.io/argoproj/argocd:v2.8.0
+    environment:
+      ARGOCD_SERVER:
+        from_secret: argocd_server
+      ARGOCD_AUTH_TOKEN:
+        from_secret: argocd_auth_token
+      ARGOCD_APP_NAME: ${ARGOCD_APP_NAME}
     commands:
       - |
         if [ -n "${ARGOCD_SERVER}" ] && [ -n "${ARGOCD_AUTH_TOKEN}" ]; then
@@ -115,22 +133,18 @@ steps:
         else
           echo "ArgoCD sync skipped - credentials not provided"
         fi
-    environment:
-      ARGOCD_SERVER:
-        from_secret: argocd_server
-      ARGOCD_AUTH_TOKEN:
-        from_secret: argocd_auth_token
-      ARGOCD_APP_NAME: *argocd_app_name
-    when:
-      - event: push
-        branch: [main]
     depends_on:
       - update-k8s-manifests
     failure: ignore
+    when:
+      branch:
+        - main
+      event:
+        - push
 
   # Notification step
-  notify:
-    image: woodpeckerci/plugin-github-comment
+  - name: notify
+    image: plugins/github-comment
     settings:
       api_key:
         from_secret: github_token
@@ -153,9 +167,13 @@ steps:
         
         🔗 [View Build Details]({{build.link}})
         {{/success}}
-    when:
-      - event: push
-        branch: [main]
-      - status: [success, failure]
     depends_on:
       - argocd-sync
+    when:
+      branch:
+        - main
+      event:
+        - push
+      status:
+        - success
+        - failure
