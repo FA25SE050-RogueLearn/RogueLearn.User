@@ -66,10 +66,10 @@ spec:
                                     }
                                 }
                             }
-                            sh """
+                            sh ""
                             mkdir -p /kaniko/.docker
                             echo '${dockerConfig}' > /kaniko/.docker/config.json
-                            """
+                            ""
                         }
 
                         // --- THIS IS THE CORRECTED LINE ---
