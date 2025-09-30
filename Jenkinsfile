@@ -1,11 +1,25 @@
-// Jenkinsfile (for Harbor and Kubernetes)
+// Jenkinsfile (Corrected with Kaniko and deleteDir)
 
 pipeline {
-    // This tells Jenkins to create a fresh Kubernetes Pod for every pipeline run.
-    agent {
-        kubernetes {
-            // This YAML defines the pod with all the tools we need.
-            yaml """
+    // We only need a Kaniko agent now for the build stage.
+    // Other stages will use a minimal agent.
+    agent any
+
+    // --- Environment variables are unchanged ---
+    environment {
+        HARBOR_URL           = "harbor.roguelearn.site" // Your Harbor domain
+        HARBOR_PROJECT       = "roguelearn"
+        APP_IMAGE_NAME       = "roguelearn-user-api"
+        HARBOR_IMAGE_PATH    = "${HARBOR_URL}/${HARBOR_PROJECT}/${APP_IMAGE_NAME}"
+        KUSTOMIZE_BASE_IMAGE = "soybean2610/roguelearn-user-api"
+    }
+
+    stages {
+        stage('Build and Test') {
+            // This stage needs the .NET SDK
+            agent {
+                kubernetes {
+                    yaml """
 apiVersion: v1
 kind: Pod
 spec:
@@ -14,38 +28,10 @@ spec:
     image: mcr.microsoft.com/dotnet/sdk:9.0
     command: [sleep]
     args: [99d]
-  - name: docker
-    image: docker:24.0
-    command: [sleep]
-    args: [99d]
-    volumeMounts:
-    - name: dockersock
-      mountPath: /var/run/docker.sock
-  - name: kustomize
-    image: alpine/k8s:1.28.4
-    command: [sleep]
-    args: [99d]
-  volumes:
-  - name: dockersock
-    hostPath:
-      path: /var/run/docker.sock
 """
-        }
-    }
-
-    // Define environment variables to make the script cleaner
-    environment {
-        HARBOR_URL           = "harbor.roguelearn.site" // IMPORTANT: Replace with your Harbor domain
-        HARBOR_PROJECT       = "roguelearn"
-        APP_IMAGE_NAME       = "roguelearn-user-api"
-        HARBOR_IMAGE_PATH    = "${HARBOR_URL}/${HARBOR_PROJECT}/${APP_IMAGE_NAME}"
-        KUSTOMIZE_BASE_IMAGE = "soybean2610/roguelearn-user-api" // The original image name in your kustomize files
-    }
-
-    stages {
-        stage('Build and Test') {
+                }
+            }
             steps {
-                // Run these steps inside the 'dotnet' container
                 container('dotnet') {
                     sh 'dotnet restore'
                     sh 'dotnet build --configuration Release --no-restore'
@@ -54,27 +40,43 @@ spec:
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                // Run these steps inside the 'docker' container
-                container('docker') {
-                    // Use the 'harbor-credentials' we created in Jenkins
-                    withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                        sh "echo $HARBOR_PASS | docker login ${HARBOR_URL} -u $HARBOR_USER --password-stdin"
-                        sh "docker build -t ${HARBOR_IMAGE_PATH}:${env.BRANCH_NAME} -t ${HARBOR_IMAGE_PATH}:${env.GIT_COMMIT.substring(0,8)} -t ${HARBOR_IMAGE_PATH}:latest -f src/RogueLearn.User.Api/Dockerfile ."
-                    }
+        // --- REPLACED Build and Push stages with a single Kaniko stage ---
+        stage('Build and Push to Harbor with Kaniko') {
+            // This stage only runs on the main branch
+            when { branch 'main' }
+            // This stage needs a special Kaniko agent
+            agent {
+                kubernetes {
+                    yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:v1.10.0-debug # Use a specific, stable version
+    imagePullPolicy: Always
+    command: [sleep]
+    args: [99d]
+"""
                 }
             }
-        }
-
-        stage('Push to Harbor') {
-            // This stage only runs for pushes to the 'main' branch
-            when { branch 'main' }
             steps {
-                container('docker') {
+                container('kaniko') {
+                    // Kaniko authenticates using a Docker config.json file.
+                    // We use withCredentials to create this file securely in the container's home directory.
                     withCredentials([usernamePassword(credentialsId: 'harbor-credentials', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                        sh "echo $HARBOR_PASS | docker login ${HARBOR_URL} -u $HARBOR_USER --password-stdin"
-                        sh "docker push --all-tags ${HARBOR_IMAGE_PATH}"
+                        // Create the config file required by Kaniko
+                        sh """
+                        echo "{\\"auths\\":{\\"${HARBOR_URL}\\":{\\"username\\":\\"${HARBOR_USER}\\",\\"password\\":\\"${HARBOR_PASS}\\",\\"auth\\":\\"$(echo -n ${HARBOR_USER}:${HARBOR_PASS} | base64)\\"}}}" > /kaniko/.docker/config.json
+                        """
+
+                        // Execute Kaniko. It builds AND pushes in one command.
+                        sh """
+                        /kaniko/executor --context=\`pwd\` \
+                                         --dockerfile=src/RogueLearn.User.Api/Dockerfile \
+                                         --destination=${HARBOR_IMAGE_PATH}:${env.GIT_COMMIT.substring(0,8)} \
+                                         --destination=${HARBOR_IMAGE_PATH}:latest
+                        """
                     }
                 }
             }
@@ -82,23 +84,35 @@ spec:
 
         stage('Update K8s Manifests') {
             when { branch 'main' }
+            // This stage needs git and kustomize
+            agent {
+                 kubernetes {
+                    yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: kustomize
+    image: alpine/k8s:1.28.4
+    command: [sleep]
+    args: [99d]
+"""
+                }
+            }
             steps {
-                // Run these steps inside the 'kustomize' container
                 container('kustomize') {
-                    // Use the 'github-token' we created in Jenkins
                     withCredentials([string(credentialsId: 'github-token', variable: 'GIT_TOKEN')]) {
                         sh """
-                        # Clone, configure git, and run kustomize
                         git clone https://oauth2:${GIT_TOKEN}@github.com/FA25SE050-RogueLearn/RogueLearn.Kubernetes.git k8s-manifests
                         cd k8s-manifests
                         git config user.name "Jenkins CI"
                         git config user.email "jenkins@your-domain.com"
-
                         cd roguelearn-user-api/base
+                        
+                        # This kustomize command is unchanged
                         kustomize edit set image ${KUSTOMIZE_BASE_IMAGE}=${HARBOR_IMAGE_PATH}:${env.GIT_COMMIT.substring(0,8)}
+                        
                         cd ../..
-
-                        # Commit and push if there are changes
                         git add .
                         if ! git diff --staged --quiet; then
                           git commit -m "ci: Update image for roguelearn-user-api to ${env.GIT_COMMIT.substring(0,8)} (from Harbor)"
@@ -114,10 +128,10 @@ spec:
     }
 
     post {
-        // This block runs at the end of every pipeline run
         always {
             echo 'Pipeline finished.'
-            cleanWs() // Cleans up the workspace to save disk space
+            // --- FIXED: Replaced cleanWs() with the built-in deleteDir() ---
+            deleteDir() // Clean up the workspace
         }
     }
 }
