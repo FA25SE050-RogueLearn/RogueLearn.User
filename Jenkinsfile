@@ -66,11 +66,11 @@ spec:
                                     }
                                 }
                             }
-                            sh ""
-                            mkdir -p /kaniko/.docker
-                            echo '${dockerConfig}' > /kaniko/.docker/config.json
-                            ""
+                            """
+                            writeFile file: 'kaniko-docker-config.json', text: dockerConfig
                         }
+                        sh "mkdir -p /kaniko/.docker"
+                        sh "cp kaniko-docker-config.json /kaniko/.docker/config.json"
 
                         // --- THIS IS THE CORRECTED LINE ---
                         // The entire command is now on a single line, with no backslashes.
