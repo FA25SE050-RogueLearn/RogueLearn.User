@@ -7,6 +7,10 @@ using RogueLearn.User.Infrastructure.Extensions;
 using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using System.Text;
+using DotNetEnv; // Add this using statement
+
+// Load environment variables from .env file
+Env.Load();
 
 // Configure Serilog
 Log.Logger = SerilogConfiguration.CreateLogger();
