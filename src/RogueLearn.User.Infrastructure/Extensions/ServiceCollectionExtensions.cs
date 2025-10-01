@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
 using MassTransit;
