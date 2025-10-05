@@ -1,7 +1,6 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Extensions/ServiceCollectionExtensions.cs
 using FluentValidation;
 using MediatR;
-using Microsoft.OpenApi.Models; // Add this using statement
+using Microsoft.OpenApi.Models;
 using RogueLearn.User.Application.Behaviours;
 using RogueLearn.User.Application.Features.Products.Commands.CreateProduct;
 using RogueLearn.User.Application.Mappings;
@@ -47,8 +46,6 @@ public static class ServiceCollectionExtensions
 			}
 
 			// --- ADD THIS SECTION TO CONFIGURE JWT AUTHENTICATION IN SWAGGER ---
-			// 1. Define the security scheme (what the authentication is).
-			// This adds the "Authorize" button and the dialog to enter the token.
 			c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
 			{
 				Name = "Authorization",
@@ -59,8 +56,6 @@ public static class ServiceCollectionExtensions
 				BearerFormat = "JWT"
 			});
 
-			// 2. Add a security requirement (how to apply the scheme).
-			// This tells Swagger to include the Authorization header with the token in requests.
 			c.AddSecurityRequirement(new OpenApiSecurityRequirement
 			{
 				{

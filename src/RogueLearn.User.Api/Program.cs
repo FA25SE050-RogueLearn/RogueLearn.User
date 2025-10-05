@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using RogueLearn.User.Api.Extensions;
@@ -7,7 +6,7 @@ using RogueLearn.User.Infrastructure.Extensions;
 using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using System.Text;
-using DotNetEnv; // Add this using statement
+using DotNetEnv;
 
 // Load environment variables from .env file
 Env.Load();
@@ -66,7 +65,7 @@ try
 		app.UseSwaggerUI(c =>
 		{
 			c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
-			c.RoutePrefix = string.Empty; // Set Swagger UI at the app's root
+			c.RoutePrefix = string.Empty;
 		});
 	}
 

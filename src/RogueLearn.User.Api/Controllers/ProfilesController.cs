@@ -1,6 +1,5 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/ProfilesController.cs
-using MediatR;
-using Microsoft.AspNetCore.Authorization; // Add this using directive
+﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 
@@ -8,7 +7,7 @@ namespace RogueLearn.User.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // ADD THIS ATTRIBUTE TO PROTECT ALL ACTIONS IN THIS CONTROLLER
+[Authorize] // This attribute protects all actions in this controller
 public class ProfilesController : ControllerBase
 {
 	private readonly IMediator _mediator;
