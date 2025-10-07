@@ -2,7 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.OpenApi.Models;
 using RogueLearn.User.Application.Behaviours;
-using RogueLearn.User.Application.Features.Products.Commands.CreateProduct;
+using RogueLearn.User.Application.Features.UserProfiles.Commands.LogNewUser;
 using RogueLearn.User.Application.Mappings;
 using System.Reflection;
 
@@ -13,13 +13,13 @@ public static class ServiceCollectionExtensions
 	public static IServiceCollection AddApplication(this IServiceCollection services)
 	{
 		// MediatR
-		services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(CreateProductCommand).Assembly));
+		services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(LogNewUserCommand).Assembly));
 
 		// Add AutoMapper
 		services.AddAutoMapper(cfg => { }, typeof(MappingProfile));
 
 		// FluentValidation
-		services.AddValidatorsFromAssembly(typeof(CreateProductCommand).Assembly);
+		services.AddValidatorsFromAssembly(typeof(LogNewUserCommand).Assembly);
 
 		// Pipeline Behaviors
 		services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));

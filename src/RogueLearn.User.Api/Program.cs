@@ -36,7 +36,7 @@ try
 			options.TokenValidationParameters = new TokenValidationParameters
 			{
 				ValidateIssuer = true,
-				ValidIssuer = supabaseUrl,
+				ValidIssuer = supabaseUrl + "/auth/v1",
 				ValidateAudience = true,
 				ValidAudience = "authenticated",
 				ValidateLifetime = true,
@@ -51,7 +51,7 @@ try
 
 	// Add services to the container
 	builder.Services.AddApplication();
-	builder.Services.AddInfrastructureServices(builder.Configuration);
+	await builder.Services.AddInfrastructureServices(builder.Configuration);
 	builder.Services.AddApiServices();
 
 	var app = builder.Build();
@@ -66,6 +66,17 @@ try
 		{
 			c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
 			c.RoutePrefix = string.Empty;
+		});
+
+		// Redirect root requests to Swagger UI
+		app.Use(async (context, next) =>
+		{
+			if (context.Request.Path == "/")
+			{
+				context.Response.Redirect("/index.html");
+				return;
+			}
+			await next();
 		});
 	}
 

@@ -13,52 +13,53 @@ namespace RogueLearn.User.Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
+  public static async Task<IServiceCollection> AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
+  {
+    // Configure Supabase
+    var supabaseUrl = configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
+    var supabaseKey = configuration["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
+
+    var options = new SupabaseOptions
     {
-        // Configure Supabase
-        var supabaseUrl = configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
-        var supabaseKey = configuration["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
-        
-        services.AddSingleton(provider =>
-        {
-            var options = new SupabaseOptions
-            {
-                AutoConnectRealtime = true
-            };
-            return new Client(supabaseUrl, supabaseKey, options);
-        });
+      AutoConnectRealtime = true
+    };
 
-        // Configure MassTransit with RabbitMQ
-        services.AddMassTransit(busConfig =>
-        {
-            busConfig.UsingRabbitMq((context, cfg) =>
-            {
-                var rabbitMqHost = configuration["RabbitMQ:Host"] ?? "localhost";
-                var rabbitMqUsername = configuration["RabbitMQ:Username"] ?? "guest";
-                var rabbitMqPassword = configuration["RabbitMQ:Password"] ?? "guest";
+    var supabase = new Client(supabaseUrl, supabaseKey, options);
+    await supabase.InitializeAsync();
 
-                cfg.Host(rabbitMqHost, "/", h =>
-                {
-                    h.Username(rabbitMqUsername);
-                    h.Password(rabbitMqPassword);
-                });
+    // Register Supabase client as a singleton
+    services.AddSingleton(supabase);
 
-                cfg.ConfigureEndpoints(context);
-            });
-        });
+    // Configure MassTransit with RabbitMQ
+    //services.AddMassTransit(busConfig =>
+    //{
+    //    busConfig.UsingRabbitMq((context, cfg) =>
+    //    {
+    //        var rabbitMqHost = configuration["RabbitMQ:Host"] ?? "localhost";
+    //        var rabbitMqUsername = configuration["RabbitMQ:Username"] ?? "guest";
+    //        var rabbitMqPassword = configuration["RabbitMQ:Password"] ?? "guest";
 
-        // Register Generic Repository
-        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+    //        cfg.Host(rabbitMqHost, "/", h =>
+    //        {
+    //            h.Username(rabbitMqUsername);
+    //            h.Password(rabbitMqPassword);
+    //        });
 
-        // Register Specific Repositories - ADD ALL YOUR REPOSITORIES HERE
-        services.AddScoped<IProductRepository, ProductRepository>();
-        services.AddScoped<IUserProfileRepository, UserProfileRepository>();
-        services.AddScoped<IRoleRepository, RoleRepository>();
-        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+    //        cfg.ConfigureEndpoints(context);
+    //    });
+    //});
 
-        // Register Message Bus
-        services.AddScoped<IMessageBus, MassTransitMessageBus>();
+    // Register Generic Repository
+    services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
-        return services;
-    }
+    // Register Specific Repositories - ADD ALL YOUR REPOSITORIES HERE
+    services.AddScoped<IUserProfileRepository, UserProfileRepository>();
+    services.AddScoped<IRoleRepository, RoleRepository>();
+    services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+
+    // Register Message Bus
+    //services.AddScoped<IMessageBus, MassTransitMessageBus>();
+
+    return services;
+  }
 }
