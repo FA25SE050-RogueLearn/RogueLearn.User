@@ -18,7 +18,7 @@ public static class ServiceCollectionExtensions
         // Configure Supabase
         var supabaseUrl = configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
         var supabaseKey = configuration["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
-
+        
         services.AddSingleton(provider =>
         {
             var options = new SupabaseOptions
@@ -47,11 +47,16 @@ public static class ServiceCollectionExtensions
             });
         });
 
-        // Register repositories
+        // Register Generic Repository
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
-        services.AddScoped<IProductRepository, ProductRepository>();
 
-        // Register message bus
+        // Register Specific Repositories - ADD ALL YOUR REPOSITORIES HERE
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IUserProfileRepository, UserProfileRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+
+        // Register Message Bus
         services.AddScoped<IMessageBus, MassTransitMessageBus>();
 
         return services;
