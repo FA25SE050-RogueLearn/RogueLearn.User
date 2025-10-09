@@ -71,6 +71,18 @@ public static class ServiceCollectionExtensions
     services.AddScoped<IUserProfileRepository, UserProfileRepository>();
     services.AddScoped<IRoleRepository, RoleRepository>();
     services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+    services.AddScoped<IUserAchievementRepository, UserAchievementRepository>();
+    services.AddScoped<IUserQuestProgressRepository, UserQuestProgressRepository>();
+    services.AddScoped<IUserSkillRepository, UserSkillRepository>();
+    services.AddScoped<IUserSkillRewardRepository, UserSkillRewardRepository>();
+    
+    // Academic repositories
+    services.AddScoped<ISubjectRepository, SubjectRepository>();
+    services.AddScoped<IClassRepository, ClassRepository>();
+    services.AddScoped<IStudentTermSubjectRepository, StudentTermSubjectRepository>();
+    services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
+    services.AddScoped<ILecturerVerificationRequestRepository, LecturerVerificationRequestRepository>();
+    
     // Curriculum repositories
     services.AddScoped<ICurriculumProgramRepository, CurriculumProgramRepository>();
     services.AddScoped<ICurriculumVersionRepository, CurriculumVersionRepository>();
@@ -78,6 +90,16 @@ public static class ServiceCollectionExtensions
     services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
     services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
     services.AddScoped<ICurriculumImportJobRepository, CurriculumImportJobRepository>();
+    services.AddScoped<IElectivePackRepository, ElectivePackRepository>();
+    services.AddScoped<IElectiveSourceRepository, ElectiveSourceRepository>();
+    
+    // Gamification repositories
+    services.AddScoped<IAchievementRepository, AchievementRepository>();
+    services.AddScoped<ISkillRepository, SkillRepository>();
+    services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
+    
+    // System repositories
+    services.AddScoped<INotificationRepository, NotificationRepository>();
 
     // Register Message Bus
     //services.AddScoped<IMessageBus, MassTransitMessageBus>();

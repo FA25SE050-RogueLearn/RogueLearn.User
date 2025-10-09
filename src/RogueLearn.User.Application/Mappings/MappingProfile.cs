@@ -10,6 +10,14 @@ using GetAllCurriculumProgramDto = RogueLearn.User.Application.Features.Curricul
 using GetByIdCurriculumProgramDto = RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetAllCurriculumPrograms.CurriculumProgramDto;
 using RogueLearn.User.Application.Features.CurriculumVersions.Commands.CreateCurriculumVersion;
 using CurriculumVersionDto = RogueLearn.User.Application.Features.CurriculumVersions.Queries.GetCurriculumVersionsByProgram.CurriculumVersionDto;
+using RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
+using RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;
+using RogueLearn.User.Application.Features.Subjects.Commands.UpdateSubject;
+using RogueLearn.User.Application.Features.CurriculumStructure.Commands.AddSubjectToCurriculum;
+using RogueLearn.User.Application.Features.CurriculumStructure.Commands.UpdateCurriculumStructure;
+using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusVersionsBySubject;
+using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
+using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Mappings;
@@ -42,5 +50,19 @@ public class MappingProfile : Profile
     // CurriculumVersion mappings
     CreateMap<CurriculumVersion, CurriculumVersionDto>();
     CreateMap<CurriculumVersion, CreateCurriculumVersionResponse>();
+
+    // Subject mappings
+    CreateMap<Subject, SubjectDto>();
+    CreateMap<Subject, CreateSubjectResponse>();
+    CreateMap<Subject, UpdateSubjectResponse>();
+
+    // CurriculumStructure mappings
+    CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
+    CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
+
+    // SyllabusVersion mappings
+    CreateMap<SyllabusVersion, SyllabusVersionDto>();
+    CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>();
+    CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>();
   }
 }
