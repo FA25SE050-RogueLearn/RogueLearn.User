@@ -71,6 +71,13 @@ public static class ServiceCollectionExtensions
     services.AddScoped<IUserProfileRepository, UserProfileRepository>();
     services.AddScoped<IRoleRepository, RoleRepository>();
     services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+    // Curriculum repositories
+    services.AddScoped<ICurriculumProgramRepository, CurriculumProgramRepository>();
+    services.AddScoped<ICurriculumVersionRepository, CurriculumVersionRepository>();
+    services.AddScoped<ICurriculumVersionActivationRepository, CurriculumVersionActivationRepository>();
+    services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
+    services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
+    services.AddScoped<ICurriculumImportJobRepository, CurriculumImportJobRepository>();
 
     // Register Message Bus
     //services.AddScoped<IMessageBus, MassTransitMessageBus>();
