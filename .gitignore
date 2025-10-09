@@ -6,6 +6,8 @@
 
 # Environment-specific files - DO NOT COMMIT
 .env
+.trae
+.bmad-core
 
 appsettings.*.json
 !appsettings.json

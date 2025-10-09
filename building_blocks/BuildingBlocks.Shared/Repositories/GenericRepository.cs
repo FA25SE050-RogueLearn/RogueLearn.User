@@ -21,7 +21,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Where(x => x.Id == id)
-            .Single();
+            .Single(cancellationToken);
+
+
 
         return response;
     }
@@ -30,7 +32,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
     {
         var response = await _supabaseClient
             .From<T>()
-            .Get();
+            .Get(cancellationToken);
+
+
 
         return response.Models;
     }
@@ -42,7 +46,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Range(offset, offset + pageSize - 1)
-            .Get();
+            .Get(cancellationToken);
+
+
 
         return response.Models;
     }
@@ -52,7 +58,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Where(predicate)
-            .Get();
+            .Get(cancellationToken);
+
+
 
         return response.Models;
     }
@@ -65,7 +73,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .From<T>()
             .Where(predicate)
             .Range(offset, offset + pageSize - 1)
-            .Get();
+            .Get(cancellationToken);
+
+
 
         return response.Models;
     }
@@ -75,31 +85,28 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Where(predicate)
-            .Single();
+            .Single(cancellationToken);
+
+
 
         return response;
     }
 
     public virtual async Task<T> AddAsync(T entity, CancellationToken cancellationToken = default)
     {
-        entity.CreatedAt = DateTime.UtcNow;
-        entity.UpdatedAt = DateTime.UtcNow;
-
         var response = await _supabaseClient
             .From<T>()
-            .Insert(entity);
+            .Insert(entity, cancellationToken: cancellationToken);
 
         return response.Models.First();
     }
 
     public virtual async Task<T> UpdateAsync(T entity, CancellationToken cancellationToken = default)
     {
-        entity.UpdateTimestamp();
-
         var response = await _supabaseClient
             .From<T>()
             .Where(x => x.Id == entity.Id)
-            .Update(entity);
+            .Update(entity, cancellationToken: cancellationToken);
 
         return response.Models.First();
     }
@@ -109,7 +116,7 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         await _supabaseClient
             .From<T>()
             .Where(x => x.Id == id)
-            .Delete();
+            .Delete(cancellationToken: cancellationToken);
     }
 
     public virtual async Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default)
@@ -117,9 +124,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Where(x => x.Id == id)
-            .Get();
+            .Get(cancellationToken);
 
-        return response.Models.Any();
+        return response.Models.Count != 0;
     }
 
     public virtual async Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
@@ -127,16 +134,18 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Where(predicate)
-            .Get();
+            .Get(cancellationToken);
 
-        return response.Models.Any();
+
+
+        return response.Models.Count != 0;
     }
 
     public virtual async Task<int> CountAsync(CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
             .From<T>()
-            .Get();
+            .Get(cancellationToken);
 
         return response.Models.Count;
     }
@@ -146,7 +155,9 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         var response = await _supabaseClient
             .From<T>()
             .Where(predicate)
-            .Get();
+            .Get(cancellationToken);
+
+
 
         return response.Models.Count;
     }
