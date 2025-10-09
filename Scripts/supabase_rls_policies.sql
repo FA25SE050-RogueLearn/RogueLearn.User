@@ -37,13 +37,17 @@ ALTER TABLE syllabus_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elective_packs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE elective_sources ENABLE ROW LEVEL SECURITY;
 
--- Helper Functions
 -- =====================================================
 
 -- Note: Using Supabase's built-in auth.uid() function instead of creating custom auth.user_id()
 -- auth.uid() returns the current authenticated user's UUID
 
--- Function to check if user has a specific role
+-- Prefer checking JWT claim to avoid table access during policy evaluation
+CREATE OR REPLACE FUNCTION public.jwt_has_role(role_name text) RETURNS boolean AS $$
+  SELECT COALESCE((auth.jwt() -> 'roles') ? role_name, false);
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
+
+-- Fallback function that checks tables when needed outside policy evaluation
 CREATE OR REPLACE FUNCTION public.user_has_role(role_name text) RETURNS boolean AS $$
   SELECT EXISTS (
     SELECT 1 FROM user_roles ur
@@ -51,52 +55,43 @@ CREATE OR REPLACE FUNCTION public.user_has_role(role_name text) RETURNS boolean 
     WHERE ur.auth_user_id = auth.uid()
     AND r.name = role_name
   );
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is Game Master (Admin)
 CREATE OR REPLACE FUNCTION public.is_game_master() RETURNS boolean AS $$
-  SELECT public.user_has_role('Game Master');
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Game Master');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is admin (alias for Game Master)
 CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean AS $$
   SELECT public.is_game_master();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is lecturer
 CREATE OR REPLACE FUNCTION public.is_lecturer() RETURNS boolean AS $$
-  SELECT public.user_has_role('Lecturer');
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Lecturer');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is Guild Master
 CREATE OR REPLACE FUNCTION public.is_guild_master() RETURNS boolean AS $$
-  SELECT public.user_has_role('Guild Master');
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Guild Master');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is Party Leader
 CREATE OR REPLACE FUNCTION public.is_party_leader() RETURNS boolean AS $$
-  SELECT public.user_has_role('Party Leader');
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Party Leader');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is Player (Student)
 CREATE OR REPLACE FUNCTION public.is_player() RETURNS boolean AS $$
-  SELECT public.user_has_role('Player');
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Player');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user is student (alias for Player)
 CREATE OR REPLACE FUNCTION public.is_student() RETURNS boolean AS $$
   SELECT public.is_player();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user has leadership role (Party Leader or Guild Master)
 CREATE OR REPLACE FUNCTION public.is_leader() RETURNS boolean AS $$
-  SELECT public.is_party_leader() OR public.is_guild_master();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Party Leader') OR public.jwt_has_role('Guild Master');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
--- Function to check if user has elevated privileges (Lecturer, Guild Master, or Game Master)
 CREATE OR REPLACE FUNCTION public.has_elevated_access() RETURNS boolean AS $$
-  SELECT public.is_lecturer() OR public.is_guild_master() OR public.is_game_master();
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT public.jwt_has_role('Lecturer') OR public.jwt_has_role('Guild Master') OR public.jwt_has_role('Game Master');
+$$ LANGUAGE sql STABLE SECURITY INVOKER;
 
 -- RLS Policies
 -- =====================================================
@@ -525,12 +520,20 @@ CREATE POLICY "elective_sources_delete_policy" ON elective_sources
 
 -- Grant usage on auth schema
 GRANT USAGE ON SCHEMA auth TO authenticated, anon;
+GRANT USAGE ON SCHEMA public TO authenticated, anon;
 
 -- Grant execute on helper functions
+GRANT EXECUTE ON FUNCTION public.jwt_has_role(text) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.user_has_role(text) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.is_game_master() TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.is_lecturer() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.is_guild_master() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.is_party_leader() TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.is_student() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.is_player() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.is_leader() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.has_elevated_access() TO authenticated, anon;
 
 -- Grant select on all tables to authenticated users (RLS will control access)
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO authenticated;

@@ -51,6 +51,24 @@ try
         // Enhanced JWT events for better role handling
         options.Events = new JwtBearerEvents
         {
+          OnMessageReceived = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+
+                // Check Authorization header presence and scheme
+                if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) || string.IsNullOrWhiteSpace(authHeader))
+                {
+                    logger.LogWarning("Missing Authorization header for {Method} {Path}", context.Request.Method, context.Request.Path);
+                }
+                else
+                {
+                    var value = authHeader.ToString();
+                    var isBearer = value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+                    logger.LogDebug("Authorization header present for {Method} {Path}; Bearer scheme: {IsBearer}", context.Request.Method, context.Request.Path, isBearer);
+                }
+
+                return Task.CompletedTask;
+            },
           OnTokenValidated = context =>
             {
                 var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
@@ -104,10 +122,11 @@ try
   builder.Services.AddAuthorization();
   // --- END AUTHENTICATION SERVICES ---
 
-  
+  builder.Services.AddHttpContextAccessor();
+
   // Add services to the container
   builder.Services.AddApplication();
-  await builder.Services.AddInfrastructureServices(builder.Configuration);
+  builder.Services.AddInfrastructureServices();
   builder.Services.AddApiServices();
 
   var app = builder.Build();
