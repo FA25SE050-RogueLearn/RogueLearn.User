@@ -8,6 +8,7 @@ using Serilog;
 using System.Text;
 using System.Security.Claims;
 using DotNetEnv;
+using Microsoft.SemanticKernel;
 
 // Load environment variables from .env file
 Env.Load();
@@ -23,6 +24,37 @@ try
 
   // Add Serilog
   builder.Host.UseSerilog();
+
+  // Add AI services
+  builder.Services.AddScoped<Kernel>(sp =>
+  {
+    // Get the required services
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+
+    // Create a new Kernel builder
+    var kernelBuilder = Kernel.CreateBuilder();
+
+    // Add logging to the Kernel
+    kernelBuilder.Services.AddSingleton(loggerFactory);
+
+    // Get the provider from configuration
+    var provider = configuration["AI:Provider"];
+
+    switch (provider)
+    {
+      case "Google":
+        var googleModel = configuration["AI:Google:Model"] ?? throw new InvalidOperationException("Google Model not configured.");
+        var googleApiKey = configuration["AI:Google:ApiKey"] ?? throw new InvalidOperationException("Google API Key not configured.");
+        kernelBuilder.AddGoogleAIGeminiChatCompletion(modelId: googleModel, apiKey: googleApiKey);
+        break;
+
+      default:
+        throw new InvalidOperationException($"AI Provider '{provider}' is not supported.");
+    }
+
+    return kernelBuilder.Build();
+  });
 
   // --- ADD JWT AUTHENTICATION SERVICES ---
   builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -53,69 +85,69 @@ try
         {
           OnMessageReceived = context =>
             {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+              var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
-                // Check Authorization header presence and scheme
-                if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) || string.IsNullOrWhiteSpace(authHeader))
-                {
-                    logger.LogWarning("Missing Authorization header for {Method} {Path}", context.Request.Method, context.Request.Path);
-                }
-                else
-                {
-                    var value = authHeader.ToString();
-                    var isBearer = value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
-                    logger.LogDebug("Authorization header present for {Method} {Path}; Bearer scheme: {IsBearer}", context.Request.Method, context.Request.Path, isBearer);
-                }
+              // Check Authorization header presence and scheme
+              if (!context.Request.Headers.TryGetValue("Authorization", out var authHeader) || string.IsNullOrWhiteSpace(authHeader))
+              {
+                logger.LogWarning("Missing Authorization header for {Method} {Path}", context.Request.Method, context.Request.Path);
+              }
+              else
+              {
+                var value = authHeader.ToString();
+                var isBearer = value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+                logger.LogDebug("Authorization header present for {Method} {Path}; Bearer scheme: {IsBearer}", context.Request.Method, context.Request.Path, isBearer);
+              }
 
-                return Task.CompletedTask;
+              return Task.CompletedTask;
             },
           OnTokenValidated = context =>
             {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+              var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
 
-                if (context.Principal?.Identity is ClaimsIdentity identity)
-                {
+              if (context.Principal?.Identity is ClaimsIdentity identity)
+              {
                 // Extract roles from custom claims and add them as role claims
-                  var rolesClaim = context.Principal.FindFirst("roles")?.Value;
-                  if (!string.IsNullOrEmpty(rolesClaim))
+                var rolesClaim = context.Principal.FindFirst("roles")?.Value;
+                if (!string.IsNullOrEmpty(rolesClaim))
+                {
+                  try
                   {
-                    try
-                    {
                     // Parse the roles array from JSON
-                      var rolesArray = System.Text.Json.JsonSerializer.Deserialize<string[]>(rolesClaim);
-                      if (rolesArray != null)
-                      {
-                      // Add each role as a separate role claim
-                        foreach (var role in rolesArray)
-                        {
-                          identity.AddClaim(new Claim(ClaimTypes.Role, role));
-                        }
-
-                        logger.LogDebug("Added roles to JWT claims: {Roles}", string.Join(", ", rolesArray));
-                      }
-                    }
-                    catch (System.Text.Json.JsonException ex)
+                    var rolesArray = System.Text.Json.JsonSerializer.Deserialize<string[]>(rolesClaim);
+                    if (rolesArray != null)
                     {
-                      logger.LogWarning("Failed to parse roles from JWT: {Error}", ex.Message);
+                      // Add each role as a separate role claim
+                      foreach (var role in rolesArray)
+                      {
+                        identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                      }
+
+                      logger.LogDebug("Added roles to JWT claims: {Roles}", string.Join(", ", rolesArray));
                     }
                   }
-
-                  var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                  var finalRoles = context.Principal?.FindAll(ClaimTypes.Role).Select(c => c.Value);
-
-                  logger.LogDebug("JWT token validated for user {UserId} with final roles: {Roles}",
-                        userId, string.Join(", ", finalRoles ?? new string[0]));
+                  catch (System.Text.Json.JsonException ex)
+                  {
+                    logger.LogWarning("Failed to parse roles from JWT: {Error}", ex.Message);
+                  }
                 }
 
-                return Task.CompletedTask;
-              },
+                var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var finalRoles = context.Principal?.FindAll(ClaimTypes.Role).Select(c => c.Value);
+
+                logger.LogDebug("JWT token validated for user {UserId} with final roles: {Roles}",
+                      userId, string.Join(", ", finalRoles ?? new string[0]));
+              }
+
+              return Task.CompletedTask;
+            },
           OnAuthenticationFailed = context =>
             {
               // Log authentication failures for debugging
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogWarning("JWT authentication failed: {Error}", context.Exception.Message);
-                return Task.CompletedTask;
-              }
+              var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+              logger.LogWarning("JWT authentication failed: {Error}", context.Exception.Message);
+              return Task.CompletedTask;
+            }
         };
       });
 
