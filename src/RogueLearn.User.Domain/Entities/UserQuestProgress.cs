@@ -17,8 +17,8 @@ public class UserQuestProgress : BaseEntity
     public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
 
     [Column("completed_at")]
-    public DateTime? CompletedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
 
     [Column("last_updated_at")]
-    public DateTime LastUpdatedAt { get; set; }
+    public DateTimeOffset LastUpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

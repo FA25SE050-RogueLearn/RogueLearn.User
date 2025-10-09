@@ -13,7 +13,7 @@ public class UserAchievement : BaseEntity
     public Guid AchievementId { get; set; }
 
     [Column("earned_at")]
-    public DateTime EarnedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset EarnedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [Column("context")]
     public string? Context { get; set; }

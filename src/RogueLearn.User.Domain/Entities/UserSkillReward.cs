@@ -26,4 +26,7 @@ public class UserSkillReward : BaseEntity
 
     [Column("reason")]
     public string? Reason { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

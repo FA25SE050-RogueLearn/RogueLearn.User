@@ -25,6 +25,9 @@ public class CurriculumImportJob : BaseEntity
     [Column("created_by")]
     public Guid? CreatedBy { get; set; }
 
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
     [Column("completed_at")]
-    public DateTime? CompletedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
 }

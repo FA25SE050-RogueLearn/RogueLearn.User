@@ -16,7 +16,7 @@ public class CurriculumVersionActivation : BaseEntity
     public Guid? ActivatedBy { get; set; }
 
     [Column("activated_at")]
-    public DateTime ActivatedAt { get; set; }
+    public DateTimeOffset ActivatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [Column("notes")]
     public string? Notes { get; set; }

@@ -23,4 +23,7 @@ public class CurriculumStructure : BaseEntity
 
     [Column("prerequisites_text")]
     public string? PrerequisitesText { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

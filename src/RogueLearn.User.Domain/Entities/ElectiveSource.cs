@@ -22,10 +22,10 @@ public class ElectiveSource : BaseEntity
     public string Status { get; set; } = "Pending";
 
     [Column("submitted_at")]
-    public DateTime SubmittedAt { get; set; }
+    public DateTimeOffset SubmittedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [Column("reviewed_at")]
-    public DateTime? ReviewedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
 
     [Column("reviewer_id")]
     public Guid? ReviewerId { get; set; }

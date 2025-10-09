@@ -14,4 +14,7 @@ public class SkillDependency : BaseEntity
 
     [Column("relationship_type")]
     public string RelationshipType { get; set; } = "Prerequisite";
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -26,5 +26,8 @@ public class Notification : BaseEntity
     public string? Metadata { get; set; }
 
     [Column("read_at")]
-    public DateTime? ReadAt { get; set; }
+    public DateTimeOffset? ReadAt { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

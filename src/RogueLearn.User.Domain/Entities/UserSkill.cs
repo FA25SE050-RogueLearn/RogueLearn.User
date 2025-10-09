@@ -19,5 +19,5 @@ public class UserSkill : BaseEntity
     public int Level { get; set; } = 1;
 
     [Column("last_updated_at")]
-    public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset LastUpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -23,10 +23,10 @@ public class LecturerVerificationRequest : BaseEntity
     public VerificationStatus Status { get; set; } = VerificationStatus.Pending;
 
     [Column("submitted_at")]
-    public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset SubmittedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [Column("reviewed_at")]
-    public DateTime? ReviewedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
 
     [Column("reviewer_id")]
     public Guid? ReviewerId { get; set; }

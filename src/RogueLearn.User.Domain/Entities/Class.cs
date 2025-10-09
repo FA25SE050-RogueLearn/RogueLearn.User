@@ -26,4 +26,10 @@ public class Class : BaseEntity
 
   [Column("is_active")]
   public bool IsActive { get; set; } = true;
+
+  [Column("created_at")]
+  public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+  [Column("updated_at")]
+  public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

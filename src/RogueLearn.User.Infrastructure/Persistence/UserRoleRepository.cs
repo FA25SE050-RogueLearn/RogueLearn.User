@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Infrastructure/Persistence/UserRoleRepository.cs
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Persistence/UserRoleRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -17,6 +17,16 @@ public class UserRoleRepository : GenericRepository<UserRole>, IUserRoleReposito
 		var response = await _supabaseClient
 			.From<UserRole>()
 			.Where(ur => ur.AuthUserId == authUserId)
+			.Get(cancellationToken);
+
+		return response.Models;
+	}
+
+	public async Task<IEnumerable<UserRole>> GetUsersByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default)
+	{
+		var response = await _supabaseClient
+			.From<UserRole>()
+			.Where(ur => ur.RoleId == roleId)
 			.Get(cancellationToken);
 
 		return response.Models;

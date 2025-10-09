@@ -16,11 +16,14 @@ public class SyllabusVersion : BaseEntity
     public string Content { get; set; } = string.Empty;
 
     [Column("effective_date")]
-    public DateTime EffectiveDate { get; set; }
+    public DateOnly EffectiveDate { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
     [Column("created_by")]
     public Guid? CreatedBy { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

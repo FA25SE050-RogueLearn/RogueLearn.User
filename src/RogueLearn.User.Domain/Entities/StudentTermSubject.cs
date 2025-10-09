@@ -32,8 +32,8 @@ public class StudentTermSubject : BaseEntity
     public int? CreditsEarned { get; set; } = 0;
 
     [Column("enrolled_at")]
-    public DateTime EnrolledAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset EnrolledAt { get; set; } = DateTimeOffset.UtcNow;
 
     [Column("completed_at")]
-    public DateTime? CompletedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
 }

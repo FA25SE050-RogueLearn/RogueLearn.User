@@ -6,6 +6,7 @@ using RogueLearn.User.Infrastructure.Extensions;
 using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using System.Text;
+using System.Security.Claims;
 using DotNetEnv;
 
 // Load environment variables from .env file
@@ -16,89 +17,147 @@ Log.Logger = SerilogConfiguration.CreateLogger();
 
 try
 {
-	Log.Information("Starting RogueLearn.User API");
+    Log.Information("Starting RogueLearn.User API");
 
-	var builder = WebApplication.CreateBuilder(args);
+    var builder = WebApplication.CreateBuilder(args);
 
-	// Add Serilog
-	builder.Host.UseSerilog();
+    // Add Serilog
+    builder.Host.UseSerilog();
 
-	// --- ADD JWT AUTHENTICATION SERVICES ---
-	builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-		.AddJwtBearer(options =>
-		{
-			var supabaseUrl = builder.Configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL not configured.");
-			var supabaseJwtSecret = builder.Configuration["Supabase:JwtSecret"] ?? throw new InvalidOperationException("Supabase JWT Secret not configured.");
+    // --- ADD JWT AUTHENTICATION SERVICES ---
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            var supabaseUrl = builder.Configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL not configured.");
+            var supabaseJwtSecret = builder.Configuration["Supabase:JwtSecret"] ?? throw new InvalidOperationException("Supabase JWT Secret not configured.");
 
-			options.Authority = supabaseUrl;
-			options.Audience = "authenticated"; // Default Supabase audience
-			options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-			options.TokenValidationParameters = new TokenValidationParameters
-			{
-				ValidateIssuer = true,
-				ValidIssuer = supabaseUrl + "/auth/v1",
-				ValidateAudience = true,
-				ValidAudience = "authenticated",
-				ValidateLifetime = true,
-				ValidateIssuerSigningKey = true,
-				IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabaseJwtSecret))
-			};
-		});
+            options.Authority = supabaseUrl;
+            options.Audience = "authenticated"; // Default Supabase audience
+            options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = supabaseUrl + "/auth/v1",
+                ValidateAudience = true,
+                ValidAudience = "authenticated",
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabaseJwtSecret)),
+                // Enhanced role claim mapping for better compatibility
+                RoleClaimType = ClaimTypes.Role,
+                NameClaimType = ClaimTypes.NameIdentifier
+            };
 
-	builder.Services.AddAuthorization();
-	// --- END AUTHENTICATION SERVICES ---
+            // Enhanced JWT events for better role handling
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+
+                    if (context.Principal?.Identity is ClaimsIdentity identity)
+                    {
+                        // Extract roles from custom claims and add them as role claims
+                        var rolesClaim = context.Principal.FindFirst("roles")?.Value;
+                        if (!string.IsNullOrEmpty(rolesClaim))
+                        {
+                            try
+                            {
+                                // Parse the roles array from JSON
+                                var rolesArray = System.Text.Json.JsonSerializer.Deserialize<string[]>(rolesClaim);
+                                if (rolesArray != null)
+                                {
+                                    // Add each role as a separate role claim
+                                    foreach (var role in rolesArray)
+                                    {
+                                        identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                                    }
+
+                                    logger.LogDebug("Added roles to JWT claims: {Roles}", string.Join(", ", rolesArray));
+                                }
+                            }
+                            catch (System.Text.Json.JsonException ex)
+                            {
+                                logger.LogWarning("Failed to parse roles from JWT: {Error}", ex.Message);
+                            }
+                        }
+
+                        var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                        var finalRoles = context.Principal?.FindAll(ClaimTypes.Role).Select(c => c.Value);
+
+                        logger.LogDebug("JWT token validated for user {UserId} with final roles: {Roles}",
+                            userId, string.Join(", ", finalRoles ?? new string[0]));
+                    }
+
+                    return Task.CompletedTask;
+                },
+                OnAuthenticationFailed = context =>
+                {
+                    // Log authentication failures for debugging
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogWarning("JWT authentication failed: {Error}", context.Exception.Message);
+                    return Task.CompletedTask;
+                }
+            };
+        });
+
+    builder.Services.AddAuthorization();
+    // --- END AUTHENTICATION SERVICES ---
 
 
-	// Add services to the container
-	builder.Services.AddApplication();
-	await builder.Services.AddInfrastructureServices(builder.Configuration);
-	builder.Services.AddApiServices();
+    // Add services to the container
+    builder.Services.AddApplication();
+    await builder.Services.AddInfrastructureServices(builder.Configuration);
+    builder.Services.AddApiServices();
 
-	var app = builder.Build();
+    var app = builder.Build();
 
-	// Configure the HTTP request pipeline
-	app.UseMiddleware<ExceptionHandlingMiddleware>();
+    // Configure the HTTP request pipeline
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-	if (app.Environment.IsDevelopment())
-	{
-		app.UseSwagger();
-		app.UseSwaggerUI(c =>
-		{
-			c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
-			c.RoutePrefix = string.Empty;
-		});
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI(c =>
+        {
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
+            c.RoutePrefix = string.Empty;
+        });
 
-		// Redirect root requests to Swagger UI
-		app.Use(async (context, next) =>
-		{
-			if (context.Request.Path == "/")
-			{
-				context.Response.Redirect("/index.html");
-				return;
-			}
-			await next();
-		});
-	}
+        // Redirect root requests to Swagger UI
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path == "/")
+            {
+                context.Response.Redirect("/index.html");
+                return;
+            }
+            await next();
+        });
+    }
 
-	app.UseCors("AllowAll");
-	app.UseHttpsRedirection();
+    app.UseCors("AllowAll");
+    app.UseHttpsRedirection();
 
-	// --- ADD AUTHENTICATION AND AUTHORIZATION MIDDLEWARE ---
-	// IMPORTANT: These must be called after UseCors and before MapControllers
-	app.UseAuthentication();
-	app.UseAuthorization();
-	// --- END MIDDLEWARE ---
+    // --- ADD AUTHENTICATION AND AUTHORIZATION MIDDLEWARE ---
+    // IMPORTANT: These must be called after UseCors and before MapControllers
+    app.UseAuthentication();
+    app.UseAuthorization();
+    // --- END MIDDLEWARE ---
 
-	app.MapControllers();
+    app.MapControllers();
 
-	Log.Information("RogueLearn.User API started successfully");
-	app.Run();
+    Log.Information("RogueLearn.User API started successfully");
+    app.Run();
 }
 catch (Exception ex)
 {
-	Log.Fatal(ex, "RogueLearn.User API terminated unexpectedly");
+    Log.Fatal(ex, "RogueLearn.User API terminated unexpectedly");
 }
 finally
 {
-	Log.CloseAndFlush();
+    Log.CloseAndFlush();
 }
+
+// Make the Program class accessible for testing
+public partial class Program { }

@@ -14,11 +14,17 @@ public class StudentEnrollment : BaseEntity
     public Guid CurriculumVersionId { get; set; }
 
     [Column("enrollment_date")]
-    public DateTime EnrollmentDate { get; set; }
+    public DateOnly EnrollmentDate { get; set; }
 
     [Column("expected_graduation_date")]
-    public DateTime? ExpectedGraduationDate { get; set; }
+    public DateOnly? ExpectedGraduationDate { get; set; }
 
     [Column("status")]
     public EnrollmentStatus Status { get; set; } = EnrollmentStatus.Active;
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
