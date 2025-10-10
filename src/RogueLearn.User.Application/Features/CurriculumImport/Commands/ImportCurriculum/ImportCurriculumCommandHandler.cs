@@ -161,8 +161,8 @@ Return only the JSON, no additional text or formatting.";
     }
 
     private async Task<ImportCurriculumResponse> PersistCurriculumDataAsync(
-        CurriculumImportData data, 
-        Guid? createdBy, 
+        CurriculumImportData data,
+        Guid? createdBy,
         CancellationToken cancellationToken)
     {
         var response = new ImportCurriculumResponse { IsSuccess = true };

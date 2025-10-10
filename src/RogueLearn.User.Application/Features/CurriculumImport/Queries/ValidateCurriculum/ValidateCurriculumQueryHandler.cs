@@ -104,33 +104,44 @@ Extract curriculum information from the following text and return it as JSON fol
 
 {{
   ""program"": {{
-    ""programCode"": ""string (max 20 chars)"",
-    ""programName"": ""string (max 200 chars)"",
-    ""description"": ""string (optional)""
+    ""programCode"": ""string (max 50 chars)"",
+    ""programName"": ""string (max 255 chars)"",
+    ""description"": ""string (optional)"",
+    ""degreeLevel"": 1,
+    ""totalCredits"": number (optional),
+    ""durationYears"": number (optional)
   }},
   ""version"": {{
-    ""versionNumber"": number,
-    ""effectiveDate"": ""YYYY-MM-DD"",
-    ""description"": ""string (optional)""
+    ""versionCode"": ""string (max 50 chars, e.g., 'V1.0', '2022')"",
+    ""effectiveYear"": number (year, e.g., 2022),
+    ""description"": ""string (optional)"",
+    ""isActive"": true
   }},
   ""subjects"": [
     {{
-      ""subjectCode"": ""string (max 20 chars)"",
-      ""subjectName"": ""string (max 200 chars)"",
-      ""credits"": number,
+      ""subjectCode"": ""string (max 50 chars)"",
+      ""subjectName"": ""string (max 255 chars)"",
+      ""credits"": number (1-10),
       ""description"": ""string (optional)""
     }}
   ],
   ""structure"": [
     {{
       ""subjectCode"": ""string"",
-      ""termNumber"": number,
-      ""isMandatory"": boolean,
-      ""prerequisiteSubjectCodes"": [""string""],
+      ""termNumber"": number (1-12),
+      ""isMandatory"": true,
+      ""prerequisiteSubjectCodes"": [""string""] (optional),
       ""prerequisitesText"": ""string (optional)""
     }}
   ]
 }}
+
+Important notes:
+- degreeLevel: Use 1 for Bachelor's, 2 for Master's, 3 for Doctoral
+- effectiveYear: Extract year from any date mentioned (e.g., from ""2022-10-26"" use 2022)
+- versionCode: Generate a meaningful version code if not explicitly mentioned
+- structure: Map each subject to a term/semester number, use 1 if not specified
+- All string fields should be properly escaped for JSON
 
 Text to extract from:
 {rawText}
@@ -140,7 +151,27 @@ Return only the JSON, no additional text or formatting.";
         try
         {
             var result = await _kernel.InvokePromptAsync(prompt);
-            return result.GetValue<string>() ?? string.Empty;
+            _logger.LogInformation("Raw AI response: {RawResponse}", result.GetValue<string>() ?? string.Empty);
+            
+            var rawResponse = result.GetValue<string>() ?? string.Empty;
+            
+            // Clean up the response - remove markdown code blocks if present
+            var cleanedResponse = rawResponse.Trim();
+            if (cleanedResponse.StartsWith("```json"))
+            {
+                cleanedResponse = cleanedResponse.Substring(7); // Remove ```json
+            }
+            else if (cleanedResponse.StartsWith("```"))
+            {
+                cleanedResponse = cleanedResponse.Substring(3); // Remove ```
+            }
+            
+            if (cleanedResponse.EndsWith("```"))
+            {
+                cleanedResponse = cleanedResponse.Substring(0, cleanedResponse.Length - 3); // Remove trailing ```
+            }
+            
+            return cleanedResponse.Trim();
         }
         catch (Exception ex)
         {
