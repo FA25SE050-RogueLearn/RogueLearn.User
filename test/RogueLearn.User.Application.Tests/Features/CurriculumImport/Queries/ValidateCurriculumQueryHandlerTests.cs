@@ -13,6 +13,7 @@ public class ValidateCurriculumQueryHandlerTests
     private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<CurriculumImportDataValidator> _mockValidator;
     private readonly Mock<ILogger<ValidateCurriculumQueryHandler>> _mockLogger;
+    private readonly Mock<RogueLearn.User.Application.Interfaces.ICurriculumImportStorage> _mockStorage;
     private readonly ValidateCurriculumQueryHandler _handler;
 
     public ValidateCurriculumQueryHandlerTests()
@@ -20,11 +21,13 @@ public class ValidateCurriculumQueryHandlerTests
         _mockKernel = new Mock<Kernel>();
         _mockValidator = new Mock<CurriculumImportDataValidator>();
         _mockLogger = new Mock<ILogger<ValidateCurriculumQueryHandler>>();
+        _mockStorage = new Mock<RogueLearn.User.Application.Interfaces.ICurriculumImportStorage>();
 
         _handler = new ValidateCurriculumQueryHandler(
             _mockKernel.Object,
             _mockValidator.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockStorage.Object);
     }
 
     [Fact]

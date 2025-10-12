@@ -23,7 +23,7 @@ public class CurriculumProgram : BaseEntity
     public int? TotalCredits { get; set; }
 
     [Column("duration_years")]
-    public int? DurationYears { get; set; }
+    public double? DurationYears { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

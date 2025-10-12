@@ -169,11 +169,11 @@ Return only the JSON, no additional text or formatting.";
 
         // Create or get curriculum program
         var existingProgram = await _curriculumProgramRepository.FirstOrDefaultAsync(p => p.ProgramCode == data.Program.ProgramCode, cancellationToken);
-        Domain.Entities.CurriculumProgram curriculumProgram;
+        CurriculumProgram curriculumProgram;
 
         if (existingProgram == null)
         {
-            curriculumProgram = new Domain.Entities.CurriculumProgram
+            curriculumProgram = new CurriculumProgram
             {
                 Id = Guid.NewGuid(),
                 ProgramName = data.Program.ProgramName,
@@ -195,7 +195,7 @@ Return only the JSON, no additional text or formatting.";
         response.CurriculumProgramId = curriculumProgram.Id;
 
         // Create curriculum version
-        var curriculumVersion = new Domain.Entities.CurriculumVersion
+        var curriculumVersion = new CurriculumVersion
         {
             Id = Guid.NewGuid(),
             ProgramId = curriculumProgram.Id,

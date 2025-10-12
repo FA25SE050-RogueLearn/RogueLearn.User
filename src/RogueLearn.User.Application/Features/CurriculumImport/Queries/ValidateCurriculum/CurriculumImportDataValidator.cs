@@ -57,8 +57,8 @@ public class CurriculumProgramDataValidator : AbstractValidator<CurriculumProgra
             .WithMessage("Program code cannot exceed 50 characters.");
 
         RuleFor(x => x.Description)
-            .MaximumLength(1000)
-            .WithMessage("Description cannot exceed 1000 characters.")
+            .MaximumLength(5000)
+            .WithMessage("Description cannot exceed 5000 characters.")
             .When(x => !string.IsNullOrEmpty(x.Description));
 
         RuleFor(x => x.DurationYears)
@@ -117,8 +117,8 @@ public class SubjectDataValidator : AbstractValidator<SubjectData>
             .WithMessage("Subject name cannot exceed 255 characters.");
 
         RuleFor(x => x.Credits)
-            .GreaterThan(0)
-            .WithMessage("Credits must be greater than 0.")
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Credits must be greater than or equal to 0.")
             .LessThanOrEqualTo(10)
             .WithMessage("Credits cannot exceed 10.");
 
@@ -140,8 +140,8 @@ public class CurriculumStructureDataValidator : AbstractValidator<CurriculumStru
             .WithMessage("Subject code cannot exceed 50 characters.");
 
         RuleFor(x => x.TermNumber)
-            .GreaterThan(0)
-            .WithMessage("Term number must be greater than 0.")
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Term number must be greater than or equal to 0.") 
             .LessThanOrEqualTo(12)
             .WithMessage("Term number cannot exceed 12.");
 

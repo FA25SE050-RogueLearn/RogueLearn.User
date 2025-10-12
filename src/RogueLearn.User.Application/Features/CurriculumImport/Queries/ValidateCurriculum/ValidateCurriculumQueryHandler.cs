@@ -1,8 +1,11 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 
@@ -11,15 +14,18 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
     private readonly Kernel _kernel;
     private readonly CurriculumImportDataValidator _validator;
     private readonly ILogger<ValidateCurriculumQueryHandler> _logger;
+    private readonly ICurriculumImportStorage _storage;
 
     public ValidateCurriculumQueryHandler(
         Kernel kernel,
         CurriculumImportDataValidator validator,
-        ILogger<ValidateCurriculumQueryHandler> logger)
+        ILogger<ValidateCurriculumQueryHandler> logger,
+        ICurriculumImportStorage storage)
     {
         _kernel = kernel;
         _validator = validator;
         _logger = logger;
+        _storage = storage;
     }
 
     public async Task<ValidateCurriculumResponse> Handle(ValidateCurriculumQuery request, CancellationToken cancellationToken)
@@ -28,8 +34,31 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
         {
             _logger.LogInformation("Starting curriculum validation from text");
 
-            // Step 1: Extract structured data using AI
-            var extractedJson = await ExtractCurriculumDataAsync(request.RawText);
+            // Step 0: Compute hash and attempt to load cached JSON to save tokens
+            var rawText = request.RawText ?? string.Empty;
+            var rawTextHash = ComputeSha256Hash(rawText);
+            string? extractedJson = null;
+            try
+            {
+                extractedJson = await _storage.TryGetByHashJsonAsync(
+                    bucketName: "curriculum-imports",
+                    rawTextHash: rawTextHash,
+                    cancellationToken: cancellationToken);
+                if (!string.IsNullOrWhiteSpace(extractedJson))
+                {
+                    _logger.LogInformation("Loaded curriculum JSON from cache by hash, skipping AI extraction.");
+                }
+            }
+            catch (Exception cacheEx)
+            {
+                _logger.LogWarning(cacheEx, "Failed to retrieve cached JSON by hash; will attempt AI extraction.");
+            }
+
+            // Step 1: Extract structured data using AI only if cache miss
+            if (string.IsNullOrWhiteSpace(extractedJson))
+            {
+                extractedJson = await ExtractCurriculumDataAsync(rawText);
+            }
             if (string.IsNullOrEmpty(extractedJson))
             {
                 return new ValidateCurriculumResponse
@@ -39,11 +68,15 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                 };
             }
 
-            // Step 2: Parse JSON
+            // Step 2: Parse JSON (case-insensitive to handle camelCase keys)
             CurriculumImportData? curriculumData;
             try
             {
-                curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson);
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, jsonOptions);
             }
             catch (JsonException ex)
             {
@@ -62,6 +95,119 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                     IsValid = false,
                     Message = "No curriculum data was extracted"
                 };
+            }
+            _logger.LogInformation("Processed curriculum data: {@CurriculumData}", curriculumData);
+
+            // Step 2.5: Check storage by hash; use stored JSON if matches, else upsert new content
+            try
+            {
+                var programCode = curriculumData.Program?.ProgramCode ?? string.Empty;
+                var versionCode = curriculumData.Version?.VersionCode ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(programCode) && !string.IsNullOrWhiteSpace(versionCode))
+                {
+                    var existingMeta = await _storage.TryGetLatestMetaJsonAsync(
+                        bucketName: "curriculum-imports",
+                        programCode: programCode,
+                        versionCode: versionCode,
+                        cancellationToken: cancellationToken);
+
+                    bool useStoredJson = false;
+                    if (!string.IsNullOrWhiteSpace(existingMeta))
+                    {
+                        try
+                        {
+                            using var metaDoc = JsonDocument.Parse(existingMeta);
+                            var root = metaDoc.RootElement;
+                            var storedHash = root.TryGetProperty("rawTextHash", out var h) ? h.GetString() : null;
+                            if (!string.IsNullOrWhiteSpace(storedHash) && string.Equals(storedHash, rawTextHash, StringComparison.OrdinalIgnoreCase))
+                            {
+                                useStoredJson = true;
+                            }
+                        }
+                        catch (Exception metaEx)
+                        {
+                            _logger.LogWarning(metaEx, "Failed to parse existing meta json");
+                        }
+                    }
+
+                    if (useStoredJson)
+                    {
+                        // First try versioned-by-hash JSON under program/version
+                        var storedJson = await _storage.TryGetVersionedByHashJsonAsync(
+                            bucketName: "curriculum-imports",
+                            programCode: programCode,
+                            versionCode: versionCode,
+                            rawTextHash: rawTextHash,
+                            cancellationToken: cancellationToken);
+
+                        if (!string.IsNullOrWhiteSpace(storedJson))
+                        {
+                            try
+                            {
+                                var jsonOptions2 = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                                var storedData = JsonSerializer.Deserialize<CurriculumImportData>(storedJson, jsonOptions2);
+                                if (storedData != null)
+                                {
+                                    curriculumData = storedData;
+                                    extractedJson = storedJson;
+                                    _logger.LogInformation("Using stored curriculum JSON since raw text hash matches.");
+                                }
+                            }
+                            catch (Exception parseStoredEx)
+                            {
+                                _logger.LogWarning(parseStoredEx, "Failed to parse stored JSON; proceeding with extracted content.");
+                            }
+                        }
+                        else
+                        {
+                            // Fallback to latest.json under program/version
+                            storedJson = await _storage.TryGetLatestJsonAsync(
+                                bucketName: "curriculum-imports",
+                                programCode: programCode,
+                                versionCode: versionCode,
+                                cancellationToken: cancellationToken);
+
+                            if (!string.IsNullOrWhiteSpace(storedJson))
+                            {
+                                try
+                                {
+                                    var jsonOptions2 = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                                    var storedData = JsonSerializer.Deserialize<CurriculumImportData>(storedJson, jsonOptions2);
+                                    if (storedData != null)
+                                    {
+                                        curriculumData = storedData;
+                                        extractedJson = storedJson;
+                                        _logger.LogInformation("Using latest stored curriculum JSON.");
+                                    }
+                                }
+                                catch (Exception parseStoredEx)
+                                {
+                                    _logger.LogWarning(parseStoredEx, "Failed to parse latest stored JSON; proceeding with extracted content.");
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Upsert latest with new content and hash
+                        await _storage.SaveLatestAsync(
+                            bucketName: "curriculum-imports",
+                            programCode: programCode,
+                            versionCode: versionCode,
+                            jsonContent: extractedJson,
+                            rawTextContent: rawText,
+                            rawTextHash: rawTextHash,
+                            cancellationToken: cancellationToken);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Skipping storage check/save due to missing programCode or versionCode");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed during storage check/save for curriculum import");
             }
 
             // Step 3: Validate extracted data
@@ -104,12 +250,13 @@ Extract curriculum information from the following text and return it as JSON fol
 
 {{
   ""program"": {{
-    ""programCode"": ""string (max 50 chars)"",
     ""programName"": ""string (max 255 chars)"",
-    ""description"": ""string (optional)"",
+    ""programCode"": ""string (max 50 chars, e.g., 'BIT_SE_K19D_K20A')"",
+    ""description"": ""string"",
     ""degreeLevel"": 1,
-    ""totalCredits"": number (optional),
-    ""durationYears"": number (optional)
+    ""totalCredits"": number,
+    ""durationYears"": number
+
   }},
   ""version"": {{
     ""versionCode"": ""string (max 50 chars, e.g., 'V1.0', '2022')"",
@@ -154,23 +301,38 @@ Return only the JSON, no additional text or formatting.";
             _logger.LogInformation("Raw AI response: {RawResponse}", result.GetValue<string>() ?? string.Empty);
             
             var rawResponse = result.GetValue<string>() ?? string.Empty;
-            
-            // Clean up the response - remove markdown code blocks if present
+
+            // Clean up the response - remove markdown and isolate the JSON block robustly
             var cleanedResponse = rawResponse.Trim();
-            if (cleanedResponse.StartsWith("```json"))
+
+            // If the response contains code fences, strip them
+            if (cleanedResponse.StartsWith("```"))
             {
-                cleanedResponse = cleanedResponse.Substring(7); // Remove ```json
+                // Remove leading code fence (``` or ```json)
+                var firstNewline = cleanedResponse.IndexOf('\n');
+                if (firstNewline > -1)
+                {
+                    cleanedResponse = cleanedResponse.Substring(firstNewline + 1);
+                }
             }
-            else if (cleanedResponse.StartsWith("```"))
-            {
-                cleanedResponse = cleanedResponse.Substring(3); // Remove ```
-            }
-            
             if (cleanedResponse.EndsWith("```"))
             {
-                cleanedResponse = cleanedResponse.Substring(0, cleanedResponse.Length - 3); // Remove trailing ```
+                // Remove trailing code fence
+                var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
+                if (lastFenceIndex > -1)
+                {
+                    cleanedResponse = cleanedResponse.Substring(0, lastFenceIndex);
+                }
             }
-            
+
+            // Extract content between first '{' and last '}' to ensure only JSON remains
+            var startIdx = cleanedResponse.IndexOf('{');
+            var endIdx = cleanedResponse.LastIndexOf('}');
+            if (startIdx >= 0 && endIdx > startIdx)
+            {
+                cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
+            }
+
             return cleanedResponse.Trim();
         }
         catch (Exception ex)
@@ -178,5 +340,17 @@ Return only the JSON, no additional text or formatting.";
             _logger.LogError(ex, "Failed to extract curriculum data using AI");
             return string.Empty;
         }
+    }
+
+    private static string ComputeSha256Hash(string input)
+    {
+        var bytes = Encoding.UTF8.GetBytes(input);
+        var hash = SHA256.HashData(bytes);
+        var sb = new StringBuilder(hash.Length * 2);
+        foreach (var b in hash)
+        {
+            sb.Append(b.ToString("x2"));
+        }
+        return sb.ToString();
     }
 }

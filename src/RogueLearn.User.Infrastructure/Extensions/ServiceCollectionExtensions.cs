@@ -9,6 +9,7 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Infrastructure.Messaging;
 using RogueLearn.User.Infrastructure.Persistence;
+using RogueLearn.User.Infrastructure.Services;
 using Supabase;
 
 namespace RogueLearn.User.Infrastructure.Extensions;
@@ -100,6 +101,9 @@ public static class ServiceCollectionExtensions
     
     // System repositories
     services.AddScoped<INotificationRepository, NotificationRepository>();
+
+    // Storage services
+    services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
 
     // Register Message Bus
     //services.AddScoped<IMessageBus, MassTransitMessageBus>();

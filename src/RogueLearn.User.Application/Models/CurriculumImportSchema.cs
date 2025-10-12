@@ -41,7 +41,7 @@ public class CurriculumProgramData
     
     public int? TotalCredits { get; set; }
     
-    public int? DurationYears { get; set; }
+    public double? DurationYears { get; set; }
 }
 
 /// <summary>

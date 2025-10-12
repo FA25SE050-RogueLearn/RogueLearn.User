@@ -13,7 +13,7 @@ namespace RogueLearn.User.Api.Controllers;
 /// Provides endpoints for importing and validating curriculum and syllabus data from raw text.
 /// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/admin")]
 [AdminOnly] // Restricts access to admin users only
 public class CurriculumImportController : ControllerBase
 {

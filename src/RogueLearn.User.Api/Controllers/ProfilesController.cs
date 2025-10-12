@@ -8,7 +8,7 @@ using RogueLearn.User.Api.Attributes;
 namespace RogueLearn.User.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/")]
 [Authorize] // This attribute protects all actions in this controller
 public class ProfilesController : ControllerBase
 {
@@ -24,7 +24,7 @@ public class ProfilesController : ControllerBase
 	/// </summary>
 	/// <param name="cancellationToken">Cancellation token.</param>
 	/// <returns>List of all user profiles.</returns>
-	[HttpGet("admin")]
+	[HttpGet("admin/profiles")]
 	[ProducesResponseType(typeof(GetAllUserProfilesResponse), StatusCodes.Status200OK)]
 	[AdminOnly]
 	public async Task<ActionResult<GetAllUserProfilesResponse>> GetAllUserProfiles(CancellationToken cancellationToken)
@@ -41,7 +41,7 @@ public class ProfilesController : ControllerBase
 	/// <param name="authId">The user's authentication UUID.</param>
 	/// <param name="cancellationToken">Cancellation token.</param>
 	/// <returns>The user profile.</returns>
-	[HttpGet("{authId:guid}")]
+	[HttpGet("profiles/{authId:guid}")]
 	[ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
 	[ProducesResponseType(StatusCodes.Status404NotFound)]
 	public async Task<ActionResult<UserProfileDto>> GetUserProfileByAuthId(Guid authId, CancellationToken cancellationToken)
