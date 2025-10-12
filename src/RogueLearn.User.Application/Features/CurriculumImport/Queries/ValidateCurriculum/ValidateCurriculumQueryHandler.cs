@@ -4,6 +4,7 @@ using Microsoft.SemanticKernel;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Interfaces;
 
@@ -74,7 +75,8 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
             {
                 var jsonOptions = new JsonSerializerOptions
                 {
-                    PropertyNameCaseInsensitive = true
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new JsonStringEnumConverter() }
                 };
                 curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, jsonOptions);
             }
@@ -251,9 +253,9 @@ Extract curriculum information from the following text and return it as JSON fol
 {{
   ""program"": {{
     ""programName"": ""string (max 255 chars)"",
-    ""programCode"": ""string (max 50 chars, e.g., 'BIT_SE_K19D_K20A')"",
+    ""programCode"": ""string (max 50 chars, e.g., 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'K16A')"",
     ""description"": ""string"",
-    ""degreeLevel"": 1,
+    ""degreeLevel"": ""Bachelor"",
     ""totalCredits"": number,
     ""durationYears"": number
 
@@ -284,9 +286,10 @@ Extract curriculum information from the following text and return it as JSON fol
 }}
 
 Important notes:
-- degreeLevel: Use 1 for Bachelor's, 2 for Master's, 3 for Doctoral
+- degreeLevel: Use ""Associate"", ""Bachelor"", ""Master"", or ""Doctorate"" (enum string values)
 - effectiveYear: Extract year from any date mentioned (e.g., from ""2022-10-26"" use 2022)
 - versionCode: Generate a meaningful version code if not explicitly mentioned
+- programCode: Accept various formats like 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'BIT_SE_K15D', 'K16A'. If multiple student year codes are present, format as 'PROGRAM_SPECIALIZATION_YEAR1_YEAR2' (e.g., 'BIT_SE_K15D_K16A'). Keep original format if it follows university naming conventions.
 - structure: Map each subject to a term/semester number, use 1 if not specified
 - All string fields should be properly escaped for JSON
 

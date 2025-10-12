@@ -5,6 +5,7 @@ using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurri
 using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportSyllabus;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateSyllabus;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -18,14 +19,17 @@ namespace RogueLearn.User.Api.Controllers;
 public class CurriculumImportController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly ICurriculumImportStorage _curriculumImportStorage;
 
     /// <summary>
     /// Initializes a new instance of the CurriculumImportController.
     /// </summary>
     /// <param name="mediator">The MediatR instance for handling commands and queries</param>
-    public CurriculumImportController(IMediator mediator)
+    /// <param name="curriculumImportStorage">The curriculum import storage service</param>
+    public CurriculumImportController(IMediator mediator, ICurriculumImportStorage curriculumImportStorage)
     {
         _mediator = mediator;
+        _curriculumImportStorage = curriculumImportStorage;
     }
 
     /// <summary>
@@ -126,5 +130,47 @@ public class CurriculumImportController : ControllerBase
         // Process the validation query through MediatR
         var result = await _mediator.Send(query);
         return Ok(result); // Always return OK as validation results are in the response body
+    }
+
+    /// <summary>
+    /// Clears cached curriculum data by hash to force re-processing.
+    /// Useful for clearing old cached data with incorrect format.
+    /// </summary>
+    /// <param name="rawTextHash">The hash of the raw text to clear from cache</param>
+    /// <returns>Success response indicating if cache was cleared</returns>
+    /// <response code="200">Cache cleared successfully</response>
+    /// <response code="400">Invalid hash provided</response>
+    [HttpDelete("curriculum/cache/{rawTextHash}")]
+    public async Task<IActionResult> ClearCurriculumCache(string rawTextHash)
+    {
+        if (string.IsNullOrWhiteSpace(rawTextHash))
+        {
+            return BadRequest("Raw text hash is required");
+        }
+
+        var success = await _curriculumImportStorage.ClearCacheByHashAsync("curriculum-imports", rawTextHash);
+        
+        return Ok(new { Success = success, Message = success ? "Cache cleared successfully" : "Failed to clear cache or cache not found" });
+    }
+
+    /// <summary>
+    /// Clears all cached curriculum data for a specific program and version.
+    /// </summary>
+    /// <param name="programCode">The program code</param>
+    /// <param name="versionCode">The version code</param>
+    /// <returns>Success response indicating if cache was cleared</returns>
+    /// <response code="200">Cache cleared successfully</response>
+    /// <response code="400">Invalid parameters provided</response>
+    [HttpDelete("curriculum/cache/{programCode}/{versionCode}")]
+    public async Task<IActionResult> ClearProgramVersionCache(string programCode, string versionCode)
+    {
+        if (string.IsNullOrWhiteSpace(programCode) || string.IsNullOrWhiteSpace(versionCode))
+        {
+            return BadRequest("Program code and version code are required");
+        }
+
+        var success = await _curriculumImportStorage.ClearCacheForProgramVersionAsync("curriculum-imports", programCode, versionCode);
+        
+        return Ok(new { Success = success, Message = success ? "Cache cleared successfully" : "Failed to clear cache or cache not found" });
     }
 }

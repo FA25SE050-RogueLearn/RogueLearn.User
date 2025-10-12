@@ -9,6 +9,7 @@ using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums;
+using RogueLearn.User.Application.Interfaces;
 using System.Linq.Expressions;
 
 namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Commands;
@@ -20,6 +21,7 @@ public class ImportCurriculumCommandHandlerTests
     private readonly Mock<ICurriculumVersionRepository> _mockCurriculumVersionRepository;
     private readonly Mock<ISubjectRepository> _mockSubjectRepository;
     private readonly Mock<ICurriculumStructureRepository> _mockCurriculumStructureRepository;
+    private readonly Mock<ICurriculumImportStorage> _mockCurriculumImportStorage;
     private readonly Mock<CurriculumImportDataValidator> _mockValidator;
     private readonly Mock<ILogger<ImportCurriculumCommandHandler>> _mockLogger;
     private readonly ImportCurriculumCommandHandler _handler;
@@ -31,6 +33,7 @@ public class ImportCurriculumCommandHandlerTests
         _mockCurriculumVersionRepository = new Mock<ICurriculumVersionRepository>();
         _mockSubjectRepository = new Mock<ISubjectRepository>();
         _mockCurriculumStructureRepository = new Mock<ICurriculumStructureRepository>();
+        _mockCurriculumImportStorage = new Mock<ICurriculumImportStorage>();
         _mockValidator = new Mock<CurriculumImportDataValidator>();
         _mockLogger = new Mock<ILogger<ImportCurriculumCommandHandler>>();
 
@@ -40,6 +43,7 @@ public class ImportCurriculumCommandHandlerTests
             _mockCurriculumVersionRepository.Object,
             _mockSubjectRepository.Object,
             _mockCurriculumStructureRepository.Object,
+            _mockCurriculumImportStorage.Object,
             _mockValidator.Object,
             _mockLogger.Object);
     }

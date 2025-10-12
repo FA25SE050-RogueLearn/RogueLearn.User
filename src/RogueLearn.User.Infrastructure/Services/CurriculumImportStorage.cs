@@ -168,4 +168,52 @@ public class CurriculumImportStorage : ICurriculumImportStorage
             return null;
         }
     }
+
+    public async Task<bool> ClearCacheByHashAsync(
+        string bucketName,
+        string rawTextHash,
+        CancellationToken cancellationToken = default)
+    {
+        var storage = _client.Storage.From(bucketName);
+        var byHashJsonPath = $"curriculum/_hashes/{rawTextHash}.json";
+
+        try
+        {
+            await storage.Remove(new List<string> { byHashJsonPath });
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> ClearCacheForProgramVersionAsync(
+        string bucketName,
+        string programCode,
+        string versionCode,
+        CancellationToken cancellationToken = default)
+    {
+        var safeProgram = programCode.Trim();
+        var safeVersion = versionCode.Trim();
+        var prefix = $"curriculum/{safeProgram}/{safeVersion}/";
+
+        var storage = _client.Storage.From(bucketName);
+
+        try
+        {
+            // List all files in the program/version directory
+            var files = await storage.List(prefix);
+            if (files?.Any() == true)
+            {
+                var filePaths = files.Select(f => prefix + f.Name).ToList();
+                await storage.Remove(filePaths);
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

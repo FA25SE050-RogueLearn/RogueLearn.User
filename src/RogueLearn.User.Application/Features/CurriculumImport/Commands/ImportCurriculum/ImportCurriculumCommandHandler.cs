@@ -2,10 +2,14 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Security.Cryptography;
+using System.Text;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum;
 
@@ -16,6 +20,7 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
     private readonly ICurriculumVersionRepository _curriculumVersionRepository;
     private readonly ISubjectRepository _subjectRepository;
     private readonly ICurriculumStructureRepository _curriculumStructureRepository;
+    private readonly ICurriculumImportStorage _curriculumImportStorage;
     private readonly CurriculumImportDataValidator _validator;
     private readonly ILogger<ImportCurriculumCommandHandler> _logger;
 
@@ -25,6 +30,7 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
         ICurriculumVersionRepository curriculumVersionRepository,
         ISubjectRepository subjectRepository,
         ICurriculumStructureRepository curriculumStructureRepository,
+        ICurriculumImportStorage curriculumImportStorage,
         CurriculumImportDataValidator validator,
         ILogger<ImportCurriculumCommandHandler> logger)
     {
@@ -33,6 +39,7 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
         _curriculumVersionRepository = curriculumVersionRepository;
         _subjectRepository = subjectRepository;
         _curriculumStructureRepository = curriculumStructureRepository;
+        _curriculumImportStorage = curriculumImportStorage;
         _validator = validator;
         _logger = logger;
     }
@@ -43,43 +50,64 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
         {
             _logger.LogInformation("Starting curriculum import from text");
 
-            // Step 1: Extract structured data using AI
-            var extractedJson = await ExtractCurriculumDataAsync(request.RawText);
-            if (string.IsNullOrEmpty(extractedJson))
-            {
-                return new ImportCurriculumResponse
-                {
-                    IsSuccess = false,
-                    Message = "Failed to extract curriculum data from the provided text"
-                };
-            }
+            // Step 1: Check if we have cached data for this text
+            var textHash = ComputeSha256Hash(request.RawText);
+            var cachedData = await TryGetCachedDataAsync(textHash, cancellationToken);
 
-            // Step 2: Parse JSON
             CurriculumImportData? curriculumData;
-            try
+
+            if (cachedData != null)
             {
-                curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson);
+                _logger.LogInformation("Using cached curriculum data for hash: {Hash}", textHash);
+                curriculumData = cachedData;
             }
-            catch (JsonException ex)
+            else
             {
-                _logger.LogError(ex, "Failed to parse extracted JSON");
-                return new ImportCurriculumResponse
+                // Step 2: Extract structured data using AI
+                var extractedJson = await ExtractCurriculumDataAsync(request.RawText);
+                if (string.IsNullOrEmpty(extractedJson))
                 {
-                    IsSuccess = false,
-                    Message = "Failed to parse extracted curriculum data"
-                };
+                    return new ImportCurriculumResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Failed to extract curriculum data from the provided text"
+                    };
+                }
+
+                // Step 3: Parse JSON
+                try
+                {
+                    var jsonOptions = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                        Converters = { new JsonStringEnumConverter() }
+                    };
+                    curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, jsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(ex, "Failed to parse extracted JSON");
+                    return new ImportCurriculumResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Failed to parse extracted curriculum data"
+                    };
+                }
+
+                if (curriculumData == null)
+                {
+                    return new ImportCurriculumResponse
+                    {
+                        IsSuccess = false,
+                        Message = "No curriculum data was extracted"
+                    };
+                }
+
+                // Step 4: Save extracted data to storage for future use
+                await SaveDataToStorageAsync(curriculumData, request.RawText, textHash, cancellationToken);
             }
 
-            if (curriculumData == null)
-            {
-                return new ImportCurriculumResponse
-                {
-                    IsSuccess = false,
-                    Message = "No curriculum data was extracted"
-                };
-            }
-
-            // Step 3: Validate extracted data
+            // Step 5: Validate extracted data
             var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
             if (!validationResult.IsValid)
             {
@@ -91,7 +119,7 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
                 };
             }
 
-            // Step 4: Map and persist data
+            // Step 6: Map and persist data
             var result = await PersistCurriculumDataAsync(curriculumData, request.CreatedBy, cancellationToken);
 
             _logger.LogInformation("Curriculum import completed successfully");
@@ -108,6 +136,50 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
         }
     }
 
+    private async Task<CurriculumImportData?> TryGetCachedDataAsync(string textHash, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var cachedJson = await _curriculumImportStorage.TryGetByHashJsonAsync("curriculum-imports", textHash, cancellationToken);
+            _logger.LogInformation("Cache lookup for hash: {Hash}, found: {Found}", textHash, cachedJson);
+            if (!string.IsNullOrEmpty(cachedJson))
+            {
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new JsonStringEnumConverter() }
+                };
+                return JsonSerializer.Deserialize<CurriculumImportData>(cachedJson, jsonOptions);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve cached data for hash: {Hash}", textHash);
+        }
+        return null;
+    }
+
+    private async Task SaveDataToStorageAsync(CurriculumImportData data, string rawText, string textHash, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+            await _curriculumImportStorage.SaveLatestAsync(
+                "curriculum-imports",
+                data.Program.ProgramCode,
+                data.Version.VersionCode,
+                json,
+                rawText,
+                textHash,
+                cancellationToken);
+            _logger.LogInformation("Saved curriculum data to storage with hash: {Hash}", textHash);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to save curriculum data to storage for hash: {Hash}", textHash);
+        }
+    }
+
     private async Task<string> ExtractCurriculumDataAsync(string rawText)
     {
         var prompt = $@"
@@ -115,33 +187,46 @@ Extract curriculum information from the following text and return it as JSON fol
 
 {{
   ""program"": {{
-    ""programCode"": ""string (max 20 chars)"",
-    ""programName"": ""string (max 200 chars)"",
-    ""description"": ""string (optional)""
+    ""programName"": ""string (max 255 chars)"",
+    ""programCode"": ""string (max 50 chars, e.g., 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'K16A')"",
+    ""description"": ""string"",
+    ""degreeLevel"": ""Bachelor"",
+    ""totalCredits"": number,
+    ""durationYears"": number
+
   }},
   ""version"": {{
-    ""versionNumber"": number,
-    ""effectiveDate"": ""YYYY-MM-DD"",
-    ""description"": ""string (optional)""
+    ""versionCode"": ""string (max 50 chars, e.g., 'V1.0', '2022')"",
+    ""effectiveYear"": number (year, e.g., 2022),
+    ""description"": ""string (optional)"",
+    ""isActive"": true
   }},
   ""subjects"": [
     {{
-      ""subjectCode"": ""string (max 20 chars)"",
-      ""subjectName"": ""string (max 200 chars)"",
-      ""credits"": number,
+      ""subjectCode"": ""string (max 50 chars)"",
+      ""subjectName"": ""string (max 255 chars)"",
+      ""credits"": number (1-10),
       ""description"": ""string (optional)""
     }}
   ],
   ""structure"": [
     {{
       ""subjectCode"": ""string"",
-      ""termNumber"": number,
-      ""isMandatory"": boolean,
-      ""prerequisiteSubjectCodes"": [""string""],
+      ""termNumber"": number (1-12),
+      ""isMandatory"": true,
+      ""prerequisiteSubjectCodes"": [""string""] (optional),
       ""prerequisitesText"": ""string (optional)""
     }}
   ]
 }}
+
+Important notes:
+- degreeLevel: Use ""Associate"", ""Bachelor"", ""Master"", or ""Doctorate"" (enum string values)
+- effectiveYear: Extract year from any date mentioned (e.g., from ""2022-10-26"" use 2022)
+- versionCode: Generate a meaningful version code if not explicitly mentioned
+- programCode: Accept various formats like 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'BIT_SE_K15D', 'K16A'. If multiple student year codes are present, format as 'PROGRAM_SPECIALIZATION_YEAR1_YEAR2' (e.g., 'BIT_SE_K15D_K16A'). Keep original format if it follows university naming conventions.
+- structure: Map each subject to a term/semester number, use 1 if not specified
+- All string fields should be properly escaped for JSON
 
 Text to extract from:
 {rawText}
@@ -151,7 +236,42 @@ Return only the JSON, no additional text or formatting.";
         try
         {
             var result = await _kernel.InvokePromptAsync(prompt);
-            return result.GetValue<string>() ?? string.Empty;
+            _logger.LogInformation("Raw AI response: {RawResponse}", result.GetValue<string>() ?? string.Empty);
+
+            var rawResponse = result.GetValue<string>() ?? string.Empty;
+
+            // Clean up the response - remove markdown and isolate the JSON block robustly
+            var cleanedResponse = rawResponse.Trim();
+
+            // If the response contains code fences, strip them
+            if (cleanedResponse.StartsWith("```"))
+            {
+                // Remove leading code fence (``` or ```json)
+                var firstNewline = cleanedResponse.IndexOf('\n');
+                if (firstNewline > -1)
+                {
+                    cleanedResponse = cleanedResponse.Substring(firstNewline + 1);
+                }
+            }
+            if (cleanedResponse.EndsWith("```"))
+            {
+                // Remove trailing code fence
+                var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
+                if (lastFenceIndex > -1)
+                {
+                    cleanedResponse = cleanedResponse.Substring(0, lastFenceIndex);
+                }
+            }
+
+            // Extract content between first '{' and last '}' to ensure only JSON remains
+            var startIdx = cleanedResponse.IndexOf('{');
+            var endIdx = cleanedResponse.LastIndexOf('}');
+            if (startIdx >= 0 && endIdx > startIdx)
+            {
+                cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
+            }
+
+            return cleanedResponse.Trim();
         }
         catch (Exception ex)
         {
@@ -175,7 +295,6 @@ Return only the JSON, no additional text or formatting.";
         {
             curriculumProgram = new CurriculumProgram
             {
-                Id = Guid.NewGuid(),
                 ProgramName = data.Program.ProgramName,
                 ProgramCode = data.Program.ProgramCode,
                 Description = data.Program.Description,
@@ -185,7 +304,8 @@ Return only the JSON, no additional text or formatting.";
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
-            await _curriculumProgramRepository.AddAsync(curriculumProgram, cancellationToken);
+            curriculumProgram = await _curriculumProgramRepository.AddAsync(curriculumProgram, cancellationToken);
+            _logger.LogInformation("Created new curriculum program with ID: {ProgramId}", curriculumProgram.Id);
         }
         else
         {
@@ -194,10 +314,28 @@ Return only the JSON, no additional text or formatting.";
 
         response.CurriculumProgramId = curriculumProgram.Id;
 
-        // Create curriculum version
-        var curriculumVersion = new CurriculumVersion
+        // Check if curriculum version already exists
+        var existingVersion = await _curriculumVersionRepository.FirstOrDefaultAsync(
+            v => v.ProgramId == curriculumProgram.Id && v.VersionCode == data.Version.VersionCode, 
+            cancellationToken);
+
+        CurriculumVersion curriculumVersion;
+
+        if (existingVersion != null)
         {
-            Id = Guid.NewGuid(),
+            _logger.LogWarning("Curriculum version {VersionCode} for program {ProgramCode} already exists. Skipping import.", 
+                data.Version.VersionCode, data.Program.ProgramCode);
+            
+            return new ImportCurriculumResponse
+            {
+                IsSuccess = false,
+                Message = $"Curriculum version '{data.Version.VersionCode}' for program '{data.Program.ProgramCode}' already exists. Import skipped to prevent duplicates."
+            };
+        }
+
+        // Create curriculum version
+        curriculumVersion = new CurriculumVersion
+        {
             ProgramId = curriculumProgram.Id,
             VersionCode = data.Version.VersionCode,
             EffectiveYear = data.Version.EffectiveYear,
@@ -205,7 +343,8 @@ Return only the JSON, no additional text or formatting.";
             Description = data.Version.Description,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        await _curriculumVersionRepository.AddAsync(curriculumVersion, cancellationToken);
+        curriculumVersion = await _curriculumVersionRepository.AddAsync(curriculumVersion, cancellationToken);
+        _logger.LogInformation("Created new curriculum version with ID: {VersionId}", curriculumVersion.Id);
 
         response.CurriculumVersionId = curriculumVersion.Id;
 
@@ -223,12 +362,12 @@ Return only the JSON, no additional text or formatting.";
                 subject.Description = subjectData.Description;
                 subject.UpdatedAt = DateTime.UtcNow;
                 await _subjectRepository.UpdateAsync(subject, cancellationToken);
+                _logger.LogInformation("Updated subject with ID: {SubjectId}", subject.Id);
             }
             else
             {
                 subject = new Subject
                 {
-                    Id = Guid.NewGuid(),
                     SubjectCode = subjectData.SubjectCode,
                     SubjectName = subjectData.SubjectName,
                     Credits = subjectData.Credits,
@@ -236,7 +375,8 @@ Return only the JSON, no additional text or formatting.";
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow
                 };
-                await _subjectRepository.AddAsync(subject, cancellationToken);
+                subject = await _subjectRepository.AddAsync(subject, cancellationToken);
+                _logger.LogInformation("Created new subject with ID: {SubjectId}", subject.Id);
             }
 
             response.SubjectIds.Add(subject.Id);
@@ -264,7 +404,6 @@ Return only the JSON, no additional text or formatting.";
 
             var structure = new Domain.Entities.CurriculumStructure
             {
-                Id = Guid.NewGuid(),
                 CurriculumVersionId = curriculumVersion.Id,
                 SubjectId = subject.Id,
                 TermNumber = structureData.TermNumber,
@@ -274,10 +413,19 @@ Return only the JSON, no additional text or formatting.";
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            await _curriculumStructureRepository.AddAsync(structure, cancellationToken);
+            structure = await _curriculumStructureRepository.AddAsync(structure, cancellationToken);
+            _logger.LogInformation("Created new curriculum structure with ID: {StructureId}", structure.Id);
         }
 
         response.Message = "Curriculum imported successfully";
         return response;
+    }
+
+    private string ComputeSha256Hash(string input)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(input);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

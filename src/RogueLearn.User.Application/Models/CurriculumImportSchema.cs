@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using RogueLearn.User.Domain.Enums;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Application.Models;
 
@@ -37,6 +39,7 @@ public class CurriculumProgramData
     public string? Description { get; set; }
     
     [Required]
+    [JsonConverter(typeof(StringEnumConverter))]
     public DegreeLevel DegreeLevel { get; set; }
     
     public int? TotalCredits { get; set; }

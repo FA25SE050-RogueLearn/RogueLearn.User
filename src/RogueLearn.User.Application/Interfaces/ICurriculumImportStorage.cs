@@ -36,4 +36,17 @@ public interface ICurriculumImportStorage
         string versionCode,
         string rawTextHash,
         CancellationToken cancellationToken = default);
+
+    // Clear cached data by hash
+    Task<bool> ClearCacheByHashAsync(
+        string bucketName,
+        string rawTextHash,
+        CancellationToken cancellationToken = default);
+
+    // Clear all cached data for a program/version
+    Task<bool> ClearCacheForProgramVersionAsync(
+        string bucketName,
+        string programCode,
+        string versionCode,
+        CancellationToken cancellationToken = default);
 }
