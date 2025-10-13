@@ -219,12 +219,10 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                     var versionCode = curriculumData.Version?.VersionCode ?? string.Empty;
                     if (!string.IsNullOrWhiteSpace(programCode) && !string.IsNullOrWhiteSpace(versionCode))
                     {
-                        // Save with embedded version in key format (programCode_versionCode)
-                        var key = $"{programCode}_{versionCode}";
                         await _storage.SaveLatestAsync(
                             bucketName: "curriculum-imports",
-                            programCode: key, // Use the full key as the program code
-                            versionCode: string.Empty, // No separate version code needed
+                            programCode: programCode, // Use the full key as the program code
+                            versionCode: versionCode, // Use the full key as the version code
                             jsonContent: extractedJson,
                             rawTextContent: rawText,
                             rawTextHash: rawTextHash,

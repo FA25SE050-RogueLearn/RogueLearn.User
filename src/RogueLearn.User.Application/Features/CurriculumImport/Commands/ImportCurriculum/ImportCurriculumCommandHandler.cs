@@ -141,7 +141,7 @@ public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCo
         try
         {
             var cachedJson = await _curriculumImportStorage.TryGetByHashJsonAsync("curriculum-imports", textHash, cancellationToken);
-            _logger.LogInformation("Cache lookup for hash: {Hash}, found: {Found}", textHash, cachedJson);
+            _logger.LogInformation("Cache lookup for hash: {Hash}, found: {Found}", textHash, cachedJson != null);
             if (!string.IsNullOrEmpty(cachedJson))
             {
                 var jsonOptions = new JsonSerializerOptions

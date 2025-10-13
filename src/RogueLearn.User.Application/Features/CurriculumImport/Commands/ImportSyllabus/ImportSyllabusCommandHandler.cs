@@ -198,14 +198,11 @@ public class ImportSyllabusCommandHandler : IRequestHandler<ImportSyllabusComman
   ""isActive"": boolean,
   ""approvedDate"": ""YYYY-MM-DD"",
   ""materials"": [{{""materialDescription"": ""string"", ""author"": ""string"", ""publisher"": ""string"", ""publishedDate"": ""YYYY-MM-DD"", ""edition"": ""string"", ""isbn"": ""string"", ""isMainMaterial"": boolean, ""isHardCopy"": boolean, ""isOnline"": boolean, ""note"": ""string""}}],
-  ""learningOutcomes"": [{{""cloNumber"": number, ""cloName"": ""string"", ""cloDetails"": ""string"", ""loDetails"": ""string""}}],
-  ""constructiveQuestions"": [{{""question"": ""string"", ""answer"": ""string"", ""category"": ""string""}}],
-  ""assessments"": [{{""type"": ""string"", ""description"": ""string"", ""weightPercentage"": number, ""dueDate"": ""YYYY-MM-DD"", ""instructions"": ""string""}}],
   ""content"": {{
     ""courseDescription"": ""string"",
-    ""learningOutcomes"": [""string""],
     ""weeklySchedule"": [{{""weekNumber"": 1-10, ""topic"": ""string"", ""activities"": [""string""], ""readings"": [""string""]}}],
-    ""assessments"": [{{""name"": ""string"", ""type"": ""string"", ""weightPercentage"": number, ""description"": ""string""}}],
+    ""assessments"": [{{""name"": ""string"", ""type"": ""string"", ""weightPercentage"": integer, ""description"": ""string""}}],
+    ""constructiveQuestions"": [{{""question"": ""string"", ""answer"": ""string"", ""category"": ""string""}}],
     ""requiredTexts"": [""string""],
     ""recommendedTexts"": [""string""],
     ""gradingPolicy"": ""string"",
@@ -218,6 +215,8 @@ RULES:
 - weeklySchedule: If text indicates 30 sessions, generate 5 weeks (1-5); otherwise 10 weeks (1-10). Distribute content logically
 - Dates: Use YYYY-MM-DD format, null if missing
 - Missing values: empty strings/arrays, false, 0, null for dates
+- For the root field 'description', summarize into a concise overview (≤ 300 characters)
+ - For each assessment's 'description', summarize concisely (≤ 300 characters)
 
 Text: {rawText}
 

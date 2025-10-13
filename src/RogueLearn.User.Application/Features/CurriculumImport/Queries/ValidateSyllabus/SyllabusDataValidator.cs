@@ -42,15 +42,11 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .WithMessage("Course description cannot exceed 2000 characters.")
             .When(x => !string.IsNullOrEmpty(x.CourseDescription));
 
-        RuleFor(x => x.LearningOutcomes)
-            .Must(outcomes => outcomes == null || outcomes.All(o => !string.IsNullOrWhiteSpace(o)))
-            .WithMessage("Learning outcomes cannot contain empty or whitespace-only values.")
-            .When(x => x.LearningOutcomes != null);
-
-        RuleForEach(x => x.LearningOutcomes)
-            .MaximumLength(500)
-            .WithMessage("Each learning outcome cannot exceed 500 characters.")
-            .When(x => x.LearningOutcomes != null);
+        // Learning outcomes removed from schema to reduce duplication and token usage
+        // Add validation for constructive questions now part of content
+        RuleForEach(x => x.ConstructiveQuestions)
+            .SetValidator(new ConstructiveQuestionValidator())
+            .When(x => x.ConstructiveQuestions != null);
 
         RuleForEach(x => x.WeeklySchedule)
             .SetValidator(new SyllabusWeekValidator())
@@ -105,8 +101,8 @@ public class SyllabusWeekValidator : AbstractValidator<SyllabusWeek>
         RuleFor(x => x.Topic)
             .NotEmpty()
             .WithMessage("Week topic is required.")
-            .MaximumLength(200)
-            .WithMessage("Week topic cannot exceed 200 characters.");
+            .MaximumLength(500)
+            .WithMessage("Week topic cannot exceed 500 characters.");
 
         RuleFor(x => x.Activities)
             .Must(activities => activities == null || activities.All(a => !string.IsNullOrWhiteSpace(a)))
@@ -148,8 +144,26 @@ public class AssessmentItemValidator : AbstractValidator<AssessmentItem>
             .When(x => x.WeightPercentage.HasValue);
 
         RuleFor(x => x.Description)
-            .MaximumLength(500)
-            .WithMessage("Assessment description cannot exceed 500 characters.")
+            .MaximumLength(1000)
+            .WithMessage("Assessment description cannot exceed 1000 characters.")
             .When(x => !string.IsNullOrEmpty(x.Description));
+    }
+}
+
+public class ConstructiveQuestionValidator : AbstractValidator<ConstructiveQuestion>
+{
+    public ConstructiveQuestionValidator()
+    {
+        RuleFor(x => x.Question)
+            .NotEmpty()
+            .WithMessage("Question is required.")
+            .MaximumLength(500);
+
+        RuleFor(x => x.Answer)
+            .MaximumLength(2000);
+
+        RuleFor(x => x.Category)
+            .MaximumLength(100)
+            .When(x => !string.IsNullOrEmpty(x.Category));
     }
 }

@@ -32,6 +32,12 @@ try
     var configuration = sp.GetRequiredService<IConfiguration>();
     var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
+    // Create a Custom HTTP Client to increase timeout
+    var httpClient = new HttpClient
+    {
+      Timeout = TimeSpan.FromMinutes(2)
+    };
+
     // Create a new Kernel builder
     var kernelBuilder = Kernel.CreateBuilder();
 
@@ -46,7 +52,7 @@ try
       case "Google":
         var googleModel = configuration["AI:Google:Model"] ?? throw new InvalidOperationException("Google Model not configured.");
         var googleApiKey = configuration["AI:Google:ApiKey"] ?? throw new InvalidOperationException("Google API Key not configured.");
-        kernelBuilder.AddGoogleAIGeminiChatCompletion(modelId: googleModel, apiKey: googleApiKey);
+        kernelBuilder.AddGoogleAIGeminiChatCompletion(modelId: googleModel, apiKey: googleApiKey, httpClient: httpClient);
         break;
 
       default:

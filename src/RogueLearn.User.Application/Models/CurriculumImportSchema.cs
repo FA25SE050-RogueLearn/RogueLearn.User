@@ -136,16 +136,9 @@ public class SyllabusData
     
     // Materials
     public List<SyllabusMaterial> Materials { get; set; } = new();
-    
-    // Learning Outcomes
-    public List<LearningOutcome> LearningOutcomes { get; set; } = new();
-    
+
     // Sessions
     public List<SyllabusSession> Sessions { get; set; } = new();
-    
-    // Questions and Assessments
-    public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
-    public List<SyllabusAssessment> Assessments { get; set; } = new();
 }
 
 /// <summary>
@@ -154,9 +147,9 @@ public class SyllabusData
 public class SyllabusContent
 {
     public string? CourseDescription { get; set; }
-    public List<string>? LearningOutcomes { get; set; }
     public List<SyllabusWeek>? WeeklySchedule { get; set; }
     public List<AssessmentItem>? Assessments { get; set; }
+    public List<ConstructiveQuestion>? ConstructiveQuestions { get; set; }
     public List<string>? RequiredTexts { get; set; }
     public List<string>? RecommendedTexts { get; set; }
     public string? GradingPolicy { get; set; }
@@ -193,13 +186,7 @@ public class SyllabusMaterial
     public string Note { get; set; } = string.Empty;
 }
 
-public class LearningOutcome
-{
-    public int CLONumber { get; set; }
-    public string CLOName { get; set; } = string.Empty;
-    public string CLODetails { get; set; } = string.Empty;
-    public string LODetails { get; set; } = string.Empty;
-}
+// Removed explicit learning outcomes from top-level schema; use content fields instead
 
 public class SyllabusSession
 {
@@ -221,11 +208,4 @@ public class ConstructiveQuestion
     public string Category { get; set; } = string.Empty;
 }
 
-public class SyllabusAssessment
-{
-    public string Type { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public int WeightPercentage { get; set; }
-    public DateOnly? DueDate { get; set; }
-    public string Instructions { get; set; } = string.Empty;
-}
+// Removed duplicate top-level assessments; use content assessments (AssessmentItem)
