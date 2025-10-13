@@ -196,7 +196,7 @@ Extract curriculum information from the following text and return it as JSON fol
 
   }},
   ""version"": {{
-    ""versionCode"": ""string (max 50 chars, e.g., 'V1.0', '2022')"",
+    ""versionCode"": ""string (max 50 chars, use full date format like '2024-09-01' if date is available, otherwise use format like 'V1.0')"",
     ""effectiveYear"": number (year, e.g., 2022),
     ""description"": ""string (optional)"",
     ""isActive"": true
@@ -223,7 +223,7 @@ Extract curriculum information from the following text and return it as JSON fol
 Important notes:
 - degreeLevel: Use ""Associate"", ""Bachelor"", ""Master"", or ""Doctorate"" (enum string values)
 - effectiveYear: Extract year from any date mentioned (e.g., from ""2022-10-26"" use 2022)
-- versionCode: Generate a meaningful version code if not explicitly mentioned
+- versionCode: Use full date format (e.g., ""2024-09-01"") if an effective date or approval date is found in the text. If no date is available, generate a meaningful version code like ""V1.0""
 - programCode: Accept various formats like 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'BIT_SE_K15D', 'K16A'. If multiple student year codes are present, format as 'PROGRAM_SPECIALIZATION_YEAR1_YEAR2' (e.g., 'BIT_SE_K15D_K16A'). Keep original format if it follows university naming conventions.
 - structure: Map each subject to a term/semester number, use 1 if not specified
 - All string fields should be properly escaped for JSON

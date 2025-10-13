@@ -1,6 +1,8 @@
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -20,6 +22,7 @@ public class StudentEnrollment : BaseEntity
     public DateOnly? ExpectedGraduationDate { get; set; }
 
     [Column("status")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public EnrollmentStatus Status { get; set; } = EnrollmentStatus.Active;
 
     [Column("created_at")]

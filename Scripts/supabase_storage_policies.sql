@@ -90,18 +90,32 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
 -- 
 -- The following file structure is expected in the curriculum-imports bucket:
 --
--- /cache/{rawTextHash}.json                    - Cached curriculum JSON by hash
--- /{programCode}/{versionCode}/latest.json     - Latest curriculum JSON
--- /{programCode}/{versionCode}/latest.txt      - Latest raw text content  
--- /{programCode}/{versionCode}/meta.json       - Latest metadata JSON
--- /{programCode}/{versionCode}/{rawTextHash}.json - Versioned curriculum JSON by hash
+-- CURRICULUM STRUCTURE:
+-- /curriculum/cache/{rawTextHash}.json                    - Cached curriculum JSON by hash
+-- /curriculum/{programCode}/{versionCode}/latest.json     - Latest curriculum JSON
+-- /curriculum/{programCode}/{versionCode}/latest.txt      - Latest raw text content  
+-- /curriculum/{programCode}/{versionCode}/meta.json       - Latest metadata JSON
+-- /curriculum/{programCode}/{versionCode}/{rawTextHash}.json - Versioned curriculum JSON by hash
+--
+-- SYLLABUS STRUCTURE:
+-- /syllabus/_hashes/{rawTextHash}.json                    - Cached syllabus JSON by hash
+-- /syllabus/{subjectCode}/{version}/latest.json           - Latest syllabus JSON
+-- /syllabus/{subjectCode}/{version}/latest.meta.json      - Latest syllabus metadata JSON
+-- /syllabus/{subjectCode}/{version}/versions/{rawTextHash}.json - Versioned syllabus JSON by hash
+-- /syllabus/_temp/validation_{inputHash}/latest.json      - Temporary syllabus validation data
 --
 -- Examples:
--- /cache/abc123def456.json
--- /COMP-SCI/2024/latest.json
--- /COMP-SCI/2024/latest.txt
--- /COMP-SCI/2024/meta.json
--- /COMP-SCI/2024/abc123def456.json
+-- /curriculum/cache/abc123def456.json
+-- /curriculum/COMP-SCI/2024/latest.json
+-- /curriculum/COMP-SCI/2024/latest.txt
+-- /curriculum/COMP-SCI/2024/meta.json
+-- /curriculum/COMP-SCI/2024/abc123def456.json
+--
+-- /syllabus/_hashes/def456ghi789.json
+-- /syllabus/BIT_SE_K17D_K18A/2024/latest.json
+-- /syllabus/BIT_SE_K17D_K18A/2024/latest.meta.json
+-- /syllabus/BIT_SE_K17D_K18A/2024/versions/def456ghi789.json
+-- /syllabus/_temp/validation_xyz789/latest.json
 --
 -- =====================================================
 -- End of Storage Policies Script

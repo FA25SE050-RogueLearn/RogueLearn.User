@@ -6,6 +6,7 @@ using RogueLearn.User.Application.Features.CurriculumPrograms.Commands.UpdateCur
 using RogueLearn.User.Application.Features.CurriculumPrograms.Commands.DeleteCurriculumProgram;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetAllCurriculumPrograms;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramById;
+using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 using GetAllCurriculumProgramDto = RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetAllCurriculumPrograms.CurriculumProgramDto;
 using GetByIdCurriculumProgramDto = RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetAllCurriculumPrograms.CurriculumProgramDto;
 
@@ -56,6 +57,28 @@ public class CurriculumProgramsController : ControllerBase
     public async Task<ActionResult<GetByIdCurriculumProgramDto>> GetById(Guid id)
     {
         var query = new GetCurriculumProgramByIdQuery { Id = id };
+        var result = await _mediator.Send(query);
+        return Ok(result);
+    }
+
+    [HttpGet("{id}/details")]
+    /// <summary>
+    /// Retrieves comprehensive details of a curriculum program including all versions, subjects, and syllabus content.
+    /// </summary>
+    /// <remarks>
+    /// GET <c>api/admin/programs/{id}/details</c>
+    /// 
+    /// This endpoint provides a complete overview of the curriculum program including:
+    /// - All curriculum versions
+    /// - All subjects in each version
+    /// - All syllabus versions for each subject
+    /// - Analysis of missing content at various levels
+    /// </remarks>
+    /// <param name="id">Program unique identifier.</param>
+    /// <returns>Comprehensive curriculum program details with content analysis.</returns>
+    public async Task<ActionResult<CurriculumProgramDetailsResponse>> GetDetails(Guid id)
+    {
+        var query = new GetCurriculumProgramDetailsQuery { ProgramId = id };
         var result = await _mediator.Send(query);
         return Ok(result);
     }

@@ -115,6 +115,37 @@ public class SyllabusData
     public DateOnly? EffectiveDate { get; set; }
     
     public bool IsActive { get; set; } = true;
+
+    // Basic Information
+    public int SyllabusId { get; set; }
+    public string SyllabusName { get; set; } = string.Empty;
+    public string SyllabusEnglish { get; set; } = string.Empty;
+    public int NoCredit { get; set; }
+    public string DegreeLevel { get; set; } = string.Empty;
+    public string TimeAllocation { get; set; } = string.Empty;
+    public string PreRequisite { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<string> StudentTasks { get; set; } = new();
+    public List<string> Tools { get; set; } = new();
+    
+    // Approval Information
+    public string DecisionNo { get; set; } = string.Empty;
+    public bool IsApproved { get; set; }
+    public string Note { get; set; } = string.Empty;
+    public DateOnly? ApprovedDate { get; set; }
+    
+    // Materials
+    public List<SyllabusMaterial> Materials { get; set; } = new();
+    
+    // Learning Outcomes
+    public List<LearningOutcome> LearningOutcomes { get; set; } = new();
+    
+    // Sessions
+    public List<SyllabusSession> Sessions { get; set; } = new();
+    
+    // Questions and Assessments
+    public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
+    public List<SyllabusAssessment> Assessments { get; set; } = new();
 }
 
 /// <summary>
@@ -146,4 +177,55 @@ public class AssessmentItem
     public string? Type { get; set; }
     public int? WeightPercentage { get; set; }
     public string? Description { get; set; }
+}
+
+public class SyllabusMaterial
+{
+    public string MaterialDescription { get; set; } = string.Empty;
+    public string Author { get; set; } = string.Empty;
+    public string Publisher { get; set; } = string.Empty;
+    public DateOnly? PublishedDate { get; set; }
+    public string Edition { get; set; } = string.Empty;
+    public string ISBN { get; set; } = string.Empty;
+    public bool IsMainMaterial { get; set; }
+    public bool IsHardCopy { get; set; }
+    public bool IsOnline { get; set; }
+    public string Note { get; set; } = string.Empty;
+}
+
+public class LearningOutcome
+{
+    public int CLONumber { get; set; }
+    public string CLOName { get; set; } = string.Empty;
+    public string CLODetails { get; set; } = string.Empty;
+    public string LODetails { get; set; } = string.Empty;
+}
+
+public class SyllabusSession
+{
+    public int SessionNumber { get; set; }
+    public string Topic { get; set; } = string.Empty;
+    public string LearningTeachingType { get; set; } = string.Empty;
+    public string LO { get; set; } = string.Empty;
+    public string ITU { get; set; } = string.Empty;
+    public string StudentMaterials { get; set; } = string.Empty;
+    public string SDownload { get; set; } = string.Empty;
+    public string StudentTasks { get; set; } = string.Empty;
+    public string URLs { get; set; } = string.Empty;
+}
+
+public class ConstructiveQuestion
+{
+    public string Question { get; set; } = string.Empty;
+    public string Answer { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+}
+
+public class SyllabusAssessment
+{
+    public string Type { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int WeightPercentage { get; set; }
+    public DateOnly? DueDate { get; set; }
+    public string Instructions { get; set; } = string.Empty;
 }

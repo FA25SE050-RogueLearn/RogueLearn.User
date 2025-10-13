@@ -1,6 +1,8 @@
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -11,6 +13,7 @@ public class Notification : BaseEntity
     public Guid AuthUserId { get; set; }
 
     [Column("type")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public NotificationType Type { get; set; }
 
     [Column("title")]

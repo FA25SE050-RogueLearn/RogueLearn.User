@@ -100,7 +100,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
             }
             _logger.LogInformation("Processed curriculum data: {@CurriculumData}", curriculumData);
 
-            // Step 2.5: Check storage by hash; use stored JSON if matches, else upsert new content
+            // Step 2.5: Check storage by hash; use stored JSON if matches
             try
             {
                 var programCode = curriculumData.Program?.ProgramCode ?? string.Empty;
@@ -189,30 +189,18 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                             }
                         }
                     }
-                    else
-                    {
-                        // Upsert latest with new content and hash
-                        await _storage.SaveLatestAsync(
-                            bucketName: "curriculum-imports",
-                            programCode: programCode,
-                            versionCode: versionCode,
-                            jsonContent: extractedJson,
-                            rawTextContent: rawText,
-                            rawTextHash: rawTextHash,
-                            cancellationToken: cancellationToken);
-                    }
                 }
                 else
                 {
-                    _logger.LogWarning("Skipping storage check/save due to missing programCode or versionCode");
+                    _logger.LogWarning("Skipping storage check due to missing programCode or versionCode");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed during storage check/save for curriculum import");
+                _logger.LogError(ex, "Failed during storage check for curriculum import");
             }
 
-            // Step 3: Validate extracted data
+            // Step 3: Validate extracted data FIRST
             var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
             
             var response = new ValidateCurriculumResponse
@@ -222,8 +210,38 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                 ValidationErrors = validationResult.Errors.Select(e => e.ErrorMessage).ToList()
             };
 
+            // Step 4: Only save to storage if validation passes
             if (validationResult.IsValid)
             {
+                try
+                {
+                    var programCode = curriculumData.Program?.ProgramCode ?? string.Empty;
+                    var versionCode = curriculumData.Version?.VersionCode ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(programCode) && !string.IsNullOrWhiteSpace(versionCode))
+                    {
+                        // Save with embedded version in key format (programCode_versionCode)
+                        var key = $"{programCode}_{versionCode}";
+                        await _storage.SaveLatestAsync(
+                            bucketName: "curriculum-imports",
+                            programCode: key, // Use the full key as the program code
+                            versionCode: string.Empty, // No separate version code needed
+                            jsonContent: extractedJson,
+                            rawTextContent: rawText,
+                            rawTextHash: rawTextHash,
+                            cancellationToken: cancellationToken);
+                        
+                        _logger.LogInformation("Curriculum data saved to storage after successful validation");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Skipping storage save due to missing programCode or versionCode");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to save curriculum data to storage after validation");
+                }
+                
                 response.Message = "Curriculum data is valid and ready for import";
             }
             else
@@ -261,7 +279,7 @@ Extract curriculum information from the following text and return it as JSON fol
 
   }},
   ""version"": {{
-    ""versionCode"": ""string (max 50 chars, e.g., 'V1.0', '2022')"",
+    ""versionCode"": ""string (max 50 chars, use full date format like '2024-09-01' if date is available, otherwise use format like 'V1.0')"",
     ""effectiveYear"": number (year, e.g., 2022),
     ""description"": ""string (optional)"",
     ""isActive"": true
@@ -288,7 +306,7 @@ Extract curriculum information from the following text and return it as JSON fol
 Important notes:
 - degreeLevel: Use ""Associate"", ""Bachelor"", ""Master"", or ""Doctorate"" (enum string values)
 - effectiveYear: Extract year from any date mentioned (e.g., from ""2022-10-26"" use 2022)
-- versionCode: Generate a meaningful version code if not explicitly mentioned
+- versionCode: Use full date format (e.g., ""2024-09-01"") if an effective date or approval date is found in the text. If no date is available, generate a meaningful version code like ""V1.0""
 - programCode: Accept various formats like 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'BIT_SE_K15D', 'K16A'. If multiple student year codes are present, format as 'PROGRAM_SPECIALIZATION_YEAR1_YEAR2' (e.g., 'BIT_SE_K15D_K16A'). Keep original format if it follows university naming conventions.
 - structure: Map each subject to a term/semester number, use 1 if not specified
 - All string fields should be properly escaped for JSON

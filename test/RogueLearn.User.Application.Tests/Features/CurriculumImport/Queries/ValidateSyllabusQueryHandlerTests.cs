@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel;
 using FluentAssertions;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateSyllabus;
 using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Queries;
 
@@ -12,6 +13,7 @@ public class ValidateSyllabusQueryHandlerTests
 {
     private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<SyllabusDataValidator> _mockValidator;
+    private readonly Mock<ICurriculumImportStorage> _mockStorage;
     private readonly Mock<ILogger<ValidateSyllabusQueryHandler>> _mockLogger;
     private readonly ValidateSyllabusQueryHandler _handler;
 
@@ -19,11 +21,13 @@ public class ValidateSyllabusQueryHandlerTests
     {
         _mockKernel = new Mock<Kernel>();
         _mockValidator = new Mock<SyllabusDataValidator>();
+        _mockStorage = new Mock<ICurriculumImportStorage>();
         _mockLogger = new Mock<ILogger<ValidateSyllabusQueryHandler>>();
 
         _handler = new ValidateSyllabusQueryHandler(
             _mockKernel.Object,
             _mockValidator.Object,
+            _mockStorage.Object,
             _mockLogger.Object);
     }
 

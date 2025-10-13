@@ -1,4 +1,6 @@
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Models;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
@@ -7,10 +9,12 @@ namespace RogueLearn.User.Infrastructure.Services;
 public class CurriculumImportStorage : ICurriculumImportStorage
 {
     private readonly Supabase.Client _client;
+    private readonly ILogger<CurriculumImportStorage> _logger;
 
-    public CurriculumImportStorage(Supabase.Client client)
+    public CurriculumImportStorage(Supabase.Client client, ILogger<CurriculumImportStorage> logger)
     {
         _client = client;
+        _logger = logger;
     }
 
     public async Task SaveLatestAsync(
@@ -216,4 +220,211 @@ public class CurriculumImportStorage : ICurriculumImportStorage
             return false;
         }
     }
+
+    #region Syllabus Storage Methods
+
+    public async Task SaveSyllabusDataAsync(
+        string subjectCode,
+        int version,
+        SyllabusData syllabusData,
+        string extractedJson,
+        string inputHash,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            const string bucketName = "curriculum-imports"; // Use same bucket but different folder
+            
+            if (string.IsNullOrEmpty(subjectCode))
+            {
+                _logger.LogWarning("Subject code is empty, using fallback storage key");
+                // Fallback to temporary key if subject code is not available
+                var tempKey = $"syllabus/_temp/validation_{inputHash}";
+                await SaveSyllabusLatestAsync(
+                    bucketName,
+                    "_temp",
+                    $"validation_{inputHash}",
+                    extractedJson,
+                    string.Empty,
+                    inputHash,
+                    cancellationToken);
+                
+                _logger.LogInformation("Saved syllabus validation data with temporary key: {Key}", tempKey);
+                return;
+            }
+
+            // Create syllabus folder structure alongside curriculum folders
+            await SaveSyllabusLatestAsync(
+                bucketName,
+                subjectCode,
+                version.ToString(),
+                extractedJson,
+                string.Empty, // No raw text content for syllabus
+                inputHash,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Saved syllabus data in syllabus/{SubjectCode}/{Version}/ for subject: {SubjectCode} version: {Version}",
+                subjectCode, version, subjectCode, version);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, 
+                "Failed to save syllabus data for subject: {SubjectCode} version: {Version}",
+                subjectCode, version);
+            throw;
+        }
+    }
+
+    public async Task<string?> TryGetCachedSyllabusDataAsync(
+        string inputHash,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            const string bucketName = "curriculum-imports";
+            var cachedData = await TryGetByHashJsonAsync(
+                bucketName,
+                inputHash,
+                cancellationToken);
+
+            if (cachedData != null)
+            {
+                _logger.LogInformation("Retrieved cached syllabus data for hash: {Hash}", inputHash);
+            }
+
+            return cachedData;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve cached syllabus data for hash: {Hash}", inputHash);
+            return null;
+        }
+    }
+
+    public async Task<string?> GetSyllabusDataAsync(
+        string subjectCode,
+        int version,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            const string bucketName = "curriculum-imports";
+            var data = await TryGetLatestJsonAsync(
+                bucketName,
+                $"syllabus/{subjectCode}",
+                $"v{version}",
+                cancellationToken);
+
+            if (data != null)
+            {
+                _logger.LogInformation(
+                    "Retrieved syllabus data for subject: {SubjectCode} version: {Version}",
+                    subjectCode, version);
+            }
+
+            return data;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to retrieve syllabus data for subject: {SubjectCode} version: {Version}",
+                subjectCode, version);
+            return null;
+        }
+    }
+
+    public async Task<bool> ClearCachedSyllabusDataAsync(
+        string inputHash,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            const string bucketName = "curriculum-imports";
+            var result = await ClearCacheByHashAsync(
+                bucketName,
+                inputHash,
+                cancellationToken);
+
+            if (result)
+            {
+                _logger.LogInformation("Cleared cached syllabus data for hash: {Hash}", inputHash);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to clear cached syllabus data for hash: {Hash}", inputHash);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing cached syllabus data for hash: {Hash}", inputHash);
+            return false;
+        }
+    }
+
+    private async Task SaveSyllabusLatestAsync(
+        string bucketName,
+        string subjectCode,
+        string versionCode,
+        string jsonContent,
+        string rawTextContent,
+        string rawTextHash,
+        CancellationToken cancellationToken = default)
+    {
+        // Paths for syllabus folder structure
+        var safeSubject = subjectCode.Trim();
+        var safeVersion = versionCode.Trim();
+        var prefix = $"syllabus/{safeSubject}/{safeVersion}/";
+        var latestJsonPath = prefix + "latest.json";
+        var latestMetaPath = prefix + "latest.meta.json";
+        var byHashJsonPath = $"syllabus/_hashes/{rawTextHash}.json";
+        var versionByHashJsonPath = prefix + $"versions/{rawTextHash}.json";
+
+        // Get bucket
+        var storage = _client.Storage.From(bucketName);
+
+        // Upload JSON (overwrite)
+        var jsonBytes = Encoding.UTF8.GetBytes(jsonContent);
+        await storage.Upload(jsonBytes, latestJsonPath, new Supabase.Storage.FileOptions
+        {
+            ContentType = "application/json",
+            Upsert = true
+        });
+
+        // Upload JSON by hash (cache), overwrite so latest known content for this raw text is available
+        await storage.Upload(jsonBytes, byHashJsonPath, new Supabase.Storage.FileOptions
+        {
+            ContentType = "application/json",
+            Upsert = true
+        });
+
+        // Upload JSON versioned under syllabus/subject/version keyed by hash (historical/reference)
+        await storage.Upload(jsonBytes, versionByHashJsonPath, new Supabase.Storage.FileOptions
+        {
+            ContentType = "application/json",
+            Upsert = true
+        });
+
+        // Upload metadata (includes hash)
+        var metaObj = new
+        {
+            rawTextHash = rawTextHash,
+            lastUpdated = DateTime.UtcNow.ToString("O"),
+            subjectCode = safeSubject,
+            version = safeVersion
+        };
+        var metaJson = System.Text.Json.JsonSerializer.Serialize(metaObj);
+        var metaBytes = Encoding.UTF8.GetBytes(metaJson);
+        await storage.Upload(metaBytes, latestMetaPath, new Supabase.Storage.FileOptions
+        {
+            ContentType = "application/json",
+            Upsert = true
+        });
+
+        _logger.LogInformation("Saved syllabus data to {Prefix} with hash {Hash}", prefix, rawTextHash);
+    }
+
+    #endregion
 }

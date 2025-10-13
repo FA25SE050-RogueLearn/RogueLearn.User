@@ -6,6 +6,7 @@ using FluentAssertions;
 using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportSyllabus;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using System.Linq.Expressions;
@@ -18,6 +19,7 @@ public class ImportSyllabusCommandHandlerTests
     private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<ISubjectRepository> _mockSubjectRepository;
     private readonly Mock<ISyllabusVersionRepository> _mockSyllabusVersionRepository;
+    private readonly Mock<ICurriculumImportStorage> _mockCurriculumImportStorage;
     private readonly Mock<SyllabusDataValidator> _mockValidator;
     private readonly Mock<ILogger<ImportSyllabusCommandHandler>> _mockLogger;
     private readonly ImportSyllabusCommandHandler _handler;
@@ -27,6 +29,7 @@ public class ImportSyllabusCommandHandlerTests
         _mockKernel = new Mock<Kernel>();
         _mockSubjectRepository = new Mock<ISubjectRepository>();
         _mockSyllabusVersionRepository = new Mock<ISyllabusVersionRepository>();
+        _mockCurriculumImportStorage = new Mock<ICurriculumImportStorage>();
         _mockValidator = new Mock<SyllabusDataValidator>();
         _mockLogger = new Mock<ILogger<ImportSyllabusCommandHandler>>();
 
@@ -34,6 +37,7 @@ public class ImportSyllabusCommandHandlerTests
             _mockKernel.Object,
             _mockSubjectRepository.Object,
             _mockSyllabusVersionRepository.Object,
+            _mockCurriculumImportStorage.Object,
             _mockValidator.Object,
             _mockLogger.Object);
     }

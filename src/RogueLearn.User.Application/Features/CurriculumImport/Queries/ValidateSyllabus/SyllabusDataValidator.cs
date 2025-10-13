@@ -17,9 +17,7 @@ public class SyllabusDataValidator : AbstractValidator<SyllabusData>
 
         RuleFor(x => x.VersionNumber)
             .GreaterThan(0)
-            .WithMessage("Version number must be greater than 0.")
-            .LessThanOrEqualTo(100)
-            .WithMessage("Version number cannot exceed 100.");
+            .WithMessage("Version number must be greater than 0.");
 
         RuleFor(x => x.Content)
             .NotNull()

@@ -18,6 +18,7 @@ using RogueLearn.User.Application.Features.CurriculumStructure.Commands.UpdateCu
 using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusVersionsBySubject;
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
+using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Mappings;
@@ -64,5 +65,9 @@ public class MappingProfile : Profile
     CreateMap<SyllabusVersion, SyllabusVersionDto>();
     CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>();
     CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>();
+
+    // CurriculumProgramDetails mappings
+    CreateMap<CurriculumProgram, CurriculumProgramDetailsResponse>();
+    CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
   }
 }
