@@ -1,12 +1,10 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
 using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
-using System.Text;
 using DotNetEnv;
+using BuildingBlocks.Shared.Authentication; // Add this using statement
 
 // Load environment variables from .env file
 Env.Load();
@@ -23,30 +21,9 @@ try
 	// Add Serilog
 	builder.Host.UseSerilog();
 
-	// --- ADD JWT AUTHENTICATION SERVICES ---
-	builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-		.AddJwtBearer(options =>
-		{
-			var supabaseUrl = builder.Configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL not configured.");
-			var supabaseJwtSecret = builder.Configuration["Supabase:JwtSecret"] ?? throw new InvalidOperationException("Supabase JWT Secret not configured.");
-
-			options.Authority = supabaseUrl;
-			options.Audience = "authenticated"; // Default Supabase audience
-			options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-			options.TokenValidationParameters = new TokenValidationParameters
-			{
-				ValidateIssuer = true,
-				ValidIssuer = supabaseUrl + "/auth/v1",
-				ValidateAudience = true,
-				ValidAudience = "authenticated",
-				ValidateLifetime = true,
-				ValidateIssuerSigningKey = true,
-				IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabaseJwtSecret))
-			};
-		});
-
-	builder.Services.AddAuthorization();
-	// --- END AUTHENTICATION SERVICES ---
+	// --- REPLACE THE OLD AUTHENTICATION BLOCK WITH OUR SHARED METHOD ---
+	builder.Services.AddRogueLearnAuthentication(builder.Configuration);
+	// --- END OF REPLACEMENT ---
 
 
 	// Add services to the container
@@ -83,7 +60,7 @@ try
 	app.UseCors("AllowAll");
 	app.UseHttpsRedirection();
 
-	// --- ADD AUTHENTICATION AND AUTHORIZATION MIDDLEWARE ---
+	// --- CONFIRM AUTHENTICATION AND AUTHORIZATION MIDDLEWARE ARE PRESENT ---
 	// IMPORTANT: These must be called after UseCors and before MapControllers
 	app.UseAuthentication();
 	app.UseAuthorization();

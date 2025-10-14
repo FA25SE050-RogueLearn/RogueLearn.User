@@ -8,6 +8,11 @@
 
   <ItemGroup>
     <PackageReference Include="Supabase" Version="1.1.1" />
+    
+    <!-- ADD THESE PACKAGES FOR SHARED AUTHENTICATION -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0-preview.6.24328.4" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0-preview.6.24327.7" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0-preview.6.24327.7" />
   </ItemGroup>
 
 </Project>
