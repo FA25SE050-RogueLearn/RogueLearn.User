@@ -6,6 +6,7 @@ using FluentAssertions;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateSyllabus;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Plugins;
 
 namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Queries;
 
@@ -15,6 +16,7 @@ public class ValidateSyllabusQueryHandlerTests
     private readonly Mock<SyllabusDataValidator> _mockValidator;
     private readonly Mock<ICurriculumImportStorage> _mockStorage;
     private readonly Mock<ILogger<ValidateSyllabusQueryHandler>> _mockLogger;
+    private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
     private readonly ValidateSyllabusQueryHandler _handler;
 
     public ValidateSyllabusQueryHandlerTests()
@@ -23,12 +25,14 @@ public class ValidateSyllabusQueryHandlerTests
         _mockValidator = new Mock<SyllabusDataValidator>();
         _mockStorage = new Mock<ICurriculumImportStorage>();
         _mockLogger = new Mock<ILogger<ValidateSyllabusQueryHandler>>();
+        _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
         _handler = new ValidateSyllabusQueryHandler(
             _mockKernel.Object,
-            _mockValidator.Object,
             _mockStorage.Object,
-            _mockLogger.Object);
+            _mockValidator.Object,
+            _mockLogger.Object,
+            _mockFlmPlugin.Object);
     }
 
     [Fact]

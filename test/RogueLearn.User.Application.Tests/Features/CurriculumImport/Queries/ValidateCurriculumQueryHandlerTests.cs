@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel;
 using FluentAssertions;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Plugins;
 
 namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Queries;
 
@@ -14,6 +15,7 @@ public class ValidateCurriculumQueryHandlerTests
     private readonly Mock<CurriculumImportDataValidator> _mockValidator;
     private readonly Mock<ILogger<ValidateCurriculumQueryHandler>> _mockLogger;
     private readonly Mock<RogueLearn.User.Application.Interfaces.ICurriculumImportStorage> _mockStorage;
+    private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
     private readonly ValidateCurriculumQueryHandler _handler;
 
     public ValidateCurriculumQueryHandlerTests()
@@ -22,12 +24,14 @@ public class ValidateCurriculumQueryHandlerTests
         _mockValidator = new Mock<CurriculumImportDataValidator>();
         _mockLogger = new Mock<ILogger<ValidateCurriculumQueryHandler>>();
         _mockStorage = new Mock<RogueLearn.User.Application.Interfaces.ICurriculumImportStorage>();
+        _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
         _handler = new ValidateCurriculumQueryHandler(
             _mockKernel.Object,
+            _mockStorage.Object,
             _mockValidator.Object,
             _mockLogger.Object,
-            _mockStorage.Object);
+            _mockFlmPlugin.Object);
     }
 
     [Fact]

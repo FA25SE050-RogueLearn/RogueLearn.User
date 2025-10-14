@@ -10,6 +10,7 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Plugins;
 using System.Linq.Expressions;
 
 namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Commands;
@@ -24,6 +25,7 @@ public class ImportCurriculumCommandHandlerTests
     private readonly Mock<ICurriculumImportStorage> _mockCurriculumImportStorage;
     private readonly Mock<CurriculumImportDataValidator> _mockValidator;
     private readonly Mock<ILogger<ImportCurriculumCommandHandler>> _mockLogger;
+    private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
     private readonly ImportCurriculumCommandHandler _handler;
 
     public ImportCurriculumCommandHandlerTests()
@@ -36,6 +38,7 @@ public class ImportCurriculumCommandHandlerTests
         _mockCurriculumImportStorage = new Mock<ICurriculumImportStorage>();
         _mockValidator = new Mock<CurriculumImportDataValidator>();
         _mockLogger = new Mock<ILogger<ImportCurriculumCommandHandler>>();
+        _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
         _handler = new ImportCurriculumCommandHandler(
             _mockKernel.Object,
@@ -45,7 +48,8 @@ public class ImportCurriculumCommandHandlerTests
             _mockCurriculumStructureRepository.Object,
             _mockCurriculumImportStorage.Object,
             _mockValidator.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockFlmPlugin.Object);
     }
 
     [Fact]

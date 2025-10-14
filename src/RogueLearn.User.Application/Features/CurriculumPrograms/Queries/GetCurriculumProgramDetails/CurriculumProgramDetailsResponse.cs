@@ -56,14 +56,12 @@ public class SyllabusVersionDetailsDto
 {
     public Guid Id { get; set; }
     public int VersionNumber { get; set; }
-    public string Content { get; set; } = string.Empty;
     public DateOnly EffectiveDate { get; set; }
     public bool IsActive { get; set; }
     public Guid? CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     
     public bool HasContent { get; set; }
-    public int ContentLength { get; set; }
 }
 
 public class CurriculumAnalysisDto

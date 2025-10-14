@@ -1,32 +1,32 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Plugins;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 
 public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculumQuery, ValidateCurriculumResponse>
 {
-    private readonly Kernel _kernel;
+    private readonly ICurriculumImportStorage _storage;
     private readonly CurriculumImportDataValidator _validator;
     private readonly ILogger<ValidateCurriculumQueryHandler> _logger;
-    private readonly ICurriculumImportStorage _storage;
+    private readonly IFlmExtractionPlugin _flmPlugin;
 
     public ValidateCurriculumQueryHandler(
-        Kernel kernel,
+        ICurriculumImportStorage storage,
         CurriculumImportDataValidator validator,
         ILogger<ValidateCurriculumQueryHandler> logger,
-        ICurriculumImportStorage storage)
+        IFlmExtractionPlugin flmPlugin)
     {
-        _kernel = kernel;
+        _storage = storage;
         _validator = validator;
         _logger = logger;
-        _storage = storage;
+        _flmPlugin = flmPlugin;
     }
 
     public async Task<ValidateCurriculumResponse> Handle(ValidateCurriculumQuery request, CancellationToken cancellationToken)
@@ -263,102 +263,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
 
     private async Task<string> ExtractCurriculumDataAsync(string rawText)
     {
-        var prompt = $@"
-Extract curriculum information from the following text and return it as JSON following this exact schema:
-
-{{
-  ""program"": {{
-    ""programName"": ""string (max 255 chars)"",
-    ""programCode"": ""string (max 50 chars, e.g., 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'K16A')"",
-    ""description"": ""string"",
-    ""degreeLevel"": ""Bachelor"",
-    ""totalCredits"": number,
-    ""durationYears"": number
-
-  }},
-  ""version"": {{
-    ""versionCode"": ""string (max 50 chars, use full date format like '2024-09-01' if date is available, otherwise use format like 'V1.0')"",
-    ""effectiveYear"": number (year, e.g., 2022),
-    ""description"": ""string (optional)"",
-    ""isActive"": true
-  }},
-  ""subjects"": [
-    {{
-      ""subjectCode"": ""string (max 50 chars)"",
-      ""subjectName"": ""string (max 255 chars)"",
-      ""credits"": number (1-10),
-      ""description"": ""string (optional)""
-    }}
-  ],
-  ""structure"": [
-    {{
-      ""subjectCode"": ""string"",
-      ""termNumber"": number (1-12),
-      ""isMandatory"": true,
-      ""prerequisiteSubjectCodes"": [""string""] (optional),
-      ""prerequisitesText"": ""string (optional)""
-    }}
-  ]
-}}
-
-Important notes:
-- degreeLevel: Use ""Associate"", ""Bachelor"", ""Master"", or ""Doctorate"" (enum string values)
-- effectiveYear: Extract year from any date mentioned (e.g., from ""2022-10-26"" use 2022)
-- versionCode: Use full date format (e.g., ""2024-09-01"") if an effective date or approval date is found in the text. If no date is available, generate a meaningful version code like ""V1.0""
-- programCode: Accept various formats like 'BIT_SE_K16D_K17A', 'BIT_SE_K16C', 'BIT_SE_K15D', 'K16A'. If multiple student year codes are present, format as 'PROGRAM_SPECIALIZATION_YEAR1_YEAR2' (e.g., 'BIT_SE_K15D_K16A'). Keep original format if it follows university naming conventions.
-- structure: Map each subject to a term/semester number, use 1 if not specified
-- All string fields should be properly escaped for JSON
-
-Text to extract from:
-{rawText}
-
-Return only the JSON, no additional text or formatting.";
-
-        try
-        {
-            var result = await _kernel.InvokePromptAsync(prompt);
-            _logger.LogInformation("Raw AI response: {RawResponse}", result.GetValue<string>() ?? string.Empty);
-            
-            var rawResponse = result.GetValue<string>() ?? string.Empty;
-
-            // Clean up the response - remove markdown and isolate the JSON block robustly
-            var cleanedResponse = rawResponse.Trim();
-
-            // If the response contains code fences, strip them
-            if (cleanedResponse.StartsWith("```"))
-            {
-                // Remove leading code fence (``` or ```json)
-                var firstNewline = cleanedResponse.IndexOf('\n');
-                if (firstNewline > -1)
-                {
-                    cleanedResponse = cleanedResponse.Substring(firstNewline + 1);
-                }
-            }
-            if (cleanedResponse.EndsWith("```"))
-            {
-                // Remove trailing code fence
-                var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
-                if (lastFenceIndex > -1)
-                {
-                    cleanedResponse = cleanedResponse.Substring(0, lastFenceIndex);
-                }
-            }
-
-            // Extract content between first '{' and last '}' to ensure only JSON remains
-            var startIdx = cleanedResponse.IndexOf('{');
-            var endIdx = cleanedResponse.LastIndexOf('}');
-            if (startIdx >= 0 && endIdx > startIdx)
-            {
-                cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
-            }
-
-            return cleanedResponse.Trim();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract curriculum data using AI");
-            return string.Empty;
-        }
+        return await _flmPlugin.ExtractCurriculumJsonAsync(rawText);
     }
 
     private static string ComputeSha256Hash(string input)

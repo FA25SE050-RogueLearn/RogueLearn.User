@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
@@ -11,39 +10,40 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateSyllabus;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Plugins;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportSyllabus;
 
 public class ImportSyllabusCommandHandler : IRequestHandler<ImportSyllabusCommand, ImportSyllabusResponse>
 {
-    private readonly Kernel _kernel;
     private readonly ISubjectRepository _subjectRepository;
     private readonly ISyllabusVersionRepository _syllabusVersionRepository;
-    private readonly ICurriculumImportStorage _curriculumImportStorage;
+    private readonly ICurriculumImportStorage _storage;
     private readonly SyllabusDataValidator _validator;
     private readonly ILogger<ImportSyllabusCommandHandler> _logger;
+    private readonly IFlmExtractionPlugin _flmPlugin;
 
     public ImportSyllabusCommandHandler(
-        Kernel kernel,
         ISubjectRepository subjectRepository,
         ISyllabusVersionRepository syllabusVersionRepository,
-        ICurriculumImportStorage curriculumImportStorage,
+        ICurriculumImportStorage storage,
         SyllabusDataValidator validator,
-        ILogger<ImportSyllabusCommandHandler> logger)
+        ILogger<ImportSyllabusCommandHandler> logger,
+        IFlmExtractionPlugin flmPlugin)
     {
-        _kernel = kernel;
         _subjectRepository = subjectRepository;
         _syllabusVersionRepository = syllabusVersionRepository;
-        _curriculumImportStorage = curriculumImportStorage;
+        _storage = storage;
         _validator = validator;
         _logger = logger;
+        _flmPlugin = flmPlugin;
     }
 
     private async Task<SyllabusData?> TryGetCachedDataAsync(string textHash, CancellationToken cancellationToken)
     {
         try
         {
-            var cachedJson = await _curriculumImportStorage.TryGetByHashJsonAsync("syllabus-imports", textHash, cancellationToken);
+            var cachedJson = await _storage.TryGetByHashJsonAsync("curriculum-imports", textHash, cancellationToken);
             _logger.LogInformation("Cache lookup for hash: {Hash}, found: {Found}", textHash, !string.IsNullOrEmpty(cachedJson));
             if (!string.IsNullOrEmpty(cachedJson))
             {
@@ -67,8 +67,8 @@ public class ImportSyllabusCommandHandler : IRequestHandler<ImportSyllabusComman
         try
         {
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-            await _curriculumImportStorage.SaveLatestAsync(
-                "syllabus-imports",
+            await _storage.SaveLatestAsync(
+                "curriculum-imports",
                 data.SubjectCode,
                 data.VersionNumber.ToString(),
                 json,
@@ -177,96 +177,7 @@ public class ImportSyllabusCommandHandler : IRequestHandler<ImportSyllabusComman
 
     private async Task<string> ExtractSyllabusDataAsync(string rawText)
     {
-        var prompt = $@"Extract syllabus information and return as JSON with this structure:
-
-{{
-  ""syllabusId"": number,
-  ""subjectCode"": ""string"",
-  ""syllabusName"": ""string"",
-  ""syllabusEnglish"": ""string"",
-  ""versionNumber"": number,
-  ""noCredit"": number,
-  ""degreeLevel"": ""string"",
-  ""timeAllocation"": ""string"",
-  ""preRequisite"": ""string"",
-  ""description"": ""string"",
-  ""studentTasks"": [""string""],
-  ""tools"": [""string""],
-  ""decisionNo"": ""string"",
-  ""isApproved"": boolean,
-  ""note"": ""string"",
-  ""isActive"": boolean,
-  ""approvedDate"": ""YYYY-MM-DD"",
-  ""materials"": [{{""materialDescription"": ""string"", ""author"": ""string"", ""publisher"": ""string"", ""publishedDate"": ""YYYY-MM-DD"", ""edition"": ""string"", ""isbn"": ""string"", ""isMainMaterial"": boolean, ""isHardCopy"": boolean, ""isOnline"": boolean, ""note"": ""string""}}],
-  ""content"": {{
-    ""courseDescription"": ""string"",
-    ""weeklySchedule"": [{{""weekNumber"": 1-10, ""topic"": ""string"", ""activities"": [""string""], ""readings"": [""string""]}}],
-    ""assessments"": [{{""name"": ""string"", ""type"": ""string"", ""weightPercentage"": integer, ""description"": ""string""}}],
-    ""constructiveQuestions"": [{{""question"": ""string"", ""answer"": ""string"", ""category"": ""string""}}],
-    ""requiredTexts"": [""string""],
-    ""recommendedTexts"": [""string""],
-    ""gradingPolicy"": ""string"",
-    ""attendancePolicy"": ""string""
-  }}
-}}
-
-RULES:
-- versionNumber: Numeric YYYYMMDD from approvedDate; if missing, use current date in YYYYMMDD
-- weeklySchedule: If text indicates 30 sessions, generate 5 weeks (1-5); otherwise 10 weeks (1-10). Distribute content logically
-- Dates: Use YYYY-MM-DD format, null if missing
-- Missing values: empty strings/arrays, false, 0, null for dates
-- For the root field 'description', summarize into a concise overview (≤ 300 characters)
- - For each assessment's 'description', summarize concisely (≤ 300 characters)
-
-Text: {rawText}
-
-Return only JSON:";
-
-        try
-        {
-            var result = await _kernel.InvokePromptAsync(prompt);
-            _logger.LogInformation("Raw AI response: {RawResponse}", result.GetValue<string>() ?? string.Empty);
-
-            var rawResponse = result.GetValue<string>() ?? string.Empty;
-
-            // Clean up the response - remove markdown and isolate the JSON block robustly
-            var cleanedResponse = rawResponse.Trim();
-
-            // If the response contains code fences, strip them
-            if (cleanedResponse.StartsWith("```"))
-            {
-                // Remove leading code fence (``` or ```json)
-                var firstNewline = cleanedResponse.IndexOf('\n');
-                if (firstNewline > -1)
-                {
-                    cleanedResponse = cleanedResponse.Substring(firstNewline + 1);
-                }
-            }
-            if (cleanedResponse.EndsWith("```"))
-            {
-                // Remove trailing code fence
-                var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
-                if (lastFenceIndex > -1)
-                {
-                    cleanedResponse = cleanedResponse.Substring(0, lastFenceIndex);
-                }
-            }
-
-            // Extract content between first '{' and last '}' to ensure only JSON remains
-            var startIdx = cleanedResponse.IndexOf('{');
-            var endIdx = cleanedResponse.LastIndexOf('}');
-            if (startIdx >= 0 && endIdx > startIdx)
-            {
-                cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
-            }
-
-            return cleanedResponse.Trim();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract syllabus data using AI");
-            return string.Empty;
-        }
+        return await _flmPlugin.ExtractSyllabusJsonAsync(rawText);
     }
 
     private async Task<ImportSyllabusResponse> PersistSyllabusDataAsync(

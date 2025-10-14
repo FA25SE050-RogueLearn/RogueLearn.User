@@ -89,13 +89,11 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
                     {
                         Id = sv.Id,
                         VersionNumber = sv.VersionNumber,
-                        Content = sv.Content,
                         EffectiveDate = sv.EffectiveDate,
                         IsActive = sv.IsActive,
                         CreatedBy = sv.CreatedBy,
                         CreatedAt = sv.CreatedAt,
-                        HasContent = !string.IsNullOrWhiteSpace(sv.Content),
-                        ContentLength = sv.Content?.Length ?? 0
+                        HasContent = !string.IsNullOrWhiteSpace(sv.Content)
                     })
                     .ToList();
 
