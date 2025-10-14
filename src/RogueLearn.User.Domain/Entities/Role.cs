@@ -1,4 +1,4 @@
-﻿using BuildingBlocks.Shared.Common;
+using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 
 namespace RogueLearn.User.Domain.Entities;
@@ -11,4 +11,7 @@ public class Role : BaseEntity
 
 	[Column("description")]
 	public string? Description { get; set; }
+
+	[Column("created_at")]
+	public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

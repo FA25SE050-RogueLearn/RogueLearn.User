@@ -1,4 +1,4 @@
-﻿using BuildingBlocks.Shared.Common;
+using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 
 namespace RogueLearn.User.Domain.Entities;
@@ -38,4 +38,10 @@ public class UserProfile : BaseEntity
 
 	[Column("onboarding_completed")]
 	public bool OnboardingCompleted { get; set; } = false;
+
+	[Column("created_at")]
+	public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+	[Column("updated_at")]
+	public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
