@@ -1,6 +1,8 @@
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -20,6 +22,7 @@ public class LecturerVerificationRequest : BaseEntity
     public string? VerificationDocumentUrl { get; set; }
 
     [Column("status")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public VerificationStatus Status { get; set; } = VerificationStatus.Pending;
 
     [Column("submitted_at")]

@@ -1,6 +1,8 @@
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -17,13 +19,14 @@ public class CurriculumProgram : BaseEntity
     public string? Description { get; set; }
 
     [Column("degree_level")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public DegreeLevel DegreeLevel { get; set; }
 
     [Column("total_credits")]
     public int? TotalCredits { get; set; }
 
     [Column("duration_years")]
-    public int? DurationYears { get; set; }
+    public double? DurationYears { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

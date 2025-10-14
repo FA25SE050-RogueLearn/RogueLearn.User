@@ -4,6 +4,7 @@ using Microsoft.OpenApi.Models;
 using RogueLearn.User.Application.Behaviours;
 using RogueLearn.User.Application.Features.UserProfiles.Commands.LogNewUser;
 using RogueLearn.User.Application.Mappings;
+using RogueLearn.User.Application.Plugins;
 using System.Reflection;
 
 namespace RogueLearn.User.Api.Extensions;
@@ -25,6 +26,9 @@ public static class ServiceCollectionExtensions
 		services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));
 		services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehaviour<,>));
 		services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnhandledExceptionBehaviour<,>));
+
+		// Register FLM SK plugin
+		services.AddScoped<IFlmExtractionPlugin, FlmExtractionPlugin>();
 
 		return services;
 	}

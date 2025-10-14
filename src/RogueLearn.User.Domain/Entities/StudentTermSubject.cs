@@ -1,6 +1,8 @@
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -23,6 +25,7 @@ public class StudentTermSubject : BaseEntity
     public string Semester { get; set; } = string.Empty;
 
     [Column("status")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public SubjectEnrollmentStatus Status { get; set; } = SubjectEnrollmentStatus.Enrolled;
 
     [Column("grade")]

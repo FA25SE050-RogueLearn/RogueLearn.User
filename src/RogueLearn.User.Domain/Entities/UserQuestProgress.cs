@@ -1,6 +1,8 @@
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -14,6 +16,7 @@ public class UserQuestProgress : BaseEntity
     public Guid QuestId { get; set; }
 
     [Column("status")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
 
     [Column("completed_at")]
