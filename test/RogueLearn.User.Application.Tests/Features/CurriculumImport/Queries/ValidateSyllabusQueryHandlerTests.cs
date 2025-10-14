@@ -12,7 +12,6 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Queries;
 
 public class ValidateSyllabusQueryHandlerTests
 {
-    private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<SyllabusDataValidator> _mockValidator;
     private readonly Mock<ICurriculumImportStorage> _mockStorage;
     private readonly Mock<ILogger<ValidateSyllabusQueryHandler>> _mockLogger;
@@ -21,14 +20,13 @@ public class ValidateSyllabusQueryHandlerTests
 
     public ValidateSyllabusQueryHandlerTests()
     {
-        _mockKernel = new Mock<Kernel>();
         _mockValidator = new Mock<SyllabusDataValidator>();
         _mockStorage = new Mock<ICurriculumImportStorage>();
         _mockLogger = new Mock<ILogger<ValidateSyllabusQueryHandler>>();
         _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
+        // FIX: Removed the unnecessary _mockKernel.Object from the constructor call.
         _handler = new ValidateSyllabusQueryHandler(
-            _mockKernel.Object,
             _mockStorage.Object,
             _mockValidator.Object,
             _mockLogger.Object,

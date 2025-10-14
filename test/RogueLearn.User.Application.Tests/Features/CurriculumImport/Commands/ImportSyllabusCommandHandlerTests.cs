@@ -17,10 +17,9 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Commands;
 
 public class ImportSyllabusCommandHandlerTests
 {
-    private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<ISubjectRepository> _mockSubjectRepository;
     private readonly Mock<ISyllabusVersionRepository> _mockSyllabusVersionRepository;
-    private readonly Mock<ICurriculumImportStorage> _mockCurriculumImportStorage;
+    private readonly Mock<ICurriculumImportStorage> _mockStorage;
     private readonly Mock<SyllabusDataValidator> _mockValidator;
     private readonly Mock<ILogger<ImportSyllabusCommandHandler>> _mockLogger;
     private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
@@ -28,19 +27,18 @@ public class ImportSyllabusCommandHandlerTests
 
     public ImportSyllabusCommandHandlerTests()
     {
-        _mockKernel = new Mock<Kernel>();
         _mockSubjectRepository = new Mock<ISubjectRepository>();
         _mockSyllabusVersionRepository = new Mock<ISyllabusVersionRepository>();
-        _mockCurriculumImportStorage = new Mock<ICurriculumImportStorage>();
+        _mockStorage = new Mock<ICurriculumImportStorage>();
         _mockValidator = new Mock<SyllabusDataValidator>();
         _mockLogger = new Mock<ILogger<ImportSyllabusCommandHandler>>();
         _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
+        // FIX: Removed the unnecessary _mockKernel.Object from the constructor call.
         _handler = new ImportSyllabusCommandHandler(
-            _mockKernel.Object,
             _mockSubjectRepository.Object,
             _mockSyllabusVersionRepository.Object,
-            _mockCurriculumImportStorage.Object,
+            _mockStorage.Object,
             _mockValidator.Object,
             _mockLogger.Object,
             _mockFlmPlugin.Object);

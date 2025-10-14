@@ -1,13 +1,10 @@
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
-using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Http;
-using System.Collections.Generic;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Infrastructure.Messaging;
 using RogueLearn.User.Infrastructure.Persistence;
 using RogueLearn.User.Infrastructure.Services;
 using Supabase;
@@ -16,98 +13,71 @@ namespace RogueLearn.User.Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-  public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
-  {
-    // Register Supabase Client as Scoped per request to attach JWT header
-    services.AddScoped<Client>(sp =>
+    public static async Task<IServiceCollection> AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
-      var cfg = sp.GetRequiredService<IConfiguration>();
-      var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
+        // Configure Supabase client
+        var supabaseUrl = configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
+        var supabaseKey = configuration["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
 
-      var supabaseUrl = cfg["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
-      var supabaseKey = cfg["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
+        var options = new SupabaseOptions
+        {
+            AutoConnectRealtime = true
+        };
 
-      var options = new SupabaseOptions
-      {
-        AutoConnectRealtime = true,
-        Headers = new Dictionary<string, string>()
-      };
+        var supabase = new Client(supabaseUrl, supabaseKey, options);
+        // Properly await the initialization
+        await supabase.InitializeAsync();
 
-      // Forward the incoming Authorization header to Supabase
-      var authHeader = httpContextAccessor.HttpContext?.Request?.Headers["Authorization"].ToString();
-      if (!string.IsNullOrWhiteSpace(authHeader))
-      {
-        options.Headers["Authorization"] = authHeader;
-      }
+        // Register Supabase client as a singleton for the application lifetime
+        services.AddSingleton(supabase);
 
-      var client = new Client(supabaseUrl, supabaseKey, options);
-      // Initialize synchronously for scoped lifetime
-      client.InitializeAsync().GetAwaiter().GetResult();
-      return client;
-    });
+        // MassTransit configuration remains commented out as per MVP scope.
+        //services.AddMassTransit(busConfig => { ... });
 
-    // Configure MassTransit with RabbitMQ
-    //services.AddMassTransit(busConfig =>
-    //{
-    //    busConfig.UsingRabbitMq((context, cfg) =>
-    //    {
-    //        var rabbitMqHost = configuration["RabbitMQ:Host"] ?? "localhost";
-    //        var rabbitMqUsername = configuration["RabbitMQ:Username"] ?? "guest";
-    //        var rabbitMqPassword = configuration["RabbitMQ:Password"] ?? "guest";
+        // Register Generic Repository
+        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
-    //        cfg.Host(rabbitMqHost, "/", h =>
-    //        {
-    //            h.Username(rabbitMqUsername);
-    //            h.Password(rabbitMqPassword);
-    //        });
+        // --- All Repository Registrations are now correctly included ---
+        // Register Specific Repositories
+        services.AddScoped<IUserProfileRepository, UserProfileRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+        services.AddScoped<IUserAchievementRepository, UserAchievementRepository>();
+        services.AddScoped<IUserQuestProgressRepository, UserQuestProgressRepository>();
+        services.AddScoped<IUserSkillRepository, UserSkillRepository>();
+        services.AddScoped<IUserSkillRewardRepository, UserSkillRewardRepository>();
 
-    //        cfg.ConfigureEndpoints(context);
-    //    });
-    //});
+        // Academic repositories
+        services.AddScoped<ISubjectRepository, SubjectRepository>();
+        services.AddScoped<IClassRepository, ClassRepository>();
+        services.AddScoped<IStudentTermSubjectRepository, StudentTermSubjectRepository>();
+        services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
+        services.AddScoped<ILecturerVerificationRequestRepository, LecturerVerificationRequestRepository>();
 
-    // Register Generic Repository
-    services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+        // Curriculum repositories
+        services.AddScoped<ICurriculumProgramRepository, CurriculumProgramRepository>();
+        services.AddScoped<ICurriculumVersionRepository, CurriculumVersionRepository>();
+        services.AddScoped<ICurriculumVersionActivationRepository, CurriculumVersionActivationRepository>();
+        services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
+        services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
+        services.AddScoped<ICurriculumImportJobRepository, CurriculumImportJobRepository>();
+        services.AddScoped<IElectivePackRepository, ElectivePackRepository>();
+        services.AddScoped<IElectiveSourceRepository, ElectiveSourceRepository>();
 
-    // Register Specific Repositories - ADD ALL YOUR REPOSITORIES HERE
-    services.AddScoped<IUserProfileRepository, UserProfileRepository>();
-    services.AddScoped<IRoleRepository, RoleRepository>();
-    services.AddScoped<IUserRoleRepository, UserRoleRepository>();
-    services.AddScoped<IUserAchievementRepository, UserAchievementRepository>();
-    services.AddScoped<IUserQuestProgressRepository, UserQuestProgressRepository>();
-    services.AddScoped<IUserSkillRepository, UserSkillRepository>();
-    services.AddScoped<IUserSkillRewardRepository, UserSkillRewardRepository>();
-    
-    // Academic repositories
-    services.AddScoped<ISubjectRepository, SubjectRepository>();
-    services.AddScoped<IClassRepository, ClassRepository>();
-    services.AddScoped<IStudentTermSubjectRepository, StudentTermSubjectRepository>();
-    services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
-    services.AddScoped<ILecturerVerificationRequestRepository, LecturerVerificationRequestRepository>();
-    
-    // Curriculum repositories
-    services.AddScoped<ICurriculumProgramRepository, CurriculumProgramRepository>();
-    services.AddScoped<ICurriculumVersionRepository, CurriculumVersionRepository>();
-    services.AddScoped<ICurriculumVersionActivationRepository, CurriculumVersionActivationRepository>();
-    services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
-    services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
-    services.AddScoped<ICurriculumImportJobRepository, CurriculumImportJobRepository>();
-    services.AddScoped<IElectivePackRepository, ElectivePackRepository>();
-    services.AddScoped<IElectiveSourceRepository, ElectiveSourceRepository>();
-    
-    // Gamification repositories
-    services.AddScoped<IAchievementRepository, AchievementRepository>();
-    services.AddScoped<ISkillRepository, SkillRepository>();
-    services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
-    
-    // System repositories
-    services.AddScoped<INotificationRepository, NotificationRepository>();
+        // Gamification repositories
+        services.AddScoped<IAchievementRepository, AchievementRepository>();
+        services.AddScoped<ISkillRepository, SkillRepository>();
+        services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
 
-    // Storage services
-    services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
+        // System repositories
+        services.AddScoped<INotificationRepository, NotificationRepository>();
 
-    // Register Message Bus
-    //services.AddScoped<IMessageBus, MassTransitMessageBus>();
+        // Storage services
+        services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
 
-    return services;
-  }
+        // Register Message Bus (commented out per MVP scope)
+        //services.AddScoped<IMessageBus, MassTransitMessageBus>();
+
+        return services;
+    }
 }

@@ -1,14 +1,12 @@
 using Xunit;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel;
 using Moq;
 using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
 using System.Linq.Expressions;
@@ -17,7 +15,6 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Commands;
 
 public class ImportCurriculumCommandHandlerTests
 {
-    private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<ICurriculumProgramRepository> _mockCurriculumProgramRepository;
     private readonly Mock<ICurriculumVersionRepository> _mockCurriculumVersionRepository;
     private readonly Mock<ISubjectRepository> _mockSubjectRepository;
@@ -28,9 +25,9 @@ public class ImportCurriculumCommandHandlerTests
     private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
     private readonly ImportCurriculumCommandHandler _handler;
 
+
     public ImportCurriculumCommandHandlerTests()
     {
-        _mockKernel = new Mock<Kernel>();
         _mockCurriculumProgramRepository = new Mock<ICurriculumProgramRepository>();
         _mockCurriculumVersionRepository = new Mock<ICurriculumVersionRepository>();
         _mockSubjectRepository = new Mock<ISubjectRepository>();
@@ -41,15 +38,14 @@ public class ImportCurriculumCommandHandlerTests
         _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
         _handler = new ImportCurriculumCommandHandler(
-            _mockKernel.Object,
-            _mockCurriculumProgramRepository.Object,
-            _mockCurriculumVersionRepository.Object,
-            _mockSubjectRepository.Object,
-            _mockCurriculumStructureRepository.Object,
-            _mockCurriculumImportStorage.Object,
-            _mockValidator.Object,
-            _mockLogger.Object,
-            _mockFlmPlugin.Object);
+             _mockCurriculumProgramRepository.Object,
+             _mockCurriculumVersionRepository.Object,
+             _mockSubjectRepository.Object,
+             _mockCurriculumStructureRepository.Object,
+             _mockCurriculumImportStorage.Object,
+             _mockValidator.Object,
+             _mockLogger.Object,
+             _mockFlmPlugin.Object);
     }
 
     [Fact]
@@ -154,7 +150,7 @@ public class ImportCurriculumCommandHandlerTests
             Id = Guid.NewGuid(),
             ProgramCode = "CS101",
             ProgramName = "Computer Science",
-            DegreeLevel = DegreeLevel.Bachelor
+            DegreeLevel = Domain.Enums.DegreeLevel.Bachelor
         };
 
         var mockValidationResult = new FluentValidation.Results.ValidationResult();

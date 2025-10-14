@@ -1,33 +1,32 @@
-using Xunit;
-using Moq;
+using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
-using FluentAssertions;
+using Moq;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Plugins;
+using Xunit;
 
 namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Queries;
 
 public class ValidateCurriculumQueryHandlerTests
 {
-    private readonly Mock<Kernel> _mockKernel;
     private readonly Mock<CurriculumImportDataValidator> _mockValidator;
     private readonly Mock<ILogger<ValidateCurriculumQueryHandler>> _mockLogger;
-    private readonly Mock<RogueLearn.User.Application.Interfaces.ICurriculumImportStorage> _mockStorage;
+    private readonly Mock<ICurriculumImportStorage> _mockStorage;
     private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
     private readonly ValidateCurriculumQueryHandler _handler;
 
     public ValidateCurriculumQueryHandlerTests()
     {
-        _mockKernel = new Mock<Kernel>();
         _mockValidator = new Mock<CurriculumImportDataValidator>();
         _mockLogger = new Mock<ILogger<ValidateCurriculumQueryHandler>>();
-        _mockStorage = new Mock<RogueLearn.User.Application.Interfaces.ICurriculumImportStorage>();
+        _mockStorage = new Mock<ICurriculumImportStorage>();
         _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 
+        // FIX: Removed the unnecessary _mockKernel.Object from the constructor call.
         _handler = new ValidateCurriculumQueryHandler(
-            _mockKernel.Object,
             _mockStorage.Object,
             _mockValidator.Object,
             _mockLogger.Object,
