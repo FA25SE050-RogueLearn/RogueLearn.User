@@ -1,6 +1,7 @@
 // RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RogueLearn.User.Application.Interfaces;
@@ -13,23 +14,36 @@ namespace RogueLearn.User.Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static async Task<IServiceCollection> AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        // Configure Supabase client
-        var supabaseUrl = configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
-        var supabaseKey = configuration["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
-
-        var options = new SupabaseOptions
+        // Register Supabase client as a scoped service so we can attach the caller's Authorization header per-request.
+        services.AddScoped<Client>(sp =>
         {
-            AutoConnectRealtime = true
-        };
+            var config = sp.GetRequiredService<IConfiguration>();
+            var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
 
-        var supabase = new Client(supabaseUrl, supabaseKey, options);
-        // Properly await the initialization
-        await supabase.InitializeAsync();
+            // Configure Supabase client
+            var supabaseUrl = config["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
+            var supabaseKey = config["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
 
-        // Register Supabase client as a singleton for the application lifetime
-        services.AddSingleton(supabase);
+            var options = new SupabaseOptions
+            {
+                AutoConnectRealtime = true,
+                Headers = []
+            };
+
+            // Forward the incoming Authorization header (Bearer <jwt>) to Supabase
+            var authHeader = httpContextAccessor.HttpContext?.Request?.Headers["Authorization"].ToString();
+            if (!string.IsNullOrWhiteSpace(authHeader))
+            {
+                options.Headers["Authorization"] = authHeader!;
+            }
+
+            var client = new Client(supabaseUrl, supabaseKey, options);
+
+            client.InitializeAsync().GetAwaiter().GetResult();
+            return client;
+        });
 
         // MassTransit configuration remains commented out as per MVP scope.
         //services.AddMassTransit(busConfig => { ... });

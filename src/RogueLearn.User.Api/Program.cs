@@ -59,7 +59,7 @@ try
     // Add other services to the container
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddApplication();
-    await builder.Services.AddInfrastructureServices(builder.Configuration);
+    builder.Services.AddInfrastructureServices();
     builder.Services.AddApiServices();
 
     var app = builder.Build();

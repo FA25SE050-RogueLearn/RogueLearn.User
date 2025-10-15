@@ -22,7 +22,7 @@ public class AdminOnlyAttribute : Attribute, IAsyncAuthorizationFilter
         if (!roleClaims.Any())
         {
             // Fallback: also check for "role" claim type for compatibility
-            roleClaims = context.HttpContext.User.FindAll("role").Select(c => c.Value).ToList();
+            roleClaims = context.HttpContext.User.FindAll("roles").Select(c => c.Value).ToList();
         }
 
         // If roles are found in JWT claims, use them directly
