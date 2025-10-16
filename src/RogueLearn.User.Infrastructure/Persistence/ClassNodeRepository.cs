@@ -5,9 +5,9 @@ using Supabase;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
-public class CurriculumImportJobRepository : GenericRepository<CurriculumImportJob>, ICurriculumImportJobRepository
+public class ClassNodeRepository : GenericRepository<ClassNode>, IClassNodeRepository
 {
-  public CurriculumImportJobRepository(Client supabaseClient) : base(supabaseClient)
+  public ClassNodeRepository(Client supabaseClient) : base(supabaseClient)
   {
   }
 }

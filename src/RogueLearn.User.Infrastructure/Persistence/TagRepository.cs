@@ -5,9 +5,9 @@ using Supabase;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
-public class ElectivePackRepository : GenericRepository<ElectivePack>, IElectivePackRepository
+public class TagRepository : GenericRepository<Tag>, ITagRepository
 {
-    public ElectivePackRepository(Client supabaseClient) : base(supabaseClient)
-    {
-    }
+  public TagRepository(Client supabaseClient) : base(supabaseClient)
+  {
+  }
 }

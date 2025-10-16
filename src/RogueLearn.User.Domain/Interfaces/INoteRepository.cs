@@ -3,7 +3,6 @@ using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Domain.Interfaces;
 
-public interface IElectivePackRepository : IGenericRepository<ElectivePack>
+public interface INoteRepository : IGenericRepository<Note>
 {
-
 }

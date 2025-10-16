@@ -47,10 +47,8 @@ The RogueLearn platform uses a gamified role system:
 - `curriculum_versions` - Version control for curricula
 - `curriculum_structure` - Curriculum organization
 - `curriculum_version_activations` - Active curriculum versions
-- `curriculum_import_jobs` - Curriculum import processes
 - `syllabus_versions` - Course syllabi
-- `elective_packs` - Elective course packages
-- `elective_sources` - Sources for elective content
+  
 
 ## Setup Instructions
 

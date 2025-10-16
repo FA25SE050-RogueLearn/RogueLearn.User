@@ -18,6 +18,25 @@ CREATE TABLE classes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE class_nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    parent_id UUID REFERENCES class_nodes(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    node_type TEXT,
+    description TEXT,
+    sequence INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE class_specialization_subjects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    placeholder_subject_code TEXT NOT NULL,
+    semester INTEGER NOT NULL
+);
+
 CREATE TABLE curriculum_programs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     program_name VARCHAR(255) NOT NULL,
@@ -25,7 +44,7 @@ CREATE TABLE curriculum_programs (
     description TEXT,
     degree_level degree_level NOT NULL,
     total_credits INTEGER,
-    duration_years INTEGER,
+    duration_years DOUBLE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -113,45 +132,6 @@ CREATE TABLE syllabus_versions (
     UNIQUE (subject_id, version_number)
 );
 
-CREATE TABLE elective_sources (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title VARCHAR(255) NOT NULL,
-    url TEXT NOT NULL,
-    description TEXT,
-    submitted_by UUID REFERENCES user_profiles(auth_user_id),
-    status VARCHAR(20) NOT NULL DEFAULT 'Pending', -- Pending, Approved, Rejected
-    submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    reviewed_at TIMESTAMPTZ,
-    reviewer_id UUID REFERENCES user_profiles(auth_user_id),
-    notes TEXT
-);
-
-CREATE TABLE elective_packs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    version VARCHAR(50) NOT NULL,
-    source_type VARCHAR(20) NOT NULL, -- Set, Seed
-    subject_id UUID REFERENCES subjects(id),
-    curriculum_version_id UUID REFERENCES curriculum_versions(id),
-    metadata JSONB,
-    approved_by UUID REFERENCES user_profiles(auth_user_id),
-    approved_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (version, subject_id, curriculum_version_id)
-);
-
-CREATE TABLE curriculum_import_jobs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_type VARCHAR(20) NOT NULL, -- file, api
-    program_code VARCHAR(50) NOT NULL,
-    file_url TEXT,
-    status VARCHAR(20) NOT NULL DEFAULT 'Pending', -- Pending, Processing, Completed, Failed
-    error_message TEXT,
-    created_by UUID REFERENCES user_profiles(auth_user_id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    completed_at TIMESTAMPTZ
-);
-
 CREATE TABLE curriculum_version_activations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     curriculum_version_id UUID NOT NULL REFERENCES curriculum_versions(id) ON DELETE CASCADE,
@@ -206,6 +186,41 @@ CREATE TABLE skill_dependencies (
     relationship_type VARCHAR(30) NOT NULL DEFAULT 'Prerequisite', -- Prerequisite, Complements, Alternative
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (skill_id, prerequisite_skill_id, relationship_type)
+);
+
+CREATE TABLE notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    auth_user_id UUID NOT NULL REFERENCES user_profiles(auth_user_id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content JSONB,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE note_quests (
+    note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    quest_id UUID NOT NULL, -- Soft reference to quests.id in Quests Service
+    PRIMARY KEY (note_id, quest_id)
+);
+
+CREATE TABLE note_skills (
+    note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    PRIMARY KEY (note_id, skill_id)
+);
+
+CREATE TABLE tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    auth_user_id UUID NOT NULL REFERENCES user_profiles(auth_user_id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    UNIQUE (auth_user_id, name)
+);
+
+CREATE TABLE note_tags (
+    note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (note_id, tag_id)
 );
 
 CREATE TABLE user_skills (

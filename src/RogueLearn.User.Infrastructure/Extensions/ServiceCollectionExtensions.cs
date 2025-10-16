@@ -64,6 +64,8 @@ public static class ServiceCollectionExtensions
         // Academic repositories
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
+        services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
+        services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
         services.AddScoped<IStudentTermSubjectRepository, StudentTermSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
         services.AddScoped<ILecturerVerificationRequestRepository, LecturerVerificationRequestRepository>();
@@ -74,9 +76,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICurriculumVersionActivationRepository, CurriculumVersionActivationRepository>();
         services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
         services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
-        services.AddScoped<ICurriculumImportJobRepository, CurriculumImportJobRepository>();
-        services.AddScoped<IElectivePackRepository, ElectivePackRepository>();
-        services.AddScoped<IElectiveSourceRepository, ElectiveSourceRepository>();
 
         // Gamification repositories
         services.AddScoped<IAchievementRepository, AchievementRepository>();
@@ -85,6 +84,11 @@ public static class ServiceCollectionExtensions
 
         // System repositories
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<INoteRepository, NoteRepository>();
+        services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<INoteTagRepository, NoteTagRepository>();
+        services.AddScoped<INoteSkillRepository, NoteSkillRepository>();
+        services.AddScoped<INoteQuestRepository, NoteQuestRepository>();
 
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();

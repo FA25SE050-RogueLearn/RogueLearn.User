@@ -32,10 +32,14 @@ ALTER TABLE curriculum_programs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE curriculum_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE curriculum_structure ENABLE ROW LEVEL SECURITY;
 ALTER TABLE curriculum_version_activations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE curriculum_import_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE syllabus_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE elective_packs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE elective_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE class_nodes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE class_specialization_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE note_quests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE note_skills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE note_tags ENABLE ROW LEVEL SECURITY;
 
 -- =====================================================
 
@@ -248,6 +252,151 @@ CREATE POLICY "notifications_delete_policy" ON notifications
     auth_user_id = auth.uid() OR public.is_game_master()
   );
 
+-- NOTES
+-- Public can read notes marked as is_public; owners can manage their notes; Game Masters can override
+DROP POLICY IF EXISTS "notes_select_policy" ON notes;
+CREATE POLICY "notes_select_policy" ON notes
+  FOR SELECT USING (
+    is_public = true OR auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "notes_insert_policy" ON notes;
+CREATE POLICY "notes_insert_policy" ON notes
+  FOR INSERT WITH CHECK (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "notes_update_policy" ON notes;
+CREATE POLICY "notes_update_policy" ON notes
+  FOR UPDATE USING (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "notes_delete_policy" ON notes;
+CREATE POLICY "notes_delete_policy" ON notes
+  FOR DELETE USING (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+-- TAGS
+-- Owner-only manage; Game Masters can override; no public read
+DROP POLICY IF EXISTS "tags_select_policy" ON tags;
+CREATE POLICY "tags_select_policy" ON tags
+  FOR SELECT USING (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "tags_insert_policy" ON tags;
+CREATE POLICY "tags_insert_policy" ON tags
+  FOR INSERT WITH CHECK (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "tags_update_policy" ON tags;
+CREATE POLICY "tags_update_policy" ON tags
+  FOR UPDATE USING (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "tags_delete_policy" ON tags;
+CREATE POLICY "tags_delete_policy" ON tags
+  FOR DELETE USING (
+    auth_user_id = auth.uid() OR public.is_game_master()
+  );
+
+-- NOTE_TAGS
+-- Restrict by owning note; allow select if owning note is public; Game Masters can override
+DROP POLICY IF EXISTS "note_tags_select_policy" ON note_tags;
+CREATE POLICY "note_tags_select_policy" ON note_tags
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND (
+        n.is_public = true OR n.auth_user_id = auth.uid()
+      )
+    ) OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "note_tags_insert_policy" ON note_tags;
+CREATE POLICY "note_tags_insert_policy" ON note_tags
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
+    ) OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "note_tags_delete_policy" ON note_tags;
+CREATE POLICY "note_tags_delete_policy" ON note_tags
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
+    ) OR public.is_game_master()
+  );
+
+-- NOTE_QUESTS
+-- Restrict by owning note; allow select if note is public; Game Masters can override
+DROP POLICY IF EXISTS "note_quests_select_policy" ON note_quests;
+CREATE POLICY "note_quests_select_policy" ON note_quests
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND (
+        n.is_public = true OR n.auth_user_id = auth.uid()
+      )
+    ) OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "note_quests_insert_policy" ON note_quests;
+CREATE POLICY "note_quests_insert_policy" ON note_quests
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
+    ) OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "note_quests_delete_policy" ON note_quests;
+CREATE POLICY "note_quests_delete_policy" ON note_quests
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
+    ) OR public.is_game_master()
+  );
+
+-- NOTE_SKILLS
+-- Restrict by owning note; allow select if note is public; Game Masters can override
+DROP POLICY IF EXISTS "note_skills_select_policy" ON note_skills;
+CREATE POLICY "note_skills_select_policy" ON note_skills
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND (
+        n.is_public = true OR n.auth_user_id = auth.uid()
+      )
+    ) OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "note_skills_insert_policy" ON note_skills;
+CREATE POLICY "note_skills_insert_policy" ON note_skills
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
+    ) OR public.is_game_master()
+  );
+
+DROP POLICY IF EXISTS "note_skills_delete_policy" ON note_skills;
+CREATE POLICY "note_skills_delete_policy" ON note_skills
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM notes n
+      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
+    ) OR public.is_game_master()
+  );
+
 -- STUDENT ENROLLMENTS
 -- Players can view their own enrollments, Guild Masters and Game Masters can view relevant enrollments
 DROP POLICY IF EXISTS "student_enrollments_select_policy" ON student_enrollments;
@@ -362,12 +511,38 @@ CREATE POLICY "classes_insert_policy" ON classes FOR INSERT WITH CHECK (public.i
 DROP POLICY IF EXISTS "classes_update_policy" ON classes;
 CREATE POLICY "classes_update_policy" ON classes FOR UPDATE USING (public.is_admin());
 
+-- CLASS NODES - Public read, admin write
+DROP POLICY IF EXISTS "class_nodes_select_policy" ON class_nodes;
+CREATE POLICY "class_nodes_select_policy" ON class_nodes FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "class_nodes_insert_policy" ON class_nodes;
+CREATE POLICY "class_nodes_insert_policy" ON class_nodes FOR INSERT WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "class_nodes_update_policy" ON class_nodes;
+CREATE POLICY "class_nodes_update_policy" ON class_nodes FOR UPDATE USING (public.is_admin());
+
+DROP POLICY IF EXISTS "class_nodes_delete_policy" ON class_nodes;
+CREATE POLICY "class_nodes_delete_policy" ON class_nodes FOR DELETE USING (public.is_admin());
+
 -- ACHIEVEMENTS - Public read, admin write
 DROP POLICY IF EXISTS "achievements_select_policy" ON achievements;
 CREATE POLICY "achievements_select_policy" ON achievements FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "achievements_insert_policy" ON achievements;
 CREATE POLICY "achievements_insert_policy" ON achievements FOR INSERT WITH CHECK (public.is_admin());
+
+-- CLASS SPECIALIZATION SUBJECTS - Public read, admin write
+DROP POLICY IF EXISTS "class_specialization_subjects_select_policy" ON class_specialization_subjects;
+CREATE POLICY "class_specialization_subjects_select_policy" ON class_specialization_subjects FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "class_specialization_subjects_insert_policy" ON class_specialization_subjects;
+CREATE POLICY "class_specialization_subjects_insert_policy" ON class_specialization_subjects FOR INSERT WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "class_specialization_subjects_update_policy" ON class_specialization_subjects;
+CREATE POLICY "class_specialization_subjects_update_policy" ON class_specialization_subjects FOR UPDATE USING (public.is_admin());
+
+DROP POLICY IF EXISTS "class_specialization_subjects_delete_policy" ON class_specialization_subjects;
+CREATE POLICY "class_specialization_subjects_delete_policy" ON class_specialization_subjects FOR DELETE USING (public.is_admin());
 
 -- SUBJECTS - Public read, lecturer/admin write
 DROP POLICY IF EXISTS "subjects_select_policy" ON subjects;
@@ -447,22 +622,6 @@ DROP POLICY IF EXISTS "curriculum_version_activations_delete_policy" ON curricul
 CREATE POLICY "curriculum_version_activations_delete_policy" ON curriculum_version_activations
   FOR DELETE USING (public.is_game_master());
 
--- CURRICULUM IMPORT JOBS - Game Masters only
-DROP POLICY IF EXISTS "curriculum_import_jobs_select_policy" ON curriculum_import_jobs;
-CREATE POLICY "curriculum_import_jobs_select_policy" ON curriculum_import_jobs
-  FOR SELECT USING (public.is_game_master());
-
-DROP POLICY IF EXISTS "curriculum_import_jobs_insert_policy" ON curriculum_import_jobs;
-CREATE POLICY "curriculum_import_jobs_insert_policy" ON curriculum_import_jobs
-  FOR INSERT WITH CHECK (public.is_game_master());
-
-DROP POLICY IF EXISTS "curriculum_import_jobs_update_policy" ON curriculum_import_jobs;
-CREATE POLICY "curriculum_import_jobs_update_policy" ON curriculum_import_jobs
-  FOR UPDATE USING (public.is_game_master());
-
-DROP POLICY IF EXISTS "curriculum_import_jobs_delete_policy" ON curriculum_import_jobs;
-CREATE POLICY "curriculum_import_jobs_delete_policy" ON curriculum_import_jobs
-  FOR DELETE USING (public.is_game_master());
 
 -- SYLLABUS VERSIONS - All authenticated users can view, elevated users can manage
 DROP POLICY IF EXISTS "syllabus_versions_select_policy" ON syllabus_versions;
@@ -481,39 +640,6 @@ DROP POLICY IF EXISTS "syllabus_versions_delete_policy" ON syllabus_versions;
 CREATE POLICY "syllabus_versions_delete_policy" ON syllabus_versions
   FOR DELETE USING (public.is_game_master());
 
--- ELECTIVE PACKS - All authenticated users can view, elevated users can manage
-DROP POLICY IF EXISTS "elective_packs_select_policy" ON elective_packs;
-CREATE POLICY "elective_packs_select_policy" ON elective_packs
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-
-DROP POLICY IF EXISTS "elective_packs_insert_policy" ON elective_packs;
-CREATE POLICY "elective_packs_insert_policy" ON elective_packs
-  FOR INSERT WITH CHECK (public.is_game_master());
-
-DROP POLICY IF EXISTS "elective_packs_update_policy" ON elective_packs;
-CREATE POLICY "elective_packs_update_policy" ON elective_packs
-  FOR UPDATE USING (public.is_game_master());
-
-DROP POLICY IF EXISTS "elective_packs_delete_policy" ON elective_packs;
-CREATE POLICY "elective_packs_delete_policy" ON elective_packs
-  FOR DELETE USING (public.is_game_master());
-
--- ELECTIVE SOURCES - All authenticated users can view, elevated users can manage
-DROP POLICY IF EXISTS "elective_sources_select_policy" ON elective_sources;
-CREATE POLICY "elective_sources_select_policy" ON elective_sources
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-
-DROP POLICY IF EXISTS "elective_sources_insert_policy" ON elective_sources;
-CREATE POLICY "elective_sources_insert_policy" ON elective_sources
-  FOR INSERT WITH CHECK (public.is_game_master());
-
-DROP POLICY IF EXISTS "elective_sources_update_policy" ON elective_sources;
-CREATE POLICY "elective_sources_update_policy" ON elective_sources
-  FOR UPDATE USING (public.is_game_master());
-
-DROP POLICY IF EXISTS "elective_sources_delete_policy" ON elective_sources;
-CREATE POLICY "elective_sources_delete_policy" ON elective_sources
-  FOR DELETE USING (public.is_game_master());
 
 -- Grant necessary permissions
 -- =====================================================
@@ -552,8 +678,8 @@ GRANT SELECT ON curriculum_programs TO anon;
 GRANT SELECT ON curriculum_versions TO anon;
 GRANT SELECT ON curriculum_structure TO anon;
 GRANT SELECT ON syllabus_versions TO anon;
-GRANT SELECT ON elective_packs TO anon;
-GRANT SELECT ON elective_sources TO anon;
+GRANT SELECT ON class_nodes TO anon;
+GRANT SELECT ON class_specialization_subjects TO anon;
 
 -- =====================================================
 -- End of RLS Policies Script

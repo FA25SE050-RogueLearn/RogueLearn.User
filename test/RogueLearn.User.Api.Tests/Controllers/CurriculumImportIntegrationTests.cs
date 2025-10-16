@@ -24,7 +24,6 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
     private readonly Mock<ICurriculumVersionRepository> _mockCurriculumVersionRepository;
     private readonly Mock<ISubjectRepository> _mockSubjectRepository;
     private readonly Mock<ISyllabusVersionRepository> _mockSyllabusVersionRepository;
-    private readonly Mock<ICurriculumImportJobRepository> _mockCurriculumImportJobRepository;
 
     public CurriculumImportIntegrationTests(WebApplicationFactory<Program> factory)
     {
@@ -32,7 +31,6 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
         _mockCurriculumVersionRepository = new Mock<ICurriculumVersionRepository>();
         _mockSubjectRepository = new Mock<ISubjectRepository>();
         _mockSyllabusVersionRepository = new Mock<ISyllabusVersionRepository>();
-        _mockCurriculumImportJobRepository = new Mock<ICurriculumImportJobRepository>();
 
         _factory = factory.WithWebHostBuilder(builder =>
         {
@@ -65,16 +63,11 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
                 if (syllabusVersionDescriptor != null)
                     services.Remove(syllabusVersionDescriptor);
 
-                var curriculumImportJobDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(ICurriculumImportJobRepository));
-                if (curriculumImportJobDescriptor != null)
-                    services.Remove(curriculumImportJobDescriptor);
-
                 // Replace with mocks
                 services.AddScoped(_ => _mockCurriculumProgramRepository.Object);
                 services.AddScoped(_ => _mockCurriculumVersionRepository.Object);
                 services.AddScoped(_ => _mockSubjectRepository.Object);
                 services.AddScoped(_ => _mockSyllabusVersionRepository.Object);
-                services.AddScoped(_ => _mockCurriculumImportJobRepository.Object);
             });
         });
 
@@ -118,9 +111,6 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
         _mockCurriculumVersionRepository.Setup(x => x.AddAsync(It.IsAny<CurriculumVersion>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CurriculumVersion { Id = Guid.NewGuid(), VersionCode = "2024.1", EffectiveYear = 2024 });
 
-        _mockCurriculumImportJobRepository.Setup(x => x.AddAsync(It.IsAny<CurriculumImportJob>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CurriculumImportJob { Id = Guid.NewGuid(), Status = "Completed" });
-
         // Act
         var response = await _client.PostAsync("/api/curriculum-import/import", content);
 
@@ -136,7 +126,6 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
         // Verify repository interactions
         _mockCurriculumProgramRepository.Verify(x => x.AddAsync(It.IsAny<CurriculumProgram>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockCurriculumVersionRepository.Verify(x => x.AddAsync(It.IsAny<CurriculumVersion>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockCurriculumImportJobRepository.Verify(x => x.AddAsync(It.IsAny<CurriculumImportJob>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -400,9 +389,6 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
         _mockCurriculumVersionRepository.Setup(x => x.AddAsync(It.IsAny<CurriculumVersion>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CurriculumVersion { Id = Guid.NewGuid(), VersionCode = "2024.2", EffectiveYear = 2024 });
 
-        _mockCurriculumImportJobRepository.Setup(x => x.AddAsync(It.IsAny<CurriculumImportJob>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CurriculumImportJob { Id = Guid.NewGuid(), Status = "Completed" });
-
         // Act & Assert - Step 1: Validate
         var validateResponse = await _client.PostAsync("/api/curriculum-import/validate", content);
         validateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -422,7 +408,6 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
         // Verify complete workflow
         _mockCurriculumProgramRepository.Verify(x => x.AddAsync(It.IsAny<CurriculumProgram>(), It.IsAny<CancellationToken>()), Times.Once);
         _mockCurriculumVersionRepository.Verify(x => x.AddAsync(It.IsAny<CurriculumVersion>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockCurriculumImportJobRepository.Verify(x => x.AddAsync(It.IsAny<CurriculumImportJob>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
