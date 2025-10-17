@@ -20,6 +20,9 @@ using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSylla
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 using RogueLearn.User.Domain.Entities;
+using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes; 
+using RogueLearn.User.Application.Features.Notes.Commands.CreateNote; 
+using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote; 
 
 namespace RogueLearn.User.Application.Mappings;
 
@@ -69,5 +72,10 @@ public class MappingProfile : Profile
     // CurriculumProgramDetails mappings
     CreateMap<CurriculumProgram, CurriculumProgramDetailsResponse>();
     CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
+
+    // Note mappings
+    CreateMap<Note, NoteDto>();
+    CreateMap<Note, CreateNoteResponse>();
+    CreateMap<Note, UpdateNoteResponse>();
   }
 }

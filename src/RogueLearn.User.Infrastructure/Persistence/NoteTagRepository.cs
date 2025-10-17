@@ -38,4 +38,14 @@ public class NoteTagRepository : INoteTagRepository
 
     return response.Models.Select(x => x.TagId);
   }
+
+  public async Task<IEnumerable<Guid>> GetNoteIdsByTagIdAsync(Guid tagId, CancellationToken cancellationToken = default)
+  {
+    var response = await _supabaseClient
+      .From<NoteTag>()
+      .Where(x => x.TagId == tagId)
+      .Get(cancellationToken);
+
+    return response.Models.Select(x => x.NoteId);
+  }
 }

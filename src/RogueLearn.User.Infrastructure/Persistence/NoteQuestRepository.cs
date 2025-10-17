@@ -38,4 +38,14 @@ public class NoteQuestRepository : INoteQuestRepository
 
     return response.Models.Select(x => x.QuestId);
   }
+
+  public async Task<IEnumerable<Guid>> GetNoteIdsByQuestIdAsync(Guid questId, CancellationToken cancellationToken = default)
+  {
+    var response = await _supabaseClient
+      .From<NoteQuest>()
+      .Where(x => x.QuestId == questId)
+      .Get(cancellationToken);
+
+    return response.Models.Select(x => x.NoteId);
+  }
 }
