@@ -38,4 +38,14 @@ public class NoteSkillRepository : INoteSkillRepository
 
     return response.Models.Select(x => x.SkillId);
   }
+
+  public async Task<IEnumerable<Guid>> GetNoteIdsBySkillIdAsync(Guid skillId, CancellationToken cancellationToken = default)
+  {
+    var response = await _supabaseClient
+      .From<NoteSkill>()
+      .Where(x => x.SkillId == skillId)
+      .Get(cancellationToken);
+
+    return response.Models.Select(x => x.NoteId);
+  }
 }
