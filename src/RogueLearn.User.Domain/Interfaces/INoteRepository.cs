@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Interfaces/INoteRepository.cs
 using BuildingBlocks.Shared.Interfaces;
 using RogueLearn.User.Domain.Entities;
 

@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/NoteQuest.cs
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 

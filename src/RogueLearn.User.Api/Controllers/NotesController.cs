@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/NotesController.cs
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -24,7 +25,7 @@ public class NotesController : ControllerBase
         _mediator = mediator;
     }
 
-    
+
     /// <summary>
     /// Creates a new note by uploading and processing a file.
     /// </summary>
