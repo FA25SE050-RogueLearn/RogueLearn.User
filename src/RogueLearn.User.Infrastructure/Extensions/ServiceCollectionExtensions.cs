@@ -97,6 +97,9 @@ public static class ServiceCollectionExtensions
         // Register Message Bus (commented out per MVP scope)
         //services.AddScoped<IMessageBus, MassTransitMessageBus>();
 
+        // PDF text extraction service
+        services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
+
         return services;
     }
 }

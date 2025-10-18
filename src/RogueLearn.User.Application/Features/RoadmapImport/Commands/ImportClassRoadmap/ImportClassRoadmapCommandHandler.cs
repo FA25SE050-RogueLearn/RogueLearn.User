@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Plugins;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.Security.Cryptography;
@@ -10,54 +11,76 @@ using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.RoadmapImport.Commands.ImportClassRoadmap;
 
-public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadmapCommand, ImportClassRoadmapResult>
+public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadmapCommand, ImportClassRoadmapResponse>
 {
     private readonly IRoadmapExtractionPlugin _extractionPlugin;
+    private readonly IPdfTextExtractor _pdfTextExtractor;
     private readonly IClassRepository _classRepository;
     private readonly IClassNodeRepository _classNodeRepository;
+    private readonly IRoadmapImportStorage _storage;
     private readonly ILogger<ImportClassRoadmapCommandHandler> _logger;
 
     public ImportClassRoadmapCommandHandler(
         IRoadmapExtractionPlugin extractionPlugin,
+        IPdfTextExtractor pdfTextExtractor,
         IClassRepository classRepository,
         IClassNodeRepository classNodeRepository,
+        IRoadmapImportStorage storage,
         ILogger<ImportClassRoadmapCommandHandler> logger)
     {
         _extractionPlugin = extractionPlugin;
+        _pdfTextExtractor = pdfTextExtractor;
         _classRepository = classRepository;
         _classNodeRepository = classNodeRepository;
+        _storage = storage;
         _logger = logger;
     }
 
-    public async Task<ImportClassRoadmapResult> Handle(ImportClassRoadmapCommand request, CancellationToken cancellationToken)
+    public async Task<ImportClassRoadmapResponse> Handle(ImportClassRoadmapCommand request, CancellationToken cancellationToken)
     {
-        var result = new ImportClassRoadmapResult();
+        var result = new ImportClassRoadmapResponse();
         try
         {
-            if (string.IsNullOrWhiteSpace(request.RoadmapJson) && string.IsNullOrWhiteSpace(request.RawText))
+            // Validate PDF input only
+            if (request.PdfAttachmentStream == null)
             {
                 result.IsSuccess = false;
-                result.Message = "Either RoadmapJson or RawText must be provided";
+                result.Message = "A PDF file must be provided";
                 return result;
             }
 
-            // Compute raw text hash for idempotent caching if raw text provided
-            if (!string.IsNullOrWhiteSpace(request.RawText))
+            // Read PDF stream into memory for repeated use
+            byte[] pdfBytes;
+            using (var ms = new MemoryStream())
             {
-                result.RawTextHash = ComputeSha256Hash(request.RawText!);
+                await request.PdfAttachmentStream.CopyToAsync(ms, cancellationToken);
+                pdfBytes = ms.ToArray();
             }
 
-            // 1) Extract JSON if not provided
-            var roadmapJson = request.RoadmapJson;
+            // Extract raw text from PDF
+            string rawText;
+            using (var extractStream = new MemoryStream(pdfBytes))
+            {
+                rawText = await _pdfTextExtractor.ExtractTextAsync(extractStream, cancellationToken);
+            }
+
+            if (string.IsNullOrWhiteSpace(rawText))
+            {
+                result.IsSuccess = false;
+                result.Message = "Failed to extract text from PDF";
+                return result;
+            }
+
+            // Compute raw text hash for idempotent caching
+            result.RawTextHash = ComputeSha256Hash(rawText);
+
+            // 1) Extract JSON from raw text via AI
+            var roadmapJson = await _extractionPlugin.ExtractClassRoadmapJsonAsync(rawText, cancellationToken);
             if (string.IsNullOrWhiteSpace(roadmapJson))
             {
-                roadmapJson = await _extractionPlugin.ExtractClassRoadmapJsonAsync(request.RawText!, cancellationToken);
-                if (string.IsNullOrWhiteSpace(roadmapJson))
-                {
-                    result.IsSuccess = false;
-                    result.Message = "AI extraction returned empty JSON";
-                    return result;
-                }
+                result.IsSuccess = false;
+                result.Message = "AI extraction returned empty JSON";
+                return result;
             }
             result.RoadmapJson = roadmapJson;
 
@@ -91,6 +114,32 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
             result.Message = "Roadmap imported successfully";
             result.CreatedNodes = created;
             result.UpdatedNodes = updated;
+
+            // Upload PDF attachment to Supabase storage after a successful import
+            if (result.Class != null)
+            {
+                try
+                {
+                    const string bucketName = "roadmap-imports";
+                    var className = result.Class.Name;
+
+                    using var uploadStream = new MemoryStream(pdfBytes);
+                    await _storage.SavePdfAttachmentAsync(
+                        bucketName,
+                        className,
+                        result.RawTextHash!,
+                        uploadStream,
+                        request.PdfAttachmentFileName ?? "attachment.pdf",
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    // Do not fail the import if upload fails; just log error and continue
+                    _logger.LogError(ex, "PDF upload failed after successful roadmap import for class {Class}", result.Class.Name);
+                    result.Errors.Add($"PDF upload failed: {ex.Message}");
+                }
+            }
+
             return result;
         }
         catch (Exception ex)
@@ -161,7 +210,8 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
     {
         int created = 0, updated = 0;
         // Compute idempotent lookup: match by ClassId + ParentId + Title
-        var existing = (await _classNodeRepository.FindAsync(n => n.ClassId == classId && n.ParentId == parentId && n.Title == node.Title, ct)).FirstOrDefault();
+        var candidates = await _classNodeRepository.GetByClassAndTitleAsync(classId, node.Title, ct);
+        var existing = candidates.FirstOrDefault(n => n.ParentId == parentId);
 
         if (existing != null)
         {

@@ -1,6 +1,6 @@
 namespace RogueLearn.User.Application.Features.RoadmapImport.Commands.ImportClassRoadmap;
 
-public class ImportClassRoadmapResult
+public class ImportClassRoadmapResponse
 {
     public bool IsSuccess { get; set; }
     public string? Message { get; set; }
