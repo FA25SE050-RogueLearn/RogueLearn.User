@@ -6,6 +6,10 @@ using RogueLearn.User.Application.Features.Subjects.Commands.UpdateSubject;
 using RogueLearn.User.Application.Features.Subjects.Commands.DeleteSubject;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetSubjectById;
+using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusVersionsBySubject;
+using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
+using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
+using RogueLearn.User.Application.Features.SyllabusVersions.Commands.DeleteSyllabusVersion;
 
 namespace RogueLearn.User.Api.Controllers;
 

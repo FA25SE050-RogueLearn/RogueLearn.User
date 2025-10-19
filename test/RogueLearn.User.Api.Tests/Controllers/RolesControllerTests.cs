@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,6 +59,22 @@ public class RolesControllerTests : IClassFixture<WebApplicationFactory<Program>
                 // Replace with mocks
                 services.AddScoped(_ => _mockRoleRepository.Object);
                 services.AddScoped(_ => _mockUserRoleRepository.Object);
+
+                // Override JWT Bearer options to align with test configuration and avoid remote metadata
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.Authority = "https://test.supabase.co";
+                    options.RequireHttpsMetadata = false;
+                    options.Audience = "authenticated";
+                    options.TokenValidationParameters.ValidIssuer = "https://test.supabase.co/auth/v1";
+                    options.TokenValidationParameters.ValidAudience = "authenticated";
+                    options.TokenValidationParameters.ValidateIssuer = false; // Relax issuer validation for tests
+                    options.TokenValidationParameters.ValidateAudience = false; // Relax audience validation for tests
+                    options.TokenValidationParameters.ValidateLifetime = true;
+                    options.TokenValidationParameters.ValidateIssuerSigningKey = true;
+                    options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"));
+                    options.TokenValidationParameters.ClockSkew = TimeSpan.Zero;
+                });
             });
         });
 

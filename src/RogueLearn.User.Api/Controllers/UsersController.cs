@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.UserProfiles.Commands.UpdateMyProfile;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
+using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
 using System.Security.Claims;
@@ -71,5 +73,36 @@ public class UsersController : ControllerBase
         command.AuthUserId = authUserId;
         var updated = await _mediator.Send(command, cancellationToken);
         return Ok(updated);
+    }
+
+    // ===== Admin endpoints moved from AdminUsersController =====
+
+    /// <summary>
+    /// Get all user profiles (admin only).
+    /// </summary>
+    [HttpGet("~/api/admin/users/profiles")]
+    [Authorize]
+    [AdminOnly]
+    [ProducesResponseType(typeof(GetAllUserProfilesResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<GetAllUserProfilesResponse>> AdminGetAllUserProfiles(CancellationToken cancellationToken)
+    {
+        var query = new GetAllUserProfilesQuery();
+        var result = await _mediator.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get a user's profile by their authentication ID (admin only).
+    /// </summary>
+    [HttpGet("~/api/admin/users/{authId:guid}")]
+    [Authorize]
+    [AdminOnly]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<UserProfileDto>> AdminGetByAuthId(Guid authId, CancellationToken cancellationToken)
+    {
+        var query = new GetUserProfileByAuthIdQuery(authId);
+        var result = await _mediator.Send(query, cancellationToken);
+        return result is not null ? Ok(result) : NotFound();
     }
 }
