@@ -2,7 +2,9 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RogueLearn.User.Application.DTOs.Internal; // ADD THIS
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
+using RogueLearn.User.Application.Features.CurriculumVersions.Queries.GetCurriculumForQuestGeneration; // ADD THIS
 
 namespace RogueLearn.User.Api.Controllers.Internal;
 
@@ -19,15 +21,25 @@ public class CurriculumController : ControllerBase
     }
 
     /// <summary>
-    /// Gets comprehensive details of a curriculum program for internal service use, looked up by EITHER program ID or version ID.
+    /// Gets comprehensive details of a curriculum program for admin UI use.
     /// </summary>
-    [HttpGet("{id:guid}/details")]
-    public async Task<ActionResult<CurriculumProgramDetailsResponse>> GetCurriculumDetailsForGeneration(Guid id)
+    [HttpGet("programs/{id:guid}/details")] // MODIFIED ROUTE
+    public async Task<ActionResult<CurriculumProgramDetailsResponse>> GetCurriculumDetailsForAdmin(Guid id)
     {
-        // MODIFIED: We intelligently decide whether the incoming ID is for a Program or a Version.
-        // This is a robust way to handle the ambiguity, but a more explicit route would be even better.
-        // For now, we will assume the ID is a VersionID, as that is what the QuestService sends.
-        var query = new GetCurriculumProgramDetailsQuery { VersionId = id };
+        var query = new GetCurriculumProgramDetailsQuery { ProgramId = id };
+        var result = await _mediator.Send(query);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets a flattened curriculum DTO for internal quest generation service.
+    /// </summary>
+    [HttpGet("versions/{versionId:guid}/for-quest-generation")] // NEW, EXPLICIT ENDPOINT
+    [ProducesResponseType(typeof(CurriculumForQuestGenerationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CurriculumForQuestGenerationDto>> GetCurriculumForQuestGeneration(Guid versionId)
+    {
+        var query = new GetCurriculumForQuestGenerationQuery { CurriculumVersionId = versionId };
         var result = await _mediator.Send(query);
         return Ok(result);
     }
