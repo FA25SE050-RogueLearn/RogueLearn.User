@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Infrastructure.Persistence;
+using RogueLearn.User.Infrastructure.Messaging;
 using RogueLearn.User.Infrastructure.Services;
 using Supabase;
 
@@ -93,12 +94,19 @@ public static class ServiceCollectionExtensions
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
         services.AddScoped<IRoadmapImportStorage, RoadmapImportStorage>();
+        services.AddScoped<IAvatarStorage, AvatarStorage>();
 
         // Register Message Bus (commented out per MVP scope)
         //services.AddScoped<IMessageBus, MassTransitMessageBus>();
 
         // PDF text extraction service
         services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
+
+        // User context aggregation service
+        services.AddScoped<IUserContextService, UserContextService>();
+
+        // Avatar URL validator
+        services.AddScoped<IAvatarUrlValidator, AvatarUrlValidator>();
 
         return services;
     }
