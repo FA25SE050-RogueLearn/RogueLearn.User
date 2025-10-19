@@ -1,4 +1,9 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Mappings/MappingProfile.cs
 using AutoMapper;
+using RogueLearn.User.Application.Features.ClassSpecialization.Commands.AddSpecializationSubject;
+using RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
+using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
+using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.Roles.Queries.GetAllRoles;
 using RogueLearn.User.Application.Features.Roles.Commands.CreateRole;
@@ -20,62 +25,73 @@ using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSylla
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 using RogueLearn.User.Domain.Entities;
-using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes; 
-using RogueLearn.User.Application.Features.Notes.Commands.CreateNote; 
-using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote; 
+using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
+using RogueLearn.User.Application.Features.Notes.Commands.CreateNote;
+using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 
 namespace RogueLearn.User.Application.Mappings;
 
 public class MappingProfile : Profile
 {
-  public MappingProfile()
-  {
-    // UserProfile mappings
-    CreateMap<UserProfile, UserProfileDto>();
-    
-    // Role mappings
-    CreateMap<Role, RoleDto>();
-    CreateMap<Role, CreateRoleResponse>();
-    CreateMap<Role, UpdateRoleResponse>();
-    
-    // UserRole mappings - custom mapping for UserRoleDto
-    CreateMap<UserRole, UserRoleDto>()
-      .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
-      .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
-      .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
-      .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
+    public MappingProfile()
+    {
+        // UserProfile mappings
+        CreateMap<UserProfile, UserProfileDto>();
 
-    // CurriculumProgram mappings
-    CreateMap<CurriculumProgram, GetAllCurriculumProgramDto>();
-    CreateMap<CurriculumProgram, GetByIdCurriculumProgramDto>();
-    CreateMap<CurriculumProgram, CreateCurriculumProgramResponse>();
-    CreateMap<CurriculumProgram, UpdateCurriculumProgramResponse>();
+        // Role mappings
+        CreateMap<Role, RoleDto>();
+        CreateMap<Role, CreateRoleResponse>();
+        CreateMap<Role, UpdateRoleResponse>();
 
-    // CurriculumVersion mappings
-    CreateMap<CurriculumVersion, CurriculumVersionDto>();
-    CreateMap<CurriculumVersion, CreateCurriculumVersionResponse>();
+        // UserRole mappings - custom mapping for UserRoleDto
+        CreateMap<UserRole, UserRoleDto>()
+          .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
+          .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
+          .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
+          .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
 
-    // Subject mappings
-    CreateMap<Subject, SubjectDto>();
-    CreateMap<Subject, CreateSubjectResponse>();
-    CreateMap<Subject, UpdateSubjectResponse>();
+        // CurriculumProgram mappings
+        CreateMap<CurriculumProgram, GetAllCurriculumProgramDto>();
+        CreateMap<CurriculumProgram, GetByIdCurriculumProgramDto>();
+        CreateMap<CurriculumProgram, CreateCurriculumProgramResponse>();
+        CreateMap<CurriculumProgram, UpdateCurriculumProgramResponse>();
 
-    // CurriculumStructure mappings
-    CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
-    CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
+        // CurriculumVersion mappings
+        CreateMap<CurriculumVersion, CurriculumVersionDto>();
+        CreateMap<CurriculumVersion, CreateCurriculumVersionResponse>();
 
-    // SyllabusVersion mappings
-    CreateMap<SyllabusVersion, SyllabusVersionDto>();
-    CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>();
-    CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>();
+        // Subject mappings
+        CreateMap<Subject, SubjectDto>();
+        CreateMap<Subject, CreateSubjectResponse>();
+        CreateMap<Subject, UpdateSubjectResponse>();
 
-    // CurriculumProgramDetails mappings
-    CreateMap<CurriculumProgram, CurriculumProgramDetailsResponse>();
-    CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
+        // CurriculumStructure mappings
+        CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
+        CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
 
-    // Note mappings
-    CreateMap<Note, NoteDto>();
-    CreateMap<Note, CreateNoteResponse>();
-    CreateMap<Note, UpdateNoteResponse>();
-  }
+        // SyllabusVersion mappings
+        CreateMap<SyllabusVersion, SyllabusVersionDto>();
+        CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>();
+        CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>();
+
+        // CurriculumProgramDetails mappings
+        CreateMap<CurriculumProgram, CurriculumProgramDetailsResponse>();
+        CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
+
+        // Note mappings
+        CreateMap<Note, NoteDto>();
+        CreateMap<Note, CreateNoteResponse>();
+        CreateMap<Note, UpdateNoteResponse>();
+
+        // Skill Catalog mapping
+        //CreateMap<Skill, SkillDto>();
+
+        // Class Specialization mappings
+        CreateMap<ClassSpecializationSubject, SpecializationSubjectDto>();
+        CreateMap<AddSpecializationSubjectCommand, ClassSpecializationSubject>();
+
+        //  Mappings for the Onboarding feature
+        CreateMap<CurriculumProgram, RouteDto>();
+        CreateMap<Class, ClassDto>();
+    }
 }
