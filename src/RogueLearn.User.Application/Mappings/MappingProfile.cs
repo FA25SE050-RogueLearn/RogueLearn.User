@@ -25,18 +25,32 @@ using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSylla
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 using RogueLearn.User.Domain.Entities;
-using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
-using RogueLearn.User.Application.Features.Notes.Commands.CreateNote;
-using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
+using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes; 
+using RogueLearn.User.Application.Features.Notes.Commands.CreateNote; 
+using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote; 
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Mappings;
 
 public class MappingProfile : Profile
 {
-    public MappingProfile()
-    {
-        // UserProfile mappings
-        CreateMap<UserProfile, UserProfileDto>();
+  public MappingProfile()
+  {
+    // UserProfile mappings
+    CreateMap<UserProfile, UserProfileDto>()
+      .ForMember(dest => dest.PreferencesJson, opt => opt.MapFrom(src => src.Preferences != null ? JsonSerializer.Serialize(src.Preferences, (JsonSerializerOptions)null!) : null));
+    
+    // Role mappings
+    CreateMap<Role, RoleDto>();
+    CreateMap<Role, CreateRoleResponse>();
+    CreateMap<Role, UpdateRoleResponse>();
+    
+    // UserRole mappings - custom mapping for UserRoleDto
+    CreateMap<UserRole, UserRoleDto>()
+      .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
+      .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
+      .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
+      .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
 
         // Role mappings
         CreateMap<Role, RoleDto>();

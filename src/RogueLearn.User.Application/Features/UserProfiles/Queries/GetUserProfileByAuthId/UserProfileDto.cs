@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/UserProfiles/Queries/GetUserProfileByAuthId/UserProfileDto.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Features/UserProfiles/Queries/GetUserProfileByAuthId/UserProfileDto.cs
 namespace RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 
 public class UserProfileDto
@@ -13,5 +13,8 @@ public class UserProfileDto
     public int ExperiencePoints { get; set; }
     public bool OnboardingCompleted { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public string? Bio { get; set; }
+    public string? PreferencesJson { get; set; }
     public List<string> Roles { get; set; } = new();
 }

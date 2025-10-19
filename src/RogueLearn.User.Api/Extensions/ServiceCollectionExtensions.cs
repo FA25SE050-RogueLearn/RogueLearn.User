@@ -29,6 +29,8 @@ public static class ServiceCollectionExtensions
 
 		// Register FLM SK plugin
 		services.AddScoped<IFlmExtractionPlugin, FlmExtractionPlugin>();
+		// Register Roadmap SK plugin
+		services.AddScoped<IRoadmapExtractionPlugin, RoadmapExtractionPlugin>();
 
 		return services;
 	}

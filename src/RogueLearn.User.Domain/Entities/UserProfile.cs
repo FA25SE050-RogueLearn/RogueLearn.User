@@ -36,6 +36,13 @@ public class UserProfile : BaseEntity
 	[Column("profile_image_url")]
 	public string? ProfileImageUrl { get; set; }
 
+	[Column("bio")]
+	public string? Bio { get; set; }
+
+	// Stored as JSONB in database; represented as a dictionary in the entity to match JSON object
+	[Column("preferences")]
+	public Dictionary<string, object>? Preferences { get; set; }
+
 	[Column("onboarding_completed")]
 	public bool OnboardingCompleted { get; set; } = false;
 
