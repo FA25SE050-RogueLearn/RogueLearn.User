@@ -1,3 +1,4 @@
+// RogueLearn.User/building_blocks/BuildingBlocks.Shared/Authentication/ServiceCollectionExtensions.cs
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,14 +13,27 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddRogueLearnAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        // Get Supabase configuration from appsettings.json or environment variables.
-        var supabaseUrl = configuration["Supabase:Url"] ?? throw new InvalidOperationException("Supabase:Url is not configured.");
-        var supabaseJwtSecret = configuration["Supabase:JwtSecret"] ?? throw new InvalidOperationException("Supabase:JwtSecret is not configured.");
+        // MODIFIED LOGIC: Prioritize 'AuthAuthority' for JWT validation.
+        // This allows consumer services (like Quest) to specify a separate authority,
+        // while the authority service itself (User) can fall back to its own Supabase config.
+        var authAuthorityUrl = configuration["AuthAuthority:Url"] ?? configuration["Supabase:Url"];
+        var supabaseJwtSecret = configuration["AuthAuthority:JwtSecret"] ?? configuration["Supabase:JwtSecret"];
+
+        // Add clearer error messages to pinpoint configuration issues.
+        if (string.IsNullOrEmpty(authAuthorityUrl))
+        {
+            throw new InvalidOperationException("Authentication authority URL is not configured. Please set either 'AuthAuthority:Url' or 'Supabase:Url'.");
+        }
+        if (string.IsNullOrEmpty(supabaseJwtSecret))
+        {
+            throw new InvalidOperationException("JWT Secret is not configured. Please set either 'AuthAuthority:JwtSecret' or 'Supabase:JwtSecret'.");
+        }
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
-                options.Authority = supabaseUrl;
+                // The Authority is the service that issues the tokens (e.g., the User service's Supabase).
+                options.Authority = authAuthorityUrl;
                 options.Audience = "authenticated";
                 // In a real production environment, this should be true. For local dev/containers, false is often needed.
                 options.RequireHttpsMetadata = false;
@@ -27,7 +41,8 @@ public static class ServiceCollectionExtensions
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = $"{supabaseUrl}/auth/v1",
+                    // The ValidIssuer must match the 'iss' claim in the JWT, which is derived from the Authority URL.
+                    ValidIssuer = $"{authAuthorityUrl}/auth/v1",
                     ValidateAudience = true,
                     ValidAudience = "authenticated",
                     ValidateLifetime = true,
@@ -77,7 +92,7 @@ public static class ServiceCollectionExtensions
                             var finalRoles = context.Principal?.FindAll(ClaimTypes.Role).Select(c => c.Value);
 
                             logger.LogDebug("JWT token validated for user {UserId} with final roles: {Roles}",
-                                userId, string.Join(", ", finalRoles ?? new string[0]));
+                                userId, string.Join(", ", finalRoles ?? Array.Empty<string>()));
                         }
 
                         return Task.CompletedTask;

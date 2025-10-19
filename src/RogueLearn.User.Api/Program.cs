@@ -1,12 +1,12 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
 using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using DotNetEnv;
-using BuildingBlocks.Shared.Authentication; // This is our shared authentication logic
-using Microsoft.SemanticKernel; // This is required for the new AI features
+using BuildingBlocks.Shared.Authentication;
+using Microsoft.SemanticKernel;
+using System.Text.Json.Serialization; // ADD THIS USING
 
 // Load environment variables from .env file
 Env.Load();
@@ -27,7 +27,6 @@ try
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
 
     // --- RE-INTRODUCED: SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
-    // This block is necessary for the curriculum import functionality.
     builder.Services.AddScoped<Kernel>(sp =>
     {
         var configuration = sp.GetRequiredService<IConfiguration>();
@@ -47,20 +46,31 @@ try
                 var googleApiKey = configuration["AI:Google:ApiKey"] ?? throw new InvalidOperationException("AI:Google:ApiKey is not configured.");
                 kernelBuilder.AddGoogleAIGeminiChatCompletion(modelId: googleModel, apiKey: googleApiKey, httpClient: httpClient);
                 break;
-            // Add cases for other providers like "AzureOpenAI" or "OpenAI" here in the future.
             default:
                 throw new InvalidOperationException($"AI Provider '{provider}' is not supported.");
         }
 
         return kernelBuilder.Build();
     });
-    // --- END OF AI SERVICE CONFIGURATION ---
 
     // Add other services to the container
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddApplication();
     builder.Services.AddInfrastructureServices();
-    builder.Services.AddApiServices();
+
+    // MODIFIED: Chain the AddApiServices call to configure JSON options
+    builder.Services.AddApiServices()
+        .ConfigureHttpJsonOptions(options =>
+        {
+            // This converter allows the API to accept and return enums as strings (e.g., "Bachelor")
+            // instead of integers (e.g., 1).
+            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        })
+        .Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
+        {
+            // This does the same for controllers that use MVC's formatter (e.g., returning Ok(object)).
+            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        });
 
     var app = builder.Build();
 
@@ -76,7 +86,6 @@ try
             c.RoutePrefix = string.Empty;
         });
 
-        // Redirect root requests to Swagger UI for convenience in development
         app.Use(async (context, next) =>
         {
             if (context.Request.Path == "/")
@@ -91,7 +100,6 @@ try
     app.UseCors("AllowAll");
     app.UseHttpsRedirection();
 
-    // Add the authentication and authorization middleware to the request pipeline.
     app.UseAuthentication();
     app.UseAuthorization();
 

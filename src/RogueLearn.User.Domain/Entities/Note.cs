@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Note.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 
