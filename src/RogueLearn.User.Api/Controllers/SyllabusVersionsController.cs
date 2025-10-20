@@ -9,10 +9,10 @@ using RogueLearn.User.Application.Features.SyllabusVersions.Commands.DeleteSylla
 namespace RogueLearn.User.Api.Controllers;
 
 [ApiController]
-[Route("api/admin/subjects/{subjectId:guid}/syllabus-versions")]
+[Route("api/admin/syllabus-versions")]
 [AdminOnly]
 /// <summary>
-/// Admin endpoints for managing syllabus versions within a subject.
+/// Admin endpoints for managing syllabus versions.
 /// </summary>
 /// <remarks>
 /// Access restricted via <see cref="AdminOnlyAttribute"/>.
@@ -30,12 +30,12 @@ public class SyllabusVersionsController : ControllerBase
     /// Gets syllabus versions by subject ID.
     /// </summary>
     /// <remarks>
-    /// GET <c>api/admin/subjects/{subjectId}/syllabus-versions</c>
+    /// GET <c>api/admin/syllabus-versions/subject/{subjectId}</c>
     /// </remarks>
     /// <param name="subjectId">Subject unique identifier.</param>
     /// <returns>List of syllabus versions for the subject.</returns>
-    [HttpGet]
-    public async Task<ActionResult<List<SyllabusVersionDto>>> GetSyllabusVersionsBySubject(Guid subjectId)
+    [HttpGet("subject/{subjectId:guid}")]
+    public async Task<ActionResult<List<SyllabusVersionDto>>> GetBySubject(Guid subjectId)
     {
         var query = new GetSyllabusVersionsBySubjectQuery(subjectId);
         var result = await _mediator.Send(query);
@@ -46,31 +46,28 @@ public class SyllabusVersionsController : ControllerBase
     /// Creates a new syllabus version.
     /// </summary>
     /// <remarks>
-    /// POST <c>api/admin/subjects/{subjectId}/syllabus-versions</c>
+    /// POST <c>api/admin/syllabus-versions</c>
     /// </remarks>
-    /// <param name="subjectId">Subject unique identifier.</param>
     /// <param name="command">Create syllabus version payload.</param>
     /// <returns>Created syllabus version.</returns>
     [HttpPost]
-    public async Task<ActionResult<CreateSyllabusVersionResponse>> CreateSyllabusVersion(Guid subjectId, [FromBody] CreateSyllabusVersionCommand command)
+    public async Task<ActionResult<CreateSyllabusVersionResponse>> Create([FromBody] CreateSyllabusVersionCommand command)
     {
-        command.SubjectId = subjectId;
         var result = await _mediator.Send(command);
-        return CreatedAtAction(nameof(GetSyllabusVersionsBySubject), new { subjectId }, result);
+        return Created(string.Empty, result);
     }
 
     /// <summary>
     /// Updates an existing syllabus version.
     /// </summary>
     /// <remarks>
-    /// PUT <c>api/admin/subjects/{subjectId}/syllabus-versions/{id}</c>
+    /// PUT <c>api/admin/syllabus-versions/{id}</c>
     /// </remarks>
-    /// <param name="subjectId">Subject unique identifier.</param>
     /// <param name="id">Syllabus version unique identifier.</param>
     /// <param name="command">Update syllabus version payload.</param>
     /// <returns>Updated syllabus version.</returns>
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<UpdateSyllabusVersionResponse>> UpdateSyllabusVersion(Guid subjectId, Guid id, [FromBody] UpdateSyllabusVersionCommand command)
+    public async Task<ActionResult<UpdateSyllabusVersionResponse>> Update(Guid id, [FromBody] UpdateSyllabusVersionCommand command)
     {
         command.Id = id;
         var result = await _mediator.Send(command);
@@ -81,16 +78,14 @@ public class SyllabusVersionsController : ControllerBase
     /// Deletes a syllabus version.
     /// </summary>
     /// <remarks>
-    /// DELETE <c>api/admin/subjects/{subjectId}/syllabus-versions/{id}</c>
+    /// DELETE <c>api/admin/syllabus-versions/{id}</c>
     /// </remarks>
-    /// <param name="subjectId">Subject unique identifier.</param>
     /// <param name="id">Syllabus version unique identifier.</param>
-    /// <returns>Status message confirming deletion.</returns>
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> DeleteSyllabusVersion(Guid subjectId, Guid id)
+    public async Task<IActionResult> Delete(Guid id)
     {
         var command = new DeleteSyllabusVersionCommand(id);
         await _mediator.Send(command);
-        return Ok(new { message = "Syllabus version deleted successfully" });
+        return NoContent();
     }
 }

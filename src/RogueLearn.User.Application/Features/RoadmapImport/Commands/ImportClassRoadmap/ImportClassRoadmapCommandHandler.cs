@@ -104,7 +104,7 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
             {
                 foreach (var rootNode in data.Nodes.Select((n, i) => (node: n, index: i)))
                 {
-                    var counts = await UpsertNodeRecursiveAsync(classEntity.Id, null, rootNode.node, rootNode.index + 1, cancellationToken);
+                    var counts = await UpsertNodeRecursiveAsync(classEntity.Id, null, rootNode.node, rootNode.index + 1, result.RawTextHash ?? string.Empty, cancellationToken);
                     created += counts.created;
                     updated += counts.updated;
                 }
@@ -206,7 +206,7 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
         return await _classRepository.AddAsync(entity, ct);
     }
 
-    private async Task<(int created, int updated)> UpsertNodeRecursiveAsync(Guid classId, Guid? parentId, RoadmapNodeData node, int siblingSequence, CancellationToken ct)
+    private async Task<(int created, int updated)> UpsertNodeRecursiveAsync(Guid classId, Guid? parentId, RoadmapNodeData node, int siblingSequence, string rawTextHash, CancellationToken ct)
     {
         int created = 0, updated = 0;
         // Compute idempotent lookup: match by ClassId + ParentId + Title
@@ -218,6 +218,14 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
             existing.NodeType = node.NodeType;
             existing.Description = node.Description;
             existing.Sequence = siblingSequence; // keep latest computed order
+            existing.IsActive = true;
+            existing.IsLockedByImport = true;
+            existing.Metadata ??= new Dictionary<string, object>();
+            existing.Metadata["import_source"] = "roadmap_pdf";
+            existing.Metadata["external_path"] = node.FullPath;
+            existing.Metadata["external_path_hash"] = ComputeSha256Hash(node.FullPath ?? string.Empty);
+            existing.Metadata["raw_text_hash"] = rawTextHash;
+            existing.Metadata["imported_at"] = DateTimeOffset.UtcNow.ToString("o");
             existing.CreatedAt = existing.CreatedAt; // unchanged
             await _classNodeRepository.UpdateAsync(existing, ct);
             updated++;
@@ -227,7 +235,7 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
                 int i = 1;
                 foreach (var child in node.Children)
                 {
-                    var childCounts = await UpsertNodeRecursiveAsync(classId, existing.Id, child, i++, ct);
+                    var childCounts = await UpsertNodeRecursiveAsync(classId, existing.Id, child, i++, rawTextHash, ct);
                     created += childCounts.created;
                     updated += childCounts.updated;
                 }
@@ -243,6 +251,16 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
                 NodeType = node.NodeType,
                 Description = node.Description,
                 Sequence = siblingSequence,
+                IsActive = true,
+                IsLockedByImport = true,
+                Metadata = new Dictionary<string, object>
+                {
+                    ["import_source"] = "roadmap_pdf",
+                    ["external_path"] = node.FullPath,
+                    ["external_path_hash"] = ComputeSha256Hash(node.FullPath ?? string.Empty),
+                    ["raw_text_hash"] = rawTextHash,
+                    ["imported_at"] = DateTimeOffset.UtcNow.ToString("o")
+                },
                 CreatedAt = DateTimeOffset.UtcNow,
             };
             var inserted = await _classNodeRepository.AddAsync(entity, ct);
@@ -253,7 +271,7 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
                 int i = 1;
                 foreach (var child in node.Children)
                 {
-                    var childCounts = await UpsertNodeRecursiveAsync(classId, inserted.Id, child, i++, ct);
+                    var childCounts = await UpsertNodeRecursiveAsync(classId, inserted.Id, child, i++, rawTextHash, ct);
                     created += childCounts.created;
                     updated += childCounts.updated;
                 }

@@ -33,7 +33,7 @@ try
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
         // Create a Custom HTTP Client to increase timeout for AI calls
-        var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+        var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
 
         var kernelBuilder = Kernel.CreateBuilder();
         kernelBuilder.Services.AddSingleton(loggerFactory);

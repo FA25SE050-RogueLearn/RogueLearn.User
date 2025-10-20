@@ -1,5 +1,6 @@
 using AutoMapper;
 using MediatR;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 
@@ -18,6 +19,13 @@ public class CreateRoleCommandHandler : IRequestHandler<CreateRoleCommand, Creat
 
   public async Task<CreateRoleResponse> Handle(CreateRoleCommand request, CancellationToken cancellationToken)
   {
+    // Prevent duplicate role names
+    var existing = await _roleRepository.GetByNameAsync(request.Name, cancellationToken);
+    if (existing != null)
+    {
+      throw new BadRequestException($"Role '{request.Name}' already exists.");
+    }
+
     var role = new Role
     {
       Name = request.Name,

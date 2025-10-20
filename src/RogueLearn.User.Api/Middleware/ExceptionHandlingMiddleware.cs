@@ -60,6 +60,18 @@ public class ExceptionHandlingMiddleware
                 };
                 break;
 
+            case ConflictException:
+                context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+                response = new
+                {
+                    error = new
+                    {
+                        message = exception.Message,
+                        details = exception.InnerException?.Message
+                    }
+                };
+                break;
+
             case UnauthorizedException:
                 context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
                 response = new

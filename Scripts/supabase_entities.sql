@@ -26,6 +26,9 @@ CREATE TABLE class_nodes (
     node_type TEXT,
     description TEXT,
     sequence INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_locked_by_import BOOLEAN NOT NULL DEFAULT FALSE,
+    metadata JSONB,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 

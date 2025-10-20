@@ -38,7 +38,8 @@ public class CreateSyllabusVersionHandler : IRequestHandler<CreateSyllabusVersio
 
         if (existingVersions.Any())
         {
-            throw new BadRequestException($"Version {request.VersionNumber} already exists for this subject");
+            // Duplicate version for this subject is a resource conflict
+            throw new ConflictException($"Version {request.VersionNumber} already exists for this subject");
         }
 
         var syllabusVersion = new SyllabusVersion

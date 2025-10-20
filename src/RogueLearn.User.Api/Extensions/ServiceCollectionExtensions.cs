@@ -5,7 +5,9 @@ using RogueLearn.User.Application.Behaviours;
 using RogueLearn.User.Application.Features.UserProfiles.Commands.LogNewUser;
 using RogueLearn.User.Application.Mappings;
 using RogueLearn.User.Application.Plugins;
+using RogueLearn.User.Application.Interfaces;
 using System.Reflection;
+using RogueLearn.User.Infrastructure.Services;
 
 namespace RogueLearn.User.Api.Extensions;
 
@@ -31,6 +33,10 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<IFlmExtractionPlugin, FlmExtractionPlugin>();
 		// Register Roadmap SK plugin
 		services.AddScoped<IRoadmapExtractionPlugin, RoadmapExtractionPlugin>();
+		// Register Tagging SK plugin
+		services.AddScoped<ITagSuggestionPlugin, TagSuggestionPlugin>();
+		// Register TaggingSuggestionService
+		services.AddScoped<ITaggingSuggestionService, TaggingSuggestionService>();
 
 		return services;
 	}
