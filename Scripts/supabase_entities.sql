@@ -61,9 +61,14 @@ CREATE TABLE user_profiles (
     level INTEGER NOT NULL DEFAULT 1,
     experience_points INTEGER NOT NULL DEFAULT 0,
     profile_image_url TEXT,
+    bio TEXT,
+    preferences JSONB DEFAULT '{}'::jsonb,
     onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT profile_image_url_is_public_avatar CHECK (
+        profile_image_url IS NULL OR position('/storage/v1/object/public/user-avatars/' in profile_image_url) > 0
+    )
 );
 
 CREATE TABLE user_roles (
