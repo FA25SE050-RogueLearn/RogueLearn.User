@@ -1,12 +1,11 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/OnboardingController.cs
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/OnboardingController.cs
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.Onboarding.Commands.CompleteOnboarding;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
-using RogueLearn.User.Application.Features.Roles.Queries.GetAllRoles;
-using System.Security.Claims;
+using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -47,21 +46,18 @@ public class OnboardingController : ControllerBase
     }
 
     /// <summary>
-    /// Completes the onboarding process by setting the user's chosen route and class.
+    /// Completes the onboarding process for the authenticated user.
     /// </summary>
     [HttpPost("complete")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CompleteOnboarding([FromBody] CompleteOnboardingCommand command, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-        {
-            return Unauthorized("User identifier not found in token.");
-        }
+        var authUserId = User.GetAuthUserId();
+    
         command.AuthUserId = authUserId;
-
         await _mediator.Send(command, cancellationToken);
+    
         return NoContent();
     }
 }

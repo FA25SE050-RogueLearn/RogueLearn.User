@@ -265,10 +265,17 @@ CREATE TABLE user_skill_rewards (
 
 CREATE TABLE achievements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
+    key TEXT NOT NULL,
+    name TEXT NOT NULL,
     description TEXT NOT NULL,
-    icon_url TEXT,
-    source_service VARCHAR(255) NOT NULL -- e.g., 'QuestsService', 'CodeBattleService'
+    rule_type TEXT,             -- e.g., threshold | streak | composite
+    rule_config JSONB,          -- JSON rule configuration
+    category TEXT,              -- e.g., core | progression | quests | codebattle | study | skills
+    icon TEXT,                  -- logical icon name (e.g., 'trophy', 'star')
+    icon_url TEXT,              -- optional storage-backed image URL
+    version INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    source_service VARCHAR(255) NOT NULL -- e.g., 'UserService', 'QuestsService', 'CodeBattleService'
 );
 
 CREATE TABLE user_achievements (

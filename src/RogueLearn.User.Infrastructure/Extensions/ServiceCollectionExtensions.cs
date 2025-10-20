@@ -96,6 +96,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
         services.AddScoped<IRoadmapImportStorage, RoadmapImportStorage>();
         services.AddScoped<IAvatarStorage, AvatarStorage>();
+        services.AddScoped<IAchievementImageStorage, AchievementImageStorage>();
 
         // Register Message Bus (commented out per MVP scope)
         //services.AddScoped<IMessageBus, MassTransitMessageBus>();

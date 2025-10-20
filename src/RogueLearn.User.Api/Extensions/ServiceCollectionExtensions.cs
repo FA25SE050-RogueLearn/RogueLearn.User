@@ -49,6 +49,9 @@ public static class ServiceCollectionExtensions
 		{
 			c.SwaggerDoc("v1", new() { Title = "RogueLearn.User API", Version = "v1" });
 
+			// Ensure unique schema IDs for types with the same name in different namespaces (and nested types)
+			c.CustomSchemaIds(type => type.FullName?.Replace("+", ".") ?? type.Name);
+
 			// Include XML comments
 			var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
 			var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);

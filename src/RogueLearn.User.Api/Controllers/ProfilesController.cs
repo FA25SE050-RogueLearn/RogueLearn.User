@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
 using RogueLearn.User.Api.Attributes;
-using System.Security.Claims; // ADD THIS
+using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -31,11 +31,7 @@ public class ProfilesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<UserProfileDto>> GetMyProfile(CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-        {
-            return Unauthorized("User identifier not found in token.");
-        }
+        var authUserId = User.GetAuthUserId();
 
         var query = new GetUserProfileByAuthIdQuery(authUserId);
         var result = await _mediator.Send(query, cancellationToken);
