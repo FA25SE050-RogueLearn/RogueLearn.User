@@ -16,6 +16,7 @@ using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusV
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace RogueLearn.User.Api.Tests.Controllers;
 
@@ -55,8 +56,25 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
                     services.Remove(subjectDescriptor);
 
                 // Replace with mocks
-                services.AddScoped(_ => _mockSyllabusVersionRepository.Object);
-                services.AddScoped(_ => _mockSubjectRepository.Object);
+                services.AddScoped(typeof(ISyllabusVersionRepository), _ => _mockSyllabusVersionRepository.Object);
+                services.AddScoped(typeof(ISubjectRepository), _ => _mockSubjectRepository.Object);
+
+                // Align JWT bearer options with test configuration to avoid remote metadata lookups
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.Authority = "https://test.supabase.co";
+                    options.RequireHttpsMetadata = false;
+                    options.Audience = "authenticated";
+                    options.TokenValidationParameters.ValidIssuer = "https://test.supabase.co/auth/v1";
+                    options.TokenValidationParameters.ValidAudience = "authenticated";
+                    // Relax issuer/audience validation in tests; signing key and lifetime are still enforced
+                    options.TokenValidationParameters.ValidateIssuer = false;
+                    options.TokenValidationParameters.ValidateAudience = false;
+                    options.TokenValidationParameters.ValidateLifetime = true;
+                    options.TokenValidationParameters.ValidateIssuerSigningKey = true;
+                    options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"));
+                    options.TokenValidationParameters.ClockSkew = TimeSpan.Zero;
+                });
             });
         });
 
@@ -447,19 +465,20 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
+            new Claim("sub", userId.ToString()),
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Role, role),
-            new Claim("sub", userId.ToString())
+            new Claim(ClaimTypes.Role, role)
         };
 
         var token = new JwtSecurityToken(
-            issuer: "test-issuer",
-            audience: "test-audience",
+            issuer: "https://test.supabase.co/auth/v1",
+            audience: "authenticated",
             claims: claims,
-            expires: DateTime.Now.AddMinutes(30),
-            signingCredentials: creds);
+            expires: DateTime.UtcNow.AddHours(1),
+            signingCredentials: creds
+        );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }

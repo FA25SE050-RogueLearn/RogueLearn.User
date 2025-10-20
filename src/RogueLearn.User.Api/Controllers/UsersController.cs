@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
+using RogueLearn.User.Application.Features.UserContext.Queries.GetUserContextByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Commands.UpdateMyProfile;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
@@ -17,12 +18,10 @@ namespace RogueLearn.User.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IUserContextService _userContextService;
 
-    public UsersController(IMediator mediator, IUserContextService userContextService)
+    public UsersController(IMediator mediator)
     {
         _mediator = mediator;
-        _userContextService = userContextService;
     }
 
     /// <summary>
@@ -39,7 +38,7 @@ public class UsersController : ControllerBase
             return Unauthorized();
         }
 
-        var context = await _userContextService.BuildForAuthUserAsync(authUserId, cancellationToken);
+        var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authUserId), cancellationToken);
         return Ok(context);
     }
 
@@ -104,5 +103,20 @@ public class UsersController : ControllerBase
         var query = new GetUserProfileByAuthIdQuery(authId);
         var result = await _mediator.Send(query, cancellationToken);
         return result is not null ? Ok(result) : NotFound();
+    }
+
+    /// <summary>
+    /// Get a user's aggregated context by their auth ID (admin only).
+    /// </summary>
+    /// <param name="authId">The user's authentication UUID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpGet("{authId:guid}/context")]
+    [AdminOnly]
+    [ProducesResponseType(typeof(UserContextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<UserContextDto>> AdminGetUserContext(Guid authId, CancellationToken cancellationToken)
+    {
+        var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authId), cancellationToken);
+        return context is not null ? Ok(context) : NotFound();
     }
 }

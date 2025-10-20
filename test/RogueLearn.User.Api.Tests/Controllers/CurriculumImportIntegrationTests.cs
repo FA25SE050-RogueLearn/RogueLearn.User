@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Moq;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -64,10 +65,67 @@ public class CurriculumImportIntegrationTests : IClassFixture<WebApplicationFact
                     services.Remove(syllabusVersionDescriptor);
 
                 // Replace with mocks
-                services.AddScoped(_ => _mockCurriculumProgramRepository.Object);
-                services.AddScoped(_ => _mockCurriculumVersionRepository.Object);
-                services.AddScoped(_ => _mockSubjectRepository.Object);
-                services.AddScoped(_ => _mockSyllabusVersionRepository.Object);
+                services.AddScoped<ICurriculumProgramRepository>(_ => _mockCurriculumProgramRepository.Object);
+                services.AddScoped<ICurriculumVersionRepository>(_ => _mockCurriculumVersionRepository.Object);
+                services.AddScoped<ISubjectRepository>(_ => _mockSubjectRepository.Object);
+                services.AddScoped<ISyllabusVersionRepository>(_ => _mockSyllabusVersionRepository.Object);
+
+                // Override FLM extraction plugin with a deterministic test stub
+                var flmDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(RogueLearn.User.Application.Plugins.IFlmExtractionPlugin));
+                if (flmDescriptor != null)
+                    services.Remove(flmDescriptor);
+
+                var flmMock = new Moq.Mock<RogueLearn.User.Application.Plugins.IFlmExtractionPlugin>();
+
+                flmMock.Setup(x => x.ExtractCurriculumJsonAsync(It.IsAny<string>(), It.IsAny<System.Threading.CancellationToken>()))
+                    .Returns<string, System.Threading.CancellationToken>((rawText, ct) =>
+                    {
+                        var hasInvalid = rawText.Contains("Invalid curriculum format", StringComparison.OrdinalIgnoreCase);
+                        var curriculumJson = hasInvalid
+                            ? "{\"program\":{\"programName\":\"Computer Science\",\"programCode\":\"CS2024\",\"degreeLevel\":\"Bachelor\",\"totalCredits\":120,\"durationYears\":4},\"version\":{\"versionCode\":\"2024.1\",\"effectiveYear\":2024,\"isActive\":true},\"subjects\":[],\"structure\":[{\"subjectCode\":\"CS101\",\"termNumber\":1,\"isMandatory\":true}]}"
+                            : "{\"program\":{\"programName\":\"Computer Science\",\"programCode\":\"CS2024\",\"degreeLevel\":\"Bachelor\",\"totalCredits\":120,\"durationYears\":4},\"version\":{\"versionCode\":\"2024.1\",\"effectiveYear\":2024,\"isActive\":true},\"subjects\":[{\"subjectCode\":\"CS101\",\"subjectName\":\"Intro to Programming\",\"credits\":3},{\"subjectCode\":\"CS102\",\"subjectName\":\"Data Structures\",\"credits\":3},{\"subjectCode\":\"CS201\",\"subjectName\":\"Algorithms\",\"credits\":4}],\"structure\":[{\"subjectCode\":\"CS101\",\"termNumber\":1,\"isMandatory\":true},{\"subjectCode\":\"CS102\",\"termNumber\":2,\"isMandatory\":true},{\"subjectCode\":\"CS201\",\"termNumber\":3,\"isMandatory\":true}]}";
+                        return Task.FromResult(curriculumJson);
+                    });
+
+                flmMock.Setup(x => x.ExtractSyllabusJsonAsync(It.IsAny<string>(), It.IsAny<System.Threading.CancellationToken>()))
+                    .Returns<string, System.Threading.CancellationToken>((rawText, ct) =>
+                    {
+                        // Extract subject code from text if present
+                        var subjectCode = "CS101";
+                        try
+                        {
+                            var marker = "Subject Code:";
+                            var idx = rawText.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0)
+                            {
+                                var rest = rawText[(idx + marker.Length)..].Trim();
+                                var firstLine = rest.Split('\n', '\r')[0].Trim();
+                                subjectCode = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                            }
+                        }
+                        catch { }
+
+                        var syllabusJson = "{\"subjectCode\":\"" + subjectCode + "\",\"syllabusName\":\"Introduction to Programming\",\"versionNumber\":1,\"noCredit\":3,\"degreeLevel\":\"Bachelor\",\"description\":\"Intro programming course\",\"content\":{\"courseDescription\":\"Intro to programming\",\"weeklySchedule\":[{\"weekNumber\":1,\"topic\":\"Introduction\",\"activities\":[],\"readings\":[]},{\"weekNumber\":2,\"topic\":\"Variables\",\"activities\":[],\"readings\":[]}]}}";
+                        return Task.FromResult(syllabusJson);
+                    });
+
+                services.AddSingleton<RogueLearn.User.Application.Plugins.IFlmExtractionPlugin>(flmMock.Object);
+
+                // Relax JWT validation to accept locally minted test tokens
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.RequireHttpsMetadata = false;
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateIssuerSigningKey = true,
+                        ValidateLifetime = false,
+                        ValidIssuer = "test-issuer",
+                        ValidAudience = "test-audience",
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"))
+                    };
+                });
             });
         });
 

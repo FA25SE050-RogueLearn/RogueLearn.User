@@ -10,6 +10,12 @@ using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
 using RogueLearn.User.Application.Features.Notes.Queries.GetPublicNotes;
 using RogueLearn.User.Application.Features.Notes.Queries.GetNoteById;
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNoteFromUpload;
+using RogueLearn.User.Application.Features.AiTagging.Queries.SuggestNoteTags;
+using RogueLearn.User.Application.Features.AiTagging.Queries.SuggestNoteTagsFromUpload;
+using RogueLearn.User.Application.Features.AiTagging.Commands.CommitNoteTagSelections;
+using RogueLearn.User.Application.Models;
+
+using RogueLearn.User.Application.Features.Notes.Commands.CreateNoteWithAiTags;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -168,5 +174,161 @@ public class NotesController : ControllerBase
         await _mediator.Send(command, cancellationToken);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Generate AI-assisted tag suggestions for a note or raw text.
+    /// </summary>
+    /// <remarks>
+    /// Provide either <c>noteId</c> to analyze an existing note's content, or <c>rawText</c> to analyze arbitrary text.
+    /// Optionally set <c>maxTags</c> (1-20) to control how many tags to suggest.
+    /// </remarks>
+    /// <param name="request">The query payload containing either <c>noteId</c> or <c>rawText</c> along with optional <c>maxTags</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("/api/ai/tagging/suggest")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(SuggestNoteTagsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Suggest([FromBody] SuggestNoteTagsQuery request, CancellationToken cancellationToken)
+    {
+        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
+            return Unauthorized();
+
+        request.AuthUserId = authUserId;
+        var result = await _mediator.Send(request, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Generate AI-assisted tag suggestions from an uploaded file (PDF, DOCX, TXT).
+    /// </summary>
+    /// <remarks>
+    /// Upload a file using multipart/form-data. The server will extract its text content in the handler and generate tag suggestions.
+    /// </remarks>
+    /// <param name="file">The uploaded file (PDF, DOCX, or TXT).</param>
+    /// <param name="maxTags">Optional maximum number of tags to suggest (1-20). Default is 10.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("/api/ai/tagging/suggest-upload")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(SuggestNoteTagsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SuggestFromUpload(IFormFile file, [FromForm] int maxTags = 10, CancellationToken cancellationToken = default)
+    {
+        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
+            return Unauthorized();
+        if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
+
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, cancellationToken);
+        var bytes = ms.ToArray();
+
+        var query = new SuggestNoteTagsFromUploadQuery
+        {
+            AuthUserId = authUserId,
+            FileContent = bytes,
+            ContentType = file.ContentType ?? string.Empty,
+            FileName = file.FileName ?? string.Empty,
+            MaxTags = maxTags
+        };
+        var result = await _mediator.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Commit selected tags (existing and/or new) to the specified note.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint after selecting which suggested tags to apply.
+    /// You may include existing tag IDs, new tag names, or both. The service will deduplicate by slug and create any missing tags.
+    /// </remarks>
+    /// <param name="request">The command payload containing the target <c>noteId</c>, selected existing tag IDs, and/or new tag names.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("/api/ai/tagging/commit")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(CommitNoteTagSelectionsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Commit([FromBody] CommitNoteTagSelectionsCommand request, CancellationToken cancellationToken)
+    {
+        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
+            return Unauthorized();
+
+        request.AuthUserId = authUserId;
+        var result = await _mediator.Send(request, cancellationToken);
+        return Ok(result);
+    }
+
+
+    /// <summary>
+    /// Create a new note (raw text) and generate AI tag suggestions, optionally auto-applying them.
+    /// </summary>
+    /// <param name="request">Payload containing rawText or title, with maxTags and applySuggestions options.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("create-with-ai-tags")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(CreateNoteWithAiTagsResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<CreateNoteWithAiTagsResponse>> CreateWithAiTags([FromBody] CreateNoteWithAiTagsCommand request, CancellationToken cancellationToken)
+    {
+        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
+            return Unauthorized();
+
+        request.AuthUserId = authUserId;
+        var result = await _mediator.Send(request, cancellationToken);
+        return CreatedAtAction(nameof(GetNoteById), new { id = result.NoteId }, result);
+    }
+
+    /// <summary>
+    /// Create a new note from an uploaded file (PDF, DOCX, TXT), generate AI tag suggestions, optionally auto-applying them.
+    /// </summary>
+    /// <param name="file">The uploaded file.</param>
+    /// <param name="maxTags">Maximum number of tag suggestions (1-20).</param>
+    /// <param name="applySuggestions">Whether to auto-apply suggestions to the created note.</param>
+    /// <param name="title">Optional title override for the note.</param>
+    /// <param name="isPublic">Whether the created note should be public (default false).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("create-with-ai-tags/upload")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(CreateNoteWithAiTagsResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<CreateNoteWithAiTagsResponse>> CreateWithAiTagsFromUpload(
+        IFormFile file,
+        [FromForm] int maxTags = 10,
+        [FromForm] bool applySuggestions = true,
+        [FromForm] string? title = null,
+        [FromForm] bool isPublic = false,
+        CancellationToken cancellationToken = default)
+    {
+        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
+            return Unauthorized();
+        if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
+
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, cancellationToken);
+        var bytes = ms.ToArray();
+
+        var command = new CreateNoteWithAiTagsCommand
+        {
+            AuthUserId = authUserId,
+            FileContent = bytes,
+            ContentType = file.ContentType ?? string.Empty,
+            FileName = file.FileName ?? string.Empty,
+            Title = title,
+            IsPublic = isPublic,
+            MaxTags = maxTags,
+            ApplySuggestions = applySuggestions
+        };
+
+        var result = await _mediator.Send(command, cancellationToken);
+        return CreatedAtAction(nameof(GetNoteById), new { id = result.NoteId }, result);
     }
 }

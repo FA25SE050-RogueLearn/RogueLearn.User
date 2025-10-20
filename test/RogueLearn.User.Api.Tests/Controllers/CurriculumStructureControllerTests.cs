@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,10 +61,26 @@ public class CurriculumStructureControllerTests : IClassFixture<WebApplicationFa
                 if (subjectDescriptor != null)
                     services.Remove(subjectDescriptor);
 
-                // Replace with mocks
-                services.AddScoped(_ => _mockCurriculumStructureRepository.Object);
-                services.AddScoped(_ => _mockCurriculumVersionRepository.Object);
-                services.AddScoped(_ => _mockSubjectRepository.Object);
+                // Replace with mocks (register under specific service types)
+                services.AddScoped(typeof(ICurriculumStructureRepository), _ => _mockCurriculumStructureRepository.Object);
+                services.AddScoped(typeof(ICurriculumVersionRepository), _ => _mockCurriculumVersionRepository.Object);
+                services.AddScoped(typeof(ISubjectRepository), _ => _mockSubjectRepository.Object);
+
+                // Relax JWT validation to accept locally minted test tokens
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    options.Authority = "https://test.supabase.co";
+                    options.RequireHttpsMetadata = false;
+                    options.Audience = "authenticated";
+                    options.TokenValidationParameters.ValidIssuer = "https://test.supabase.co/auth/v1";
+                    options.TokenValidationParameters.ValidAudience = "authenticated";
+                    options.TokenValidationParameters.ValidateIssuer = false;
+                    options.TokenValidationParameters.ValidateAudience = false;
+                    options.TokenValidationParameters.ValidateLifetime = true;
+                    options.TokenValidationParameters.ValidateIssuerSigningKey = true;
+                    options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"));
+                    options.TokenValidationParameters.ClockSkew = TimeSpan.Zero;
+                });
             });
         });
 
@@ -104,9 +121,7 @@ public class CurriculumStructureControllerTests : IClassFixture<WebApplicationFa
             Description = "Basic computer science concepts"
         };
 
-        _mockCurriculumStructureRepository.Setup(x => x.FindAsync(
-            It.Is<Expression<Func<CurriculumStructure, bool>>>(expr => true), 
-            It.IsAny<CancellationToken>()))
+        _mockCurriculumStructureRepository.Setup(x => x.GetAllAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(curriculumStructures);
 
         _mockSubjectRepository.Setup(x => x.GetByIdAsync(subjectId, It.IsAny<CancellationToken>()))
@@ -183,9 +198,7 @@ public class CurriculumStructureControllerTests : IClassFixture<WebApplicationFa
         _mockSubjectRepository.Setup(x => x.GetByIdAsync(subjectId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(subject);
 
-        _mockCurriculumStructureRepository.Setup(x => x.FindAsync(
-            It.Is<Expression<Func<CurriculumStructure, bool>>>(expr => true), 
-            It.IsAny<CancellationToken>()))
+        _mockCurriculumStructureRepository.Setup(x => x.GetAllAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<CurriculumStructure>());
 
         _mockCurriculumStructureRepository.Setup(x => x.AddAsync(It.IsAny<CurriculumStructure>(), It.IsAny<CancellationToken>()))
@@ -392,10 +405,10 @@ public class CurriculumStructureControllerTests : IClassFixture<WebApplicationFa
         };
 
         var token = new JwtSecurityToken(
-            issuer: "test-issuer",
-            audience: "test-audience",
+            issuer: "https://test.supabase.co/auth/v1",
+            audience: "authenticated",
             claims: claims,
-            expires: DateTime.Now.AddMinutes(30),
+            expires: DateTime.UtcNow.AddMinutes(30),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
