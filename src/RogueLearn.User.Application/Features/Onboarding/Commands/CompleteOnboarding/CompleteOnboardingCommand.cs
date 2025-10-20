@@ -8,6 +8,6 @@ public class CompleteOnboardingCommand : IRequest
 {
     [JsonIgnore]
     public Guid AuthUserId { get; set; }
-    public Guid CurriculumVersionId { get; set; } // Represents the chosen "Route"
-    public Guid CareerRoadmapId { get; set; } // Represents the chosen "Class"
+    public Guid CurriculumProgramId { get; set; }
+    public Guid CareerRoadmapId { get; set; }
 }
