@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using RogueLearn.User.Domain.Interfaces;
 using System.Security.Claims;
+using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Attributes;
 
@@ -40,8 +41,12 @@ public class AdminOnlyAttribute : Attribute, IAsyncAuthorizationFilter
         }
 
         // Fallback: Database lookup (for backward compatibility)
-        var authIdClaim = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
+        Guid authUserId;
+        try
+        {
+            authUserId = context.HttpContext.User.GetAuthUserId();
+        }
+        catch
         {
             context.Result = new UnauthorizedResult();
             return;

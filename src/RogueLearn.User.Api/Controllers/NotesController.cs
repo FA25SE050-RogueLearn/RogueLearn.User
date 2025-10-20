@@ -4,8 +4,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNote;
-using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 using RogueLearn.User.Application.Features.Notes.Commands.DeleteNote;
+using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
 using RogueLearn.User.Application.Features.Notes.Queries.GetPublicNotes;
 using RogueLearn.User.Application.Features.Notes.Queries.GetNoteById;
@@ -16,6 +16,7 @@ using RogueLearn.User.Application.Features.AiTagging.Commands.CommitNoteTagSelec
 using RogueLearn.User.Application.Models;
 
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNoteWithAiTags;
+using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -42,9 +43,7 @@ public class NotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CreateNoteResponse>> CreateNoteFromUpload(IFormFile file, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         if (file == null || file.Length == 0)
             return BadRequest("A valid file is required.");
@@ -69,9 +68,7 @@ public class NotesController : ControllerBase
     [HttpGet("me")]
     public async Task<ActionResult<List<NoteDto>>> GetMyNotes([FromQuery] string? search, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         var query = new GetMyNotesQuery(authUserId, search);
 
@@ -112,8 +109,16 @@ public class NotesController : ControllerBase
         // Only return private notes if the requester is the owner
         if (!result.IsPublic)
         {
-            var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId) || authUserId != result.AuthUserId)
+            Guid requesterId;
+            try
+            {
+                requesterId = User.GetAuthUserId();
+            }
+            catch
+            {
+                return NotFound();
+            }
+            if (requesterId != result.AuthUserId)
                 return NotFound();
         }
 
@@ -128,9 +133,7 @@ public class NotesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CreateNoteResponse>> CreateNote([FromBody] CreateNoteCommand command, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         command.AuthUserId = authUserId;
 
@@ -147,9 +150,7 @@ public class NotesController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<UpdateNoteResponse>> UpdateNote(Guid id, [FromBody] UpdateNoteCommand command, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         command.Id = id;
         command.AuthUserId = authUserId;
@@ -166,9 +167,7 @@ public class NotesController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteNote(Guid id, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         var command = new DeleteNoteCommand { Id = id, AuthUserId = authUserId };
         await _mediator.Send(command, cancellationToken);
@@ -192,9 +191,7 @@ public class NotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Suggest([FromBody] SuggestNoteTagsQuery request, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         request.AuthUserId = authUserId;
         var result = await _mediator.Send(request, cancellationToken);
@@ -217,10 +214,8 @@ public class NotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SuggestFromUpload(IFormFile file, [FromForm] int maxTags = 10, CancellationToken cancellationToken = default)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
-        if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
+        var authUserId = User.GetAuthUserId();
+    if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
 
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, cancellationToken);
@@ -254,9 +249,7 @@ public class NotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Commit([FromBody] CommitNoteTagSelectionsCommand request, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         request.AuthUserId = authUserId;
         var result = await _mediator.Send(request, cancellationToken);
@@ -276,9 +269,7 @@ public class NotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateNoteWithAiTagsResponse>> CreateWithAiTags([FromBody] CreateNoteWithAiTagsCommand request, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
+        var authUserId = User.GetAuthUserId();
 
         request.AuthUserId = authUserId;
         var result = await _mediator.Send(request, cancellationToken);
@@ -307,10 +298,8 @@ public class NotesController : ControllerBase
         [FromForm] bool isPublic = false,
         CancellationToken cancellationToken = default)
     {
-        var authIdClaim = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-            return Unauthorized();
-        if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
+        var authUserId = User.GetAuthUserId();
+    if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
 
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, cancellationToken);

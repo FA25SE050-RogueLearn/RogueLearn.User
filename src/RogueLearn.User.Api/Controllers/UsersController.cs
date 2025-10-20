@@ -6,9 +6,8 @@ using RogueLearn.User.Application.Features.UserContext.Queries.GetUserContextByA
 using RogueLearn.User.Application.Features.UserProfiles.Commands.UpdateMyProfile;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
-using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
-using System.Security.Claims;
+using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -32,11 +31,7 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserContextDto>> GetMyContext(CancellationToken cancellationToken)
     {
-        var authIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-        {
-            return Unauthorized();
-        }
+        var authUserId = User.GetAuthUserId();
 
         var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authUserId), cancellationToken);
         return Ok(context);
@@ -53,11 +48,7 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserProfileDto>> PatchMyProfileForm([FromForm] UpdateMyProfileCommand command, IFormFile? profileImage, CancellationToken cancellationToken)
     {
-        var authIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(authIdClaim) || !Guid.TryParse(authIdClaim, out var authUserId))
-        {
-            return Unauthorized();
-        }
+        var authUserId = User.GetAuthUserId();
 
         // If an image is provided, pass its bytes and metadata to the command for the handler to process
         if (profileImage is not null && profileImage.Length > 0)
