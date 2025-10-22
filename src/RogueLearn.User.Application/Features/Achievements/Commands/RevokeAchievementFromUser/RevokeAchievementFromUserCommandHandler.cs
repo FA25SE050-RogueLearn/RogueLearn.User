@@ -6,6 +6,13 @@ using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Achievements.Commands.RevokeAchievementFromUser;
 
+/// <summary>
+/// Handles revoking a previously awarded Achievement from a user.
+/// - Validates input via FluentValidation.
+/// - Checks user and achievement existence.
+/// - Ensures the user actually has the achievement before revocation.
+/// - Emits structured logs for observability.
+/// </summary>
 public class RevokeAchievementFromUserCommandHandler : IRequestHandler<RevokeAchievementFromUserCommand>
 {
     private readonly IUserProfileRepository _userProfileRepository;
@@ -28,14 +35,20 @@ public class RevokeAchievementFromUserCommandHandler : IRequestHandler<RevokeAch
         _logger = logger;
     }
 
+    /// <summary>
+    /// Revokes the achievement from the specified user.
+    /// </summary>
     public async Task Handle(RevokeAchievementFromUserCommand request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Handling RevokeAchievementFromUserCommand for UserId={UserId}, AchievementId={AchievementId}", request.UserId, request.AchievementId);
+
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
 
         // Verify user exists
         var user = await _userProfileRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
         {
+            _logger.LogWarning("User not found: UserId={UserId}", request.UserId);
             throw new NotFoundException("User", request.UserId);
         }
 
@@ -43,6 +56,7 @@ public class RevokeAchievementFromUserCommandHandler : IRequestHandler<RevokeAch
         var achievement = await _achievementRepository.GetByIdAsync(request.AchievementId, cancellationToken);
         if (achievement is null)
         {
+            _logger.LogWarning("Achievement not found: AchievementId={AchievementId}", request.AchievementId);
             throw new NotFoundException("Achievement", request.AchievementId);
         }
 
@@ -54,6 +68,7 @@ public class RevokeAchievementFromUserCommandHandler : IRequestHandler<RevokeAch
 
         if (uaToRemove is null)
         {
+            _logger.LogWarning("No achievement to revoke: UserId={UserId}, AchievementId={AchievementId}", request.UserId, request.AchievementId);
             throw new BadRequestException($"User has not earned achievement '{achievement.Name}'.");
         }
 

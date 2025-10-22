@@ -27,6 +27,33 @@ Use this checklist when adding or modifying API endpoints and their correspondin
 - [ ] Validate inputs (and any invariants) within the handler.
 - [ ] Use mapping profiles for conversions to/from domain models as needed.
 - [ ] Keep handlers cohesive and unit-testable.
+- [ ] Use FluentValidation consistently:
+  - [ ] Prefer validators wired via the pipeline (`ValidationBehaviour`) for request DTOs.
+  - [ ] When the handler builds domain data internally (e.g., parsed text), validate it via `IValidator<T>` and surface errors using `ValidationException` or the response contract.
+- [ ] Throw standardized exceptions for expected errors so middleware can translate them:
+  - [ ] `NotFoundException` for missing resources
+  - [ ] `ValidationException` for invalid inputs
+  - [ ] Avoid returning `null` on failure paths; rely on centralized error handling.
+- [ ] Do not call 3rd-party services directly in handlers:
+  - [ ] Interact with external providers via interfaces defined in `Application/Interfaces` and implemented in `Infrastructure`.
+- [ ] Ensure idempotency and determinism where applicable:
+  - [ ] Check for existing records/relationships before creating to avoid duplicates.
+  - [ ] Perform all validations before side-effects (storage, messaging).
+- [ ] Logging standards:
+  - [ ] Use structured logging with key identifiers; include "starting" and "completed" messages for major operations.
+  - [ ] Do not log sensitive data (PII) or large payloads.
+- [ ] Authorization and user context:
+  - [ ] Do not parse claims inside handlers; receive `AuthUserId` in the command/query.
+  - [ ] If richer context is needed, use `IUserContextService` to build it.
+- [ ] Consistency and persistence:
+  - [ ] Group related writes; avoid partial updates.
+  - [ ] Set `CreatedAt`/`UpdatedAt` and other audit fields in handlers (not in mappers).
+- [ ] Performance & scalability:
+  - [ ] Avoid N+1 repository calls; prefer batching and pagination.
+  - [ ] Minimize unnecessary data loading; map only what the response requires.
+- [ ] Propagate cancellation & resilience:
+  - [ ] Pass `CancellationToken` to repositories/services.
+  - [ ] Apply retry/timeout policies in `Infrastructure` for external calls (via abstractions).
 
 ## Mapping Profiles (Mapper)
 
@@ -35,6 +62,25 @@ Use this checklist when adding or modifying API endpoints and their correspondin
 - [ ] Handle nulls, collections, and nested objects explicitly in mappings.
 - [ ] Validate mappings (unit tests or runtime assertions where appropriate).
 - [ ] Keep DTOs and domain models decoupled.
+- [ ] Location & organization:
+  - [ ] Define mappings in `Application/Mappings/MappingProfile.cs` (or feature-specific profiles if they remain small and cohesive).
+- [ ] Non-trivial conversions:
+  - [ ] Prefer `ForMember(...).MapFrom(...)` for computed fields.
+  - [ ] Use `AfterMap` only for pure, side-effect-free transformations (e.g., JSON serialization), as seen in `Achievement` mappings.
+- [ ] Avoid side-effects in mapping:
+  - [ ] Do not call repositories/services in profiles or resolvers; perform enrichment in handlers.
+- [ ] Explicit ignores:
+  - [ ] `ForMember(..., opt => opt.Ignore())` for properties that are set manually in handlers (e.g., `UserRoleDto.RoleName`).
+- [ ] Collections & nulls:
+  - [ ] Ensure element mappings exist for collections and be explicit about null vs empty lists.
+- [ ] Directional mapping:
+  - [ ] Provide reverse maps only when needed; avoid overwriting domain invariants.
+- [ ] IDs & audit fields:
+  - [ ] Do not map `Id`, `CreatedAt`, `UpdatedAt` from request DTOs to domain entities; set them in handlers.
+- [ ] Performance:
+  - [ ] Map only required fields; avoid mapping entire graphs when the response needs a subset.
+- [ ] Documentation:
+  - [ ] Comment any mapping that deviates from straightforward property-to-property mapping to explain intent.
 
 ## Application Layer: Services & Interfaces
 

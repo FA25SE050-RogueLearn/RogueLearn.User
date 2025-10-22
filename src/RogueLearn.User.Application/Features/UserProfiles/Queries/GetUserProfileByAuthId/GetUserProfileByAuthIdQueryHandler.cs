@@ -27,18 +27,27 @@ public class GetUserProfileByAuthIdQueryHandler : IRequestHandler<GetUserProfile
 		_logger = logger;
 	}
 
+	/// <summary>
+	/// Retrieves a user's profile by their authentication ID, including mapped role names.
+	/// </summary>
+	/// <param name="request">The request containing the AuthId.</param>
+	/// <param name="cancellationToken">Cancellation token.</param>
+	/// <returns>The user's profile DTO, or null if not found.</returns>
 	public async Task<UserProfileDto?> Handle(GetUserProfileByAuthIdQuery request, CancellationToken cancellationToken)
 	{
+		_logger.LogInformation("Fetching user profile by auth id {AuthId}", request.AuthId);
 		var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthId, cancellationToken);
 
 		if (userProfile is null)
 		{
+			_logger.LogInformation("No user profile found for auth id {AuthId}", request.AuthId);
 			return null;
 		}
 
 		var dto = _mapper.Map<UserProfileDto>(userProfile);
 
-		var userRoles = await _userRoleRepository.GetRolesForUserAsync(userProfile.AuthUserId, cancellationToken);
+		var userRoles = await _userRoleRepository.GetRolesForUserAsync(userProfile.AuthUserId, cancellationToken) 
+			?? Enumerable.Empty<Domain.Entities.UserRole>();
 		var roleNames = new List<string>();
 		foreach (var userRole in userRoles)
 		{

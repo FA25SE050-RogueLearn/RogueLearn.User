@@ -1,12 +1,17 @@
 // RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumPrograms/Queries/GetCurriculumProgramDetails/GetCurriculumProgramDetailsQueryHandler.cs
 using AutoMapper;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Entities; // ADD THIS USING
 
 namespace RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 
+/// <summary>
+/// Handles retrieval of detailed curriculum program information, including versions and subjects.
+/// Adds structured logging to improve observability across the multi-step aggregation.
+/// </summary>
 public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurriculumProgramDetailsQuery, CurriculumProgramDetailsResponse>
 {
     private readonly ICurriculumProgramRepository _curriculumProgramRepository;
@@ -15,6 +20,7 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
     private readonly ISubjectRepository _subjectRepository;
     private readonly ISyllabusVersionRepository _syllabusVersionRepository;
     private readonly IMapper _mapper;
+    private readonly ILogger<GetCurriculumProgramDetailsQueryHandler> _logger;
 
     public GetCurriculumProgramDetailsQueryHandler(
         ICurriculumProgramRepository curriculumProgramRepository,
@@ -22,7 +28,8 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
         ICurriculumStructureRepository curriculumStructureRepository,
         ISubjectRepository subjectRepository,
         ISyllabusVersionRepository syllabusVersionRepository,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<GetCurriculumProgramDetailsQueryHandler> logger)
     {
         _curriculumProgramRepository = curriculumProgramRepository;
         _curriculumVersionRepository = curriculumVersionRepository;
@@ -30,10 +37,23 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
         _subjectRepository = subjectRepository;
         _syllabusVersionRepository = syllabusVersionRepository;
         _mapper = mapper;
+        _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves curriculum program details based on ProgramId or VersionId and composes nested analysis.
+    /// </summary>
+    /// <param name="request">The query containing either ProgramId or VersionId.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The composed curriculum program details response.</returns>
+    /// <exception cref="BadRequestException">Thrown when neither ProgramId nor VersionId is provided.</exception>
+    /// <exception cref="NotFoundException">Thrown when referenced entities cannot be found.</exception>
     public async Task<CurriculumProgramDetailsResponse> Handle(GetCurriculumProgramDetailsQuery request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "Handling {Handler} - retrieving curriculum program details (ProgramId={ProgramId}, VersionId={VersionId})",
+            nameof(GetCurriculumProgramDetailsQueryHandler), request.ProgramId, request.VersionId);
+
         CurriculumProgram? program;
 
         // MODIFIED LOGIC: Determine how to fetch the program based on the provided ID.
@@ -44,6 +64,7 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
             if (version == null)
             {
                 // This is the error the QuestService will now receive if the ID is wrong.
+                _logger.LogWarning("{Handler} - CurriculumVersion not found for Id={VersionId}", nameof(GetCurriculumProgramDetailsQueryHandler), request.VersionId);
                 throw new NotFoundException("CurriculumVersion", request.VersionId.Value);
             }
             // Then, use the ProgramId from the version to get the program.
@@ -56,12 +77,14 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
         }
         else
         {
+            _logger.LogWarning("{Handler} - neither ProgramId nor VersionId provided", nameof(GetCurriculumProgramDetailsQueryHandler));
             throw new BadRequestException("Either a ProgramId or a VersionId must be provided.");
         }
 
         // The original error occurred here because a VersionId was used to search the program repository.
         if (program == null)
         {
+            _logger.LogWarning("{Handler} - CurriculumProgram not found (ProgramId={ProgramId}, VersionId={VersionId})", nameof(GetCurriculumProgramDetailsQueryHandler), request.ProgramId, request.VersionId);
             throw new NotFoundException("CurriculumProgram", request.ProgramId ?? request.VersionId ?? Guid.Empty);
         }
 
@@ -137,6 +160,12 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
 
         // Analyze overall curriculum program
         response.Analysis = AnalyzeCurriculumProgram(response);
+
+        _logger.LogInformation(
+            "{Handler} - returning details: Versions={VersionsCount}, UniqueSubjects={UniqueSubjectsCount}",
+            nameof(GetCurriculumProgramDetailsQueryHandler),
+            response.CurriculumVersions.Count,
+            response.CurriculumVersions.SelectMany(v => v.Subjects).GroupBy(s => s.SubjectId).Count());
 
         return response;
     }

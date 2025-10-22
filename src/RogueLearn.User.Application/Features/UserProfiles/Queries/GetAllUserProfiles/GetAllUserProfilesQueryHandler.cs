@@ -28,9 +28,17 @@ public class GetAllUserProfilesQueryHandler : IRequestHandler<GetAllUserProfiles
         _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves all user profiles and enriches each with their distinct role names.
+    /// </summary>
+    /// <param name="request">The request to get all profiles.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A response containing all user profiles with their roles.</returns>
     public async Task<GetAllUserProfilesResponse> Handle(GetAllUserProfilesQuery request, CancellationToken cancellationToken)
     {
-        var userProfiles = await _userProfileRepository.GetAllAsync(cancellationToken);
+        _logger.LogInformation("Fetching all user profiles");
+        var userProfiles = await _userProfileRepository.GetAllAsync(cancellationToken) 
+            ?? Enumerable.Empty<Domain.Entities.UserProfile>();
         var userProfileDtos = new List<UserProfileDto>();
 
         foreach (var userProfile in userProfiles)
@@ -38,7 +46,8 @@ public class GetAllUserProfilesQueryHandler : IRequestHandler<GetAllUserProfiles
             var dto = _mapper.Map<UserProfileDto>(userProfile);
 
             // Get roles for each user
-            var userRoles = await _userRoleRepository.GetRolesForUserAsync(userProfile.AuthUserId, cancellationToken);
+            var userRoles = await _userRoleRepository.GetRolesForUserAsync(userProfile.AuthUserId, cancellationToken) 
+                ?? Enumerable.Empty<Domain.Entities.UserRole>();
             var roleNames = new List<string>();
             
             foreach (var userRole in userRoles)

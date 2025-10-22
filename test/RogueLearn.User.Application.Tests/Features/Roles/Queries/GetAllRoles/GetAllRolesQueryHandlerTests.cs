@@ -12,13 +12,15 @@ public class GetAllRolesQueryHandlerTests
 {
     private readonly Mock<IRoleRepository> _mockRoleRepository;
     private readonly Mock<IMapper> _mockMapper;
+    private readonly Mock<ILogger<GetAllRolesQueryHandler>> _mockLogger;
     private readonly GetAllRolesQueryHandler _handler;
 
     public GetAllRolesQueryHandlerTests()
     {
         _mockRoleRepository = new Mock<IRoleRepository>();
         _mockMapper = new Mock<IMapper>();
-        _handler = new GetAllRolesQueryHandler(_mockRoleRepository.Object, _mockMapper.Object);
+        _mockLogger = new Mock<ILogger<GetAllRolesQueryHandler>>();
+        _handler = new GetAllRolesQueryHandler(_mockRoleRepository.Object, _mockMapper.Object, _mockLogger.Object);
     }
 
     [Fact]

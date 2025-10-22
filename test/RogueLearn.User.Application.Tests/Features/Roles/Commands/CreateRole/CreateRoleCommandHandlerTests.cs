@@ -13,13 +13,15 @@ public class CreateRoleCommandHandlerTests
 {
     private readonly Mock<IRoleRepository> _mockRoleRepository;
     private readonly Mock<IMapper> _mockMapper;
+    private readonly Mock<ILogger<CreateRoleCommandHandler>> _mockLogger;
     private readonly CreateRoleCommandHandler _handler;
 
     public CreateRoleCommandHandlerTests()
     {
         _mockRoleRepository = new Mock<IRoleRepository>();
         _mockMapper = new Mock<IMapper>();
-        _handler = new CreateRoleCommandHandler(_mockRoleRepository.Object, _mockMapper.Object);
+        _mockLogger = new Mock<ILogger<CreateRoleCommandHandler>>();
+        _handler = new CreateRoleCommandHandler(_mockRoleRepository.Object, _mockMapper.Object, _mockLogger.Object);
     }
 
     [Fact]
@@ -248,38 +250,36 @@ public class CreateRoleCommandHandlerTests
         // Arrange
         var command = new CreateRoleCommand
         {
-            Name = "TestRole",
-            Description = "Test description"
+            Name = "UniqueRole",
+            Description = "Unique description"
         };
 
-        var createdRole = new Role
-        {
-            Id = Guid.NewGuid(),
-            Name = command.Name,
-            Description = command.Description,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
-        var expectedResponse = new CreateRoleResponse
-        {
-            Id = createdRole.Id,
-            Name = createdRole.Name,
-            Description = createdRole.Description,
-            CreatedAt = createdRole.CreatedAt
-        };
+        Role? capturedRole = null;
 
         _mockRoleRepository.Setup(x => x.AddAsync(It.IsAny<Role>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(createdRole);
+            .ReturnsAsync((Role role, CancellationToken _) =>
+            {
+                capturedRole = role;
+                return role;
+            });
 
         _mockMapper.Setup(x => x.Map<CreateRoleResponse>(It.IsAny<Role>()))
-            .Returns(expectedResponse);
+            .Returns((Role role) => new CreateRoleResponse
+            {
+                Id = role.Id,
+                Name = role.Name,
+                Description = role.Description,
+                CreatedAt = role.CreatedAt
+            });
 
         // Act
         var result = await _handler.Handle(command, CancellationToken.None);
 
         // Assert
         result.Should().NotBeNull();
-        result.Id.Should().Be(createdRole.Id);
-        _mockMapper.Verify(x => x.Map<CreateRoleResponse>(It.IsAny<Role>()), Times.Once);
+        result.Id.Should().NotBe(Guid.Empty);
+        capturedRole.Should().NotBeNull();
+        capturedRole!.Id.Should().NotBe(Guid.Empty);
+        capturedRole.CreatedAt.Should().NotBe(default);
     }
 }
