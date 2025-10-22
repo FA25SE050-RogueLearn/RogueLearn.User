@@ -30,6 +30,9 @@ public class RoadmapImportController : ControllerBase
     /// <response code="400">Invalid request data or AI extraction failed</response>
     [HttpPost("roadmap/class")]
     [Consumes("multipart/form-data")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ImportClassRoadmap([FromForm] ClassRoadmapUploadRequest form, CancellationToken cancellationToken)
     {
         if (form.Pdf is null || form.Pdf.Length == 0)

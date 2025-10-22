@@ -46,6 +46,7 @@ public class ClassesController : ControllerBase
     [Authorize]
     [AdminOnly]
     [ProducesResponseType(typeof(List<ClassDetailDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<ClassDetailDto>>> AdminGetAll([FromQuery] bool? active, CancellationToken cancellationToken)
     {
         var classes = await _mediator.Send(new GetClassesQuery(active), cancellationToken);
@@ -61,6 +62,7 @@ public class ClassesController : ControllerBase
     [AdminOnly]
     [ProducesResponseType(typeof(ClassDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ClassDetailDto>> AdminGetById(Guid id, CancellationToken cancellationToken)
     {
         var entity = await _mediator.Send(new GetClassByIdQuery(id), cancellationToken);
@@ -77,6 +79,7 @@ public class ClassesController : ControllerBase
     [AdminOnly]
     [ProducesResponseType(typeof(ClassDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ClassDetailDto>> AdminCreate([FromBody] CreateClassCommand command, CancellationToken cancellationToken)
     {
         var entity = await _mediator.Send(command, cancellationToken);
@@ -92,6 +95,8 @@ public class ClassesController : ControllerBase
     [AdminOnly]
     [ProducesResponseType(typeof(ClassDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ClassDetailDto>> AdminUpdate(Guid id, [FromBody] UpdateClassCommand command, CancellationToken cancellationToken)
     {
         var effectiveCommand = command with { Id = id };
@@ -107,6 +112,7 @@ public class ClassesController : ControllerBase
     [AdminOnly]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AdminSoftDelete(Guid id, CancellationToken cancellationToken)
     {
         await _mediator.Send(new SoftDeleteClassCommand(id), cancellationToken);
@@ -121,6 +127,7 @@ public class ClassesController : ControllerBase
     [AdminOnly]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AdminRestore(Guid id, CancellationToken cancellationToken)
     {
         await _mediator.Send(new RestoreClassCommand(id), cancellationToken);

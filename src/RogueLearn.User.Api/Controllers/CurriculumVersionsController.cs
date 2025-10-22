@@ -34,6 +34,8 @@ public class CurriculumVersionsController : ControllerBase
     /// </remarks>
     /// <param name="programId">Program unique identifier.</param>
     /// <returns>List of curriculum versions.</returns>
+    [ProducesResponseType(typeof(List<CurriculumVersionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<CurriculumVersionDto>>> GetByProgram(Guid programId)
     {
         var query = new GetCurriculumVersionsByProgramQuery { ProgramId = programId };
@@ -51,6 +53,9 @@ public class CurriculumVersionsController : ControllerBase
     /// <param name="programId">Program unique identifier.</param>
     /// <param name="command">Version creation payload.</param>
     /// <returns>Created version details.</returns>
+    [ProducesResponseType(typeof(CreateCurriculumVersionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateCurriculumVersionResponse>> Create(Guid programId, [FromBody] CreateCurriculumVersionCommand command)
     {
         command.ProgramId = programId;
@@ -68,11 +73,14 @@ public class CurriculumVersionsController : ControllerBase
     /// <param name="programId">Program unique identifier.</param>
     /// <param name="versionId">Version unique identifier.</param>
     /// <param name="command">Activation payload.</param>
-    /// <returns>Status message confirming activation.</returns>
+    /// <returns>No content if successful.</returns>
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Activate(Guid programId, Guid versionId, [FromBody] ActivateCurriculumVersionCommand command)
     {
         command.CurriculumVersionId = versionId;
         await _mediator.Send(command);
-        return Ok(new { message = "Version activated" });
+        return NoContent();
     }
 }

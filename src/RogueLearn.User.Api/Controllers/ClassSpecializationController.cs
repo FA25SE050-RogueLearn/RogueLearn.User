@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/ClassSpecializationController.cs
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/ClassSpecializationController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
@@ -21,6 +21,8 @@ public class ClassSpecializationController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(List<SpecializationSubjectDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSpecializationSubjects(Guid classId, CancellationToken cancellationToken)
     {
         var query = new GetSpecializationSubjectsQuery { ClassId = classId };
@@ -29,6 +31,10 @@ public class ClassSpecializationController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(SpecializationSubjectDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AddSpecializationSubject(Guid classId, [FromBody] AddSpecializationSubjectCommand command, CancellationToken cancellationToken)
     {
         command.ClassId = classId;
@@ -37,6 +43,9 @@ public class ClassSpecializationController : ControllerBase
     }
 
     [HttpDelete("{subjectId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RemoveSpecializationSubject(Guid classId, Guid subjectId, CancellationToken cancellationToken)
     {
         var command = new RemoveSpecializationSubjectCommand { ClassId = classId, SubjectId = subjectId };

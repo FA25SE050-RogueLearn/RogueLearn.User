@@ -30,6 +30,7 @@ public class ClassNodesController : ControllerBase
     /// </summary>
     [HttpGet("flat")]
     [ProducesResponseType(typeof(List<ClassNodeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<List<ClassNodeDto>>> GetFlat(Guid classId, [FromQuery] bool onlyActive = false, CancellationToken cancellationToken = default)
@@ -44,6 +45,7 @@ public class ClassNodesController : ControllerBase
     /// </summary>
     [HttpGet("tree")]
     [ProducesResponseType(typeof(List<ClassNodeTreeItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<List<ClassNodeTreeItemDto>>> GetTree(Guid classId, [FromQuery] bool onlyActive = false, CancellationToken cancellationToken = default)
@@ -59,6 +61,7 @@ public class ClassNodesController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(ClassNodeDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ClassNodeDto>> Create(Guid classId, [FromBody] CreateNodeRequest request, CancellationToken cancellationToken = default)
@@ -85,6 +88,7 @@ public class ClassNodesController : ControllerBase
     [HttpPut("{nodeId:guid}")]
     [ProducesResponseType(typeof(ClassNodeDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ClassNodeDto>> Update(Guid classId, Guid nodeId, [FromBody] UpdateNodeRequest request, CancellationToken cancellationToken = default)
@@ -106,6 +110,7 @@ public class ClassNodesController : ControllerBase
     [HttpPost("{nodeId:guid}/move")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Move(Guid classId, Guid nodeId, [FromBody] MoveNodeRequest request, CancellationToken cancellationToken = default)
@@ -123,6 +128,7 @@ public class ClassNodesController : ControllerBase
     [HttpPost("reorder")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Reorder(Guid classId, [FromBody] ReorderNodesRequest request, CancellationToken cancellationToken = default)
@@ -140,6 +146,7 @@ public class ClassNodesController : ControllerBase
     /// </summary>
     [HttpDelete("{nodeId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SoftDelete(Guid classId, Guid nodeId, CancellationToken cancellationToken = default)
@@ -153,6 +160,7 @@ public class ClassNodesController : ControllerBase
     /// </summary>
     [HttpPost("{nodeId:guid}/lock")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ToggleLock(Guid classId, Guid nodeId, [FromBody] ToggleLockRequest request, CancellationToken cancellationToken = default)

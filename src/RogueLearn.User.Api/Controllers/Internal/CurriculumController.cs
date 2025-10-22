@@ -24,6 +24,9 @@ public class CurriculumController : ControllerBase
     /// Gets comprehensive details of a curriculum program for admin UI use.
     /// </summary>
     [HttpGet("programs/{id:guid}/details")] // MODIFIED ROUTE
+    [ProducesResponseType(typeof(CurriculumProgramDetailsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CurriculumProgramDetailsResponse>> GetCurriculumDetailsForAdmin(Guid id)
     {
         var query = new GetCurriculumProgramDetailsQuery { ProgramId = id };
@@ -37,6 +40,7 @@ public class CurriculumController : ControllerBase
     [HttpGet("versions/{versionId:guid}/for-quest-generation")] // NEW, EXPLICIT ENDPOINT
     [ProducesResponseType(typeof(CurriculumForQuestGenerationDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CurriculumForQuestGenerationDto>> GetCurriculumForQuestGeneration(Guid versionId)
     {
         var query = new GetCurriculumForQuestGenerationQuery { CurriculumVersionId = versionId };

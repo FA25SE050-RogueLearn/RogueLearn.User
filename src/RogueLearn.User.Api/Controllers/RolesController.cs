@@ -25,6 +25,8 @@ public class RolesController : ControllerBase
     /// </summary>
     /// <returns>List of all roles</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(GetAllRolesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetAllRolesResponse>> GetAllRoles()
     {
         var query = new GetAllRolesQuery();
@@ -38,6 +40,9 @@ public class RolesController : ControllerBase
     /// <param name="command">Role creation data</param>
     /// <returns>Created role information</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateRoleResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateRoleResponse>> CreateRole([FromBody] CreateRoleCommand command)
     {
         var result = await _mediator.Send(command);
@@ -51,6 +56,10 @@ public class RolesController : ControllerBase
     /// <param name="command">Role update data</param>
     /// <returns>Updated role information</returns>
     [HttpPut("{id}")]
+    [ProducesResponseType(typeof(UpdateRoleResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateRoleResponse>> UpdateRole(Guid id, [FromBody] UpdateRoleCommand command)
     {
         command.Id = id;
@@ -64,6 +73,9 @@ public class RolesController : ControllerBase
     /// <param name="id">Role ID</param>
     /// <returns>No content if successful</returns>
     [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult> DeleteRole(Guid id)
     {
         var command = new DeleteRoleCommand { Id = id };

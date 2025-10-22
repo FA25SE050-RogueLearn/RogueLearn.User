@@ -25,10 +25,13 @@ public class UserRoleController : ControllerBase
     /// <param name="command">The assign role command</param>
     /// <returns>Success response</returns>
     [HttpPost("assign")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AssignRoleToUser([FromBody] AssignRoleToUserCommand command)
     {
         await _mediator.Send(command);
-        return Ok(new { message = "Role assigned successfully" });
+        return NoContent();
     }
 
     /// <summary>
@@ -37,10 +40,13 @@ public class UserRoleController : ControllerBase
     /// <param name="command">The remove role command</param>
     /// <returns>Success response</returns>
     [HttpPost("remove")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RemoveRoleFromUser([FromBody] RemoveRoleFromUserCommand command)
     {
         await _mediator.Send(command);
-        return Ok(new { message = "Role removed successfully" });
+        return NoContent();
     }
 
     /// <summary>
@@ -49,6 +55,8 @@ public class UserRoleController : ControllerBase
     /// <param name="userId">The user ID</param>
     /// <returns>User roles response</returns>
     [HttpGet("user/{userId:guid}/roles")]
+    [ProducesResponseType(typeof(GetUserRolesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetUserRoles(Guid userId)
     {
         var query = new GetUserRolesQuery { UserId = userId };

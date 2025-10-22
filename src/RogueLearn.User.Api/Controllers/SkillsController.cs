@@ -25,6 +25,8 @@ public class SkillsController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(GetSkillsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetSkillsResponse>> GetAll()
     {
         var result = await _mediator.Send(new GetSkillsQuery());
@@ -32,6 +34,9 @@ public class SkillsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(GetSkillByIdResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetSkillByIdResponse>> GetById(Guid id)
     {
         var result = await _mediator.Send(new GetSkillByIdQuery { Id = id });
@@ -39,6 +44,9 @@ public class SkillsController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(CreateSkillResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateSkillResponse>> Create([FromBody] CreateSkillCommand command)
     {
         var result = await _mediator.Send(command);
@@ -46,6 +54,10 @@ public class SkillsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(UpdateSkillResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateSkillResponse>> Update(Guid id, [FromBody] UpdateSkillCommand command)
     {
         command.Id = id;
@@ -54,6 +66,9 @@ public class SkillsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _mediator.Send(new DeleteSkillCommand { Id = id });
@@ -62,6 +77,8 @@ public class SkillsController : ControllerBase
 
     // Dependencies endpoints
     [HttpGet("{id:guid}/dependencies")]
+    [ProducesResponseType(typeof(GetSkillDependenciesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetSkillDependenciesResponse>> GetDependencies(Guid id)
     {
         var result = await _mediator.Send(new GetSkillDependenciesQuery { SkillId = id });
@@ -69,6 +86,9 @@ public class SkillsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/dependencies")]
+    [ProducesResponseType(typeof(AddSkillDependencyResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AddSkillDependencyResponse>> AddDependency(Guid id, [FromBody] AddSkillDependencyCommand command)
     {
         command.SkillId = id;
@@ -77,6 +97,9 @@ public class SkillsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}/dependencies/{prereqId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RemoveDependency(Guid id, Guid prereqId)
     {
         await _mediator.Send(new RemoveSkillDependencyCommand { SkillId = id, PrerequisiteSkillId = prereqId });

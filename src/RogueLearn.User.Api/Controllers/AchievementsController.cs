@@ -27,6 +27,8 @@ public class AchievementsController : ControllerBase
     /// Get all achievements in the catalog
     /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(GetAllAchievementsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetAllAchievementsResponse>> GetAll()
     {
         var result = await _mediator.Send(new GetAllAchievementsQuery());
@@ -37,6 +39,9 @@ public class AchievementsController : ControllerBase
     /// Create a new achievement
     /// </summary>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateAchievementResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateAchievementResponse>> Create([FromBody] CreateAchievementCommand command)
     {
         var result = await _mediator.Send(command);
@@ -47,6 +52,9 @@ public class AchievementsController : ControllerBase
     /// Create a new achievement with icon upload (multipart/form-data)
     /// </summary>
     [HttpPost("upload")]
+    [ProducesResponseType(typeof(CreateAchievementResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateAchievementResponse>> CreateFromUpload([FromForm] CreateAchievementCommand command, IFormFile? icon)
     {
         if (icon is not null && icon.Length > 0)
@@ -65,6 +73,10 @@ public class AchievementsController : ControllerBase
     /// Update an existing achievement
     /// </summary>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(UpdateAchievementResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateAchievementResponse>> Update(Guid id, [FromBody] UpdateAchievementCommand command)
     {
         command.Id = id;
@@ -76,6 +88,10 @@ public class AchievementsController : ControllerBase
     /// Update an existing achievement with icon upload (multipart/form-data)
     /// </summary>
     [HttpPut("{id:guid}/upload")]
+    [ProducesResponseType(typeof(UpdateAchievementResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateAchievementResponse>> UpdateFromUpload(Guid id, [FromForm] UpdateAchievementCommand command, IFormFile? icon)
     {
         command.Id = id;
@@ -96,6 +112,9 @@ public class AchievementsController : ControllerBase
     /// Delete an achievement
     /// </summary>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _mediator.Send(new DeleteAchievementCommand { Id = id });

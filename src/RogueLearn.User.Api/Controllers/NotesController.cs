@@ -66,6 +66,8 @@ public class NotesController : ControllerBase
     /// <param name="search">Optional search term for filtering by title.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("me")]
+    [ProducesResponseType(typeof(List<NoteDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<NoteDto>>> GetMyNotes([FromQuery] string? search, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
@@ -83,6 +85,7 @@ public class NotesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("public")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(List<NoteDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<NoteDto>>> GetPublicNotes([FromQuery] string? search, CancellationToken cancellationToken)
     {
         var query = new GetPublicNotesQuery(search);
@@ -98,6 +101,8 @@ public class NotesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(NoteDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<NoteDto>> GetNoteById(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetNoteByIdQuery { Id = id };
@@ -131,6 +136,9 @@ public class NotesController : ControllerBase
     /// <param name="command">Note creation payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateNoteResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateNoteResponse>> CreateNote([FromBody] CreateNoteCommand command, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
@@ -148,6 +156,9 @@ public class NotesController : ControllerBase
     /// <param name="command">Note update payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(UpdateNoteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateNoteResponse>> UpdateNote(Guid id, [FromBody] UpdateNoteCommand command, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
@@ -165,6 +176,9 @@ public class NotesController : ControllerBase
     /// <param name="id">Note ID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteNote(Guid id, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();

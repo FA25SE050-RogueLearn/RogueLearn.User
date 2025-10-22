@@ -55,18 +55,6 @@ public class MappingProfile : Profile
           .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
           .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
 
-        // Role mappings
-        CreateMap<Role, RoleDto>();
-        CreateMap<Role, CreateRoleResponse>();
-        CreateMap<Role, UpdateRoleResponse>();
-
-        // UserRole mappings - custom mapping for UserRoleDto
-        CreateMap<UserRole, UserRoleDto>()
-          .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
-          .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
-          .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
-          .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
-
         // CurriculumProgram mappings
         CreateMap<CurriculumProgram, GetAllCurriculumProgramDto>();
         CreateMap<CurriculumProgram, GetByIdCurriculumProgramDto>();
