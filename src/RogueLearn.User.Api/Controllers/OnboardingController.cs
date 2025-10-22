@@ -26,6 +26,7 @@ public class OnboardingController : ControllerBase
     /// </summary>
     [HttpGet("routes")]
     [ProducesResponseType(typeof(List<RouteDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetAllRoutes(CancellationToken cancellationToken)
     {
         var query = new GetAllRoutesQuery();
@@ -38,6 +39,7 @@ public class OnboardingController : ControllerBase
     /// </summary>
     [HttpGet("classes")]
     [ProducesResponseType(typeof(List<ClassDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetAllClasses(CancellationToken cancellationToken)
     {
         var query = new GetAllClassesQuery();

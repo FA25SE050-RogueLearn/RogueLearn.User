@@ -26,6 +26,8 @@ public class UserAchievementsController : ControllerBase
     /// Get achievements earned by the current authenticated user
     /// </summary>
     [HttpGet("me/achievements")]
+    [ProducesResponseType(typeof(GetUserAchievementsByAuthIdResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserAchievementsByAuthIdResponse>> GetMyAchievements()
     {
         var authUserId = User.GetAuthUserId();
@@ -44,10 +46,13 @@ public class UserAchievementsController : ControllerBase
     /// </summary>
     [AdminOnly]
     [HttpPost("~/api/admin/user-achievements/award")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Award([FromBody] AwardAchievementToUserCommand command)
     {
         await _mediator.Send(command);
-        return Ok(new { message = "Achievement awarded successfully" });
+        return NoContent();
     }
 
     /// <summary>
@@ -55,9 +60,12 @@ public class UserAchievementsController : ControllerBase
     /// </summary>
     [AdminOnly]
     [HttpPost("~/api/admin/user-achievements/revoke")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Revoke([FromBody] RevokeAchievementFromUserCommand command)
     {
         await _mediator.Send(command);
-        return Ok(new { message = "Achievement revoked successfully" });
+        return NoContent();
     }
 }

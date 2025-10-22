@@ -20,6 +20,8 @@ public class UserSkillRewardsController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(GetUserSkillRewardsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserSkillRewardsResponse>> Get()
     {
         // Use the authenticated user's ID from claims
@@ -32,6 +34,8 @@ public class UserSkillRewardsController : ControllerBase
     // Admin-only endpoint under absolute /api/admin path
     [AdminOnly]
     [HttpGet("~/api/admin/users/{id:guid}/skill-rewards")]
+    [ProducesResponseType(typeof(GetUserSkillRewardsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserSkillRewardsResponse>> AdminGet(Guid id)
     {
         var result = await _mediator.Send(new GetUserSkillRewardsQuery { UserId = id });

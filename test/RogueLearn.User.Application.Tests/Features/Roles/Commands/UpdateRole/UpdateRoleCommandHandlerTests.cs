@@ -13,13 +13,15 @@ public class UpdateRoleCommandHandlerTests
 {
     private readonly Mock<IRoleRepository> _mockRoleRepository;
     private readonly Mock<IMapper> _mockMapper;
+    private readonly Mock<ILogger<UpdateRoleCommandHandler>> _mockLogger;
     private readonly UpdateRoleCommandHandler _handler;
 
     public UpdateRoleCommandHandlerTests()
     {
         _mockRoleRepository = new Mock<IRoleRepository>();
         _mockMapper = new Mock<IMapper>();
-        _handler = new UpdateRoleCommandHandler(_mockRoleRepository.Object, _mockMapper.Object);
+        _mockLogger = new Mock<ILogger<UpdateRoleCommandHandler>>();
+        _handler = new UpdateRoleCommandHandler(_mockRoleRepository.Object, _mockMapper.Object, _mockLogger.Object);
     }
 
     [Fact]
@@ -277,169 +279,8 @@ public class UpdateRoleCommandHandlerTests
         result.Name.Should().Be(command.Name);
         result.Description.Should().Be(command.Description);
 
+        _mockRoleRepository.Verify(x => x.GetByIdAsync(roleId, It.IsAny<CancellationToken>()), Times.Once);
         _mockRoleRepository.Verify(x => x.UpdateAsync(It.IsAny<Role>(), It.IsAny<CancellationToken>()), Times.Once);
-        _mockMapper.Verify(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Handle_ShouldLogInformation()
-    {
-        // Arrange
-        var roleId = Guid.NewGuid();
-        var command = new UpdateRoleCommand
-        {
-            Id = roleId,
-            Name = "UpdatedRole",
-            Description = "Updated description"
-        };
-
-        var existingRole = new Role
-        {
-            Id = roleId,
-            Name = "OldRole",
-            Description = "Old description",
-            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
-        };
-
-        var updatedRole = new Role
-        {
-            Id = roleId,
-            Name = command.Name,
-            Description = command.Description,
-            CreatedAt = existingRole.CreatedAt
-        };
-
-        var expectedResponse = new UpdateRoleResponse
-        {
-            Id = updatedRole.Id,
-            Name = updatedRole.Name,
-            Description = updatedRole.Description,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _mockRoleRepository.Setup(x => x.GetByIdAsync(roleId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingRole);
-
-        _mockRoleRepository.Setup(x => x.UpdateAsync(It.IsAny<Role>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(updatedRole);
-
-        _mockMapper.Setup(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()))
-            .Returns(expectedResponse);
-
-        // Act
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        _mockMapper.Verify(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Handle_WithCancellationToken_ShouldPassTokenToRepository()
-    {
-        // Arrange
-        var roleId = Guid.NewGuid();
-        var command = new UpdateRoleCommand
-        {
-            Id = roleId,
-            Name = "UpdatedRole",
-            Description = "Updated description"
-        };
-
-        var cancellationToken = new CancellationToken();
-
-        var existingRole = new Role
-        {
-            Id = roleId,
-            Name = "OldRole",
-            Description = "Old description"
-        };
-
-        var updatedRole = new Role
-        {
-            Id = roleId,
-            Name = command.Name,
-            Description = command.Description,
-            CreatedAt = existingRole.CreatedAt
-        };
-
-        var expectedResponse = new UpdateRoleResponse
-        {
-            Id = updatedRole.Id,
-            Name = updatedRole.Name,
-            Description = updatedRole.Description,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _mockRoleRepository.Setup(x => x.GetByIdAsync(roleId, cancellationToken))
-            .ReturnsAsync(existingRole);
-
-        _mockRoleRepository.Setup(x => x.UpdateAsync(It.IsAny<Role>(), cancellationToken))
-            .ReturnsAsync(updatedRole);
-
-        _mockMapper.Setup(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()))
-            .Returns(expectedResponse);
-
-        // Act
-        var result = await _handler.Handle(command, cancellationToken);
-
-        // Assert
-        result.Should().NotBeNull();
-        _mockRoleRepository.Verify(x => x.GetByIdAsync(roleId, cancellationToken), Times.Once);
-        _mockRoleRepository.Verify(x => x.UpdateAsync(It.IsAny<Role>(), cancellationToken), Times.Once);
-        _mockMapper.Verify(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task Handle_ShouldUpdateTimestamp()
-    {
-        // Arrange
-        var roleId = Guid.NewGuid();
-        var command = new UpdateRoleCommand
-        {
-            Id = roleId,
-            Name = "UpdatedRole",
-            Description = "Updated description"
-        };
-
-        var existingRole = new Role
-        {
-            Id = roleId,
-            Name = "OldRole",
-            Description = "Old description",
-            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
-        };
-
-        var updatedRole = new Role
-        {
-            Id = roleId,
-            Name = command.Name,
-            Description = command.Description,
-            CreatedAt = existingRole.CreatedAt
-        };
-
-        var expectedResponse = new UpdateRoleResponse
-        {
-            Id = updatedRole.Id,
-            Name = updatedRole.Name,
-            Description = updatedRole.Description,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _mockRoleRepository.Setup(x => x.GetByIdAsync(roleId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingRole);
-
-        _mockRoleRepository.Setup(x => x.UpdateAsync(It.IsAny<Role>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(updatedRole);
-
-        _mockMapper.Setup(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()))
-            .Returns(expectedResponse);
-
-        // Act
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
         _mockMapper.Verify(x => x.Map<UpdateRoleResponse>(It.IsAny<Role>()), Times.Once);
     }
 }

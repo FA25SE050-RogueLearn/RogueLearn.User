@@ -29,6 +29,7 @@ public class ProfilesController : ControllerBase
     [HttpGet("profiles/me")] // ADDED THIS NEW ENDPOINT
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserProfileDto>> GetMyProfile(CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
@@ -46,6 +47,7 @@ public class ProfilesController : ControllerBase
     /// <returns>List of all user profiles.</returns>
     [HttpGet("admin/profiles")]
     [ProducesResponseType(typeof(GetAllUserProfilesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [AdminOnly]
     public async Task<ActionResult<GetAllUserProfilesResponse>> GetAllUserProfiles(CancellationToken cancellationToken)
     {
@@ -64,6 +66,7 @@ public class ProfilesController : ControllerBase
     [HttpGet("profiles/{authId:guid}")]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserProfileDto>> GetUserProfileByAuthId(Guid authId, CancellationToken cancellationToken)
     {
         var query = new GetUserProfileByAuthIdQuery(authId);

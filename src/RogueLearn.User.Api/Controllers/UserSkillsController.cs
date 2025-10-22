@@ -28,6 +28,8 @@ public class UserSkillsController : ControllerBase
     /// List all skills for the authenticated user
     /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(GetUserSkillsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserSkillsResponse>> GetAll()
     {
         var authUserId = User.GetAuthUserId();
@@ -44,6 +46,8 @@ public class UserSkillsController : ControllerBase
     /// Get a specific skill for the authenticated user by skill name
     /// </summary>
     [HttpGet("{skillName}")]
+    [ProducesResponseType(typeof(GetUserSkillResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserSkillResponse>> GetOne([FromRoute] string skillName)
     {
         var authUserId = User.GetAuthUserId();
@@ -61,6 +65,9 @@ public class UserSkillsController : ControllerBase
     /// Track/assign a skill to the authenticated user; idempotent upsert
     /// </summary>
     [HttpPost]
+    [ProducesResponseType(typeof(AddUserSkillResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AddUserSkillResponse>> Add([FromBody] AddUserSkillCommand command)
     {
         var authUserId = User.GetAuthUserId();
@@ -74,6 +81,8 @@ public class UserSkillsController : ControllerBase
     /// Untrack/remove a skill from the authenticated user; idempotent
     /// </summary>
     [HttpDelete("{skillName}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Remove([FromRoute] string skillName)
     {
         var authUserId = User.GetAuthUserId();
@@ -92,13 +101,16 @@ public class UserSkillsController : ControllerBase
     /// </summary>
     [AdminOnly]
     [HttpPost("~/api/admin/users/{id:guid}/skills/{skillName}/reset")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AdminReset([FromRoute] Guid id, [FromRoute] string skillName, [FromBody] ResetUserSkillProgressCommand command)
     {
         // Admin-only endpoint, so we don't enforce self-access here.
         command.AuthUserId = id;
         command.SkillName = skillName;
         await _mediator.Send(command);
-        return Ok(new { message = "User skill progression reset successfully" });
+        return NoContent();
     }
 
     /// <summary>
@@ -106,6 +118,9 @@ public class UserSkillsController : ControllerBase
     /// Only the authenticated user can ingest via this non-admin endpoint.
     /// </summary>
     [HttpPost("~/api/users/me/xp-events")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> IngestXpEvent([FromBody] IngestXpEventCommand command)
     {
         var authUserId = User.GetAuthUserId();

@@ -35,6 +35,13 @@ using RogueLearn.User.Application.Features.Achievements.Commands.UpdateAchieveme
 
 namespace RogueLearn.User.Application.Mappings;
 
+/// <summary>
+/// Centralized AutoMapper profile for Application layer DTOs.
+/// - Maps domain entities to response DTOs.
+/// - Avoids side-effects and external calls in mapping.
+/// - Uses ReverseMap only when explicitly needed; otherwise preserves domain invariants.
+/// - Ignores IDs and audit fields when mapping from request DTOs to domain entities; they are set in handlers.
+/// </summary>
 public class MappingProfile : Profile
 {
     public MappingProfile()
@@ -42,18 +49,6 @@ public class MappingProfile : Profile
         // UserProfile mappings
         CreateMap<UserProfile, UserProfileDto>()
           .ForMember(dest => dest.PreferencesJson, opt => opt.MapFrom(src => src.Preferences != null ? JsonSerializer.Serialize(src.Preferences, (JsonSerializerOptions)null!) : null));
-
-        // Role mappings
-        CreateMap<Role, RoleDto>();
-        CreateMap<Role, CreateRoleResponse>();
-        CreateMap<Role, UpdateRoleResponse>();
-
-        // UserRole mappings - custom mapping for UserRoleDto
-        CreateMap<UserRole, UserRoleDto>()
-          .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
-          .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
-          .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
-          .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
 
         // Role mappings
         CreateMap<Role, RoleDto>();
@@ -105,13 +100,16 @@ public class MappingProfile : Profile
 
         // Class Specialization mappings
         CreateMap<ClassSpecializationSubject, SpecializationSubjectDto>();
-        CreateMap<AddSpecializationSubjectCommand, ClassSpecializationSubject>();
+        // Request -> Domain mapping: do NOT overwrite Id from BaseEntity; set in handler/domain.
+        CreateMap<AddSpecializationSubjectCommand, ClassSpecializationSubject>()
+            .ForMember(dest => dest.Id, opt => opt.Ignore());
 
         //  Mappings for the Onboarding feature
         CreateMap<CurriculumProgram, RouteDto>();
         CreateMap<Class, ClassDto>();
 
         // Achievement mappings
+        // Non-trivial conversion: serialize RuleConfig JSON string from a structured object. Pure transformation only.
         CreateMap<Achievement, AchievementDto>()
             .ForMember(dest => dest.RuleConfig, opt => opt.Ignore())
             .AfterMap((src, dest) => { dest.RuleConfig = src.RuleConfig != null ? JsonSerializer.Serialize(src.RuleConfig) : null; });

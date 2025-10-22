@@ -38,6 +38,8 @@ public class CurriculumProgramsController : ControllerBase
     /// GET <c>api/admin/programs</c>
     /// </remarks>
     /// <returns>List of curriculum programs.</returns>
+    [ProducesResponseType(typeof(List<GetAllCurriculumProgramDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<GetAllCurriculumProgramDto>>> GetAll()
     {
         var query = new GetAllCurriculumProgramsQuery();
@@ -54,6 +56,9 @@ public class CurriculumProgramsController : ControllerBase
     /// </remarks>
     /// <param name="id">Program unique identifier.</param>
     /// <returns>The requested curriculum program.</returns>
+    [ProducesResponseType(typeof(GetByIdCurriculumProgramDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetByIdCurriculumProgramDto>> GetById(Guid id)
     {
         var query = new GetCurriculumProgramByIdQuery { Id = id };
@@ -76,6 +81,9 @@ public class CurriculumProgramsController : ControllerBase
     /// </remarks>
     /// <param name="id">Program unique identifier.</param>
     /// <returns>Comprehensive curriculum program details with content analysis.</returns>
+    [ProducesResponseType(typeof(CurriculumProgramDetailsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CurriculumProgramDetailsResponse>> GetDetails(Guid id)
     {
         var query = new GetCurriculumProgramDetailsQuery { ProgramId = id };
@@ -92,6 +100,9 @@ public class CurriculumProgramsController : ControllerBase
     /// </remarks>
     /// <param name="command">Program creation payload.</param>
     /// <returns>Created program and its location.</returns>
+    [ProducesResponseType(typeof(CreateCurriculumProgramResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateCurriculumProgramResponse>> Create([FromBody] CreateCurriculumProgramCommand command)
     {
         var result = await _mediator.Send(command);
@@ -108,6 +119,10 @@ public class CurriculumProgramsController : ControllerBase
     /// <param name="id">Program unique identifier.</param>
     /// <param name="command">Program update payload.</param>
     /// <returns>Updated program details.</returns>
+    [ProducesResponseType(typeof(UpdateCurriculumProgramResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateCurriculumProgramResponse>> Update(Guid id, [FromBody] UpdateCurriculumProgramCommand command)
     {
         command.Id = id;
@@ -124,6 +139,9 @@ public class CurriculumProgramsController : ControllerBase
     /// </remarks>
     /// <param name="id">Program unique identifier.</param>
     /// <returns>No content on success.</returns>
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Delete(Guid id)
     {
         var command = new DeleteCurriculumProgramCommand { Id = id };

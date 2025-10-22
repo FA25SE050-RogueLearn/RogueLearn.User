@@ -7,6 +7,13 @@ using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Achievements.Commands.AwardAchievementToUser;
 
+/// <summary>
+/// Handles awarding an existing Achievement to a user.
+/// - Validates input via FluentValidation.
+/// - Checks user and achievement existence.
+/// - Prevents duplicate awarding.
+/// - Emits structured logs for observability.
+/// </summary>
 public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchievementToUserCommand>
 {
     private readonly IUserProfileRepository _userProfileRepository;
@@ -29,14 +36,20 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
         _logger = logger;
     }
 
+    /// <summary>
+    /// Awards the achievement to the specified user.
+    /// </summary>
     public async Task Handle(AwardAchievementToUserCommand request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Handling AwardAchievementToUserCommand for UserId={UserId}, AchievementId={AchievementId}", request.UserId, request.AchievementId);
+
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
 
         // Verify user exists
         var user = await _userProfileRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
         {
+            _logger.LogWarning("User not found: UserId={UserId}", request.UserId);
             throw new NotFoundException("User", request.UserId);
         }
 
@@ -44,6 +57,7 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
         var achievement = await _achievementRepository.GetByIdAsync(request.AchievementId, cancellationToken);
         if (achievement is null)
         {
+            _logger.LogWarning("Achievement not found: AchievementId={AchievementId}", request.AchievementId);
             throw new NotFoundException("Achievement", request.AchievementId);
         }
 
@@ -53,6 +67,7 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
             cancellationToken);
         if (alreadyEarned)
         {
+            _logger.LogWarning("Duplicate award prevented: UserId={UserId}, AchievementId={AchievementId}", request.UserId, request.AchievementId);
             throw new BadRequestException($"User already earned achievement '{achievement.Name}'.");
         }
 

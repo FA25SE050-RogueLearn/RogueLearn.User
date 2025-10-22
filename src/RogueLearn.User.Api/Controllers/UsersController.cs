@@ -74,6 +74,7 @@ public class UsersController : ControllerBase
     [Authorize]
     [AdminOnly]
     [ProducesResponseType(typeof(GetAllUserProfilesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetAllUserProfilesResponse>> AdminGetAllUserProfiles(CancellationToken cancellationToken)
     {
         var query = new GetAllUserProfilesQuery();
@@ -89,6 +90,7 @@ public class UsersController : ControllerBase
     [AdminOnly]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserProfileDto>> AdminGetByAuthId(Guid authId, CancellationToken cancellationToken)
     {
         var query = new GetUserProfileByAuthIdQuery(authId);
@@ -101,10 +103,12 @@ public class UsersController : ControllerBase
     /// </summary>
     /// <param name="authId">The user's authentication UUID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    [HttpGet("{authId:guid}/context")]
+    [HttpGet("~/api/admin/users/{authId:guid}/context")]
+    [Authorize]
     [AdminOnly]
     [ProducesResponseType(typeof(UserContextDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserContextDto>> AdminGetUserContext(Guid authId, CancellationToken cancellationToken)
     {
         var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authId), cancellationToken);

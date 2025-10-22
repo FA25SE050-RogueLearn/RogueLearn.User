@@ -40,6 +40,9 @@ public class CurriculumImportController : ControllerBase
     /// <response code="200">Curriculum imported successfully</response>
     /// <response code="400">Invalid request data or import validation failed</response>
     [HttpPost("curriculum")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ImportCurriculum([FromBody] ImportCurriculumCommand command)
     {
         // Validate that raw text is provided
@@ -68,6 +71,9 @@ public class CurriculumImportController : ControllerBase
     /// <response code="200">Syllabus imported successfully</response>
     /// <response code="400">Invalid request data or import validation failed</response>
     [HttpPost("syllabus")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ImportSyllabus([FromBody] ImportSyllabusCommand command)
     {
         // Validate that raw text is provided
@@ -97,6 +103,9 @@ public class CurriculumImportController : ControllerBase
     /// <response code="200">Validation completed (may contain validation errors in response)</response>
     /// <response code="400">Invalid request data</response>
     [HttpPost("curriculum/validate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ValidateCurriculum([FromBody] ValidateCurriculumQuery query)
     {
         // Validate that raw text is provided
@@ -119,6 +128,9 @@ public class CurriculumImportController : ControllerBase
     /// <response code="200">Validation completed (may contain validation errors in response)</response>
     /// <response code="400">Invalid request data</response>
     [HttpPost("syllabus/validate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ValidateSyllabus([FromBody] ValidateSyllabusQuery query)
     {
         // Validate that raw text is provided
@@ -138,9 +150,12 @@ public class CurriculumImportController : ControllerBase
     /// </summary>
     /// <param name="rawTextHash">The hash of the raw text to clear from cache</param>
     /// <returns>Success response indicating if cache was cleared</returns>
-    /// <response code="200">Cache cleared successfully</response>
+    /// <response code="204">Cache cleared successfully</response>
     /// <response code="400">Invalid hash provided</response>
     [HttpDelete("curriculum/cache/{rawTextHash}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ClearCurriculumCache(string rawTextHash)
     {
         if (string.IsNullOrWhiteSpace(rawTextHash))
@@ -150,7 +165,8 @@ public class CurriculumImportController : ControllerBase
 
         var success = await _curriculumImportStorage.ClearCacheByHashAsync("curriculum-imports", rawTextHash);
         
-        return Ok(new { Success = success, Message = success ? "Cache cleared successfully" : "Failed to clear cache or cache not found" });
+        // Even if not found, treat as idempotent delete
+        return NoContent();
     }
 
     /// <summary>
@@ -159,9 +175,12 @@ public class CurriculumImportController : ControllerBase
     /// <param name="programCode">The program code</param>
     /// <param name="versionCode">The version code</param>
     /// <returns>Success response indicating if cache was cleared</returns>
-    /// <response code="200">Cache cleared successfully</response>
+    /// <response code="204">Cache cleared successfully</response>
     /// <response code="400">Invalid parameters provided</response>
     [HttpDelete("curriculum/cache/{programCode}/{versionCode}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ClearProgramVersionCache(string programCode, string versionCode)
     {
         if (string.IsNullOrWhiteSpace(programCode) || string.IsNullOrWhiteSpace(versionCode))
@@ -171,6 +190,7 @@ public class CurriculumImportController : ControllerBase
 
         var success = await _curriculumImportStorage.ClearCacheForProgramVersionAsync("curriculum-imports", programCode, versionCode);
         
-        return Ok(new { Success = success, Message = success ? "Cache cleared successfully" : "Failed to clear cache or cache not found" });
+        // Even if not found, treat as idempotent delete
+        return NoContent();
     }
 }

@@ -39,6 +39,8 @@ public class SubjectsController : ControllerBase
     /// </remarks>
     /// <returns>List of all subjects.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(List<SubjectDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<SubjectDto>>> GetAllSubjects()
     {
         var query = new GetAllSubjectsQuery();
@@ -55,6 +57,9 @@ public class SubjectsController : ControllerBase
     /// <param name="id">Subject unique identifier.</param>
     /// <returns>Subject details.</returns>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(SubjectDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<SubjectDto>> GetSubjectById(Guid id)
     {
         var query = new GetSubjectByIdQuery { Id = id };
@@ -75,6 +80,9 @@ public class SubjectsController : ControllerBase
     /// <param name="command">Subject creation payload.</param>
     /// <returns>Created subject details.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateSubjectResponse>> CreateSubject([FromBody] CreateSubjectCommand command)
     {
         var result = await _mediator.Send(command);
@@ -91,6 +99,10 @@ public class SubjectsController : ControllerBase
     /// <param name="command">Subject update payload.</param>
     /// <returns>Updated subject details.</returns>
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(UpdateSubjectResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UpdateSubjectResponse>> UpdateSubject(Guid id, [FromBody] UpdateSubjectCommand command)
     {
         command.Id = id;
@@ -105,12 +117,15 @@ public class SubjectsController : ControllerBase
     /// DELETE <c>api/admin/subjects/{id}</c>
     /// </remarks>
     /// <param name="id">Subject unique identifier.</param>
-    /// <returns>Status message confirming deletion.</returns>
+    /// <returns>No content if successful.</returns>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteSubject(Guid id)
     {
         var command = new DeleteSubjectCommand { Id = id };
         await _mediator.Send(command);
-        return Ok(new { message = "Subject deleted successfully" });
+        return NoContent();
     }
 }
