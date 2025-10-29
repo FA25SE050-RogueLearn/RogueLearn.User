@@ -1,6 +1,7 @@
 using MediatR;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 
@@ -8,13 +9,16 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
 {
     private readonly IUserSkillRewardRepository _userSkillRewardRepository;
     private readonly IUserSkillRepository _userSkillRepository;
+    private readonly ISkillRepository _skillRepository;
 
     public IngestXpEventCommandHandler(
         IUserSkillRewardRepository userSkillRewardRepository,
-        IUserSkillRepository userSkillRepository)
+        IUserSkillRepository userSkillRepository,
+        ISkillRepository skillRepository)
     {
         _userSkillRewardRepository = userSkillRewardRepository;
         _userSkillRepository = userSkillRepository;
+        _skillRepository = skillRepository;
     }
 
     public async Task<IngestXpEventResponse> Handle(IngestXpEventCommand request, CancellationToken cancellationToken)
@@ -41,13 +45,31 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
         }
 
         // Persist reward entry
+        // Parse SourceType string to enum; default to QuestComplete if invalid
+        var parsedSourceType = SkillRewardSourceType.QuestComplete;
+        if (!string.IsNullOrWhiteSpace(request.SourceType))
+        {
+            if (Enum.TryParse<SkillRewardSourceType>(request.SourceType, ignoreCase: true, out var st))
+            {
+                parsedSourceType = st;
+            }
+        }
+
+        // Resolve skill catalog entry to obtain SkillId (required by schema)
+        var skill = await _skillRepository.FirstOrDefaultAsync(s => s.Name == request.SkillName, cancellationToken);
+        if (skill is null)
+        {
+            throw new RogueLearn.User.Application.Exceptions.BadRequestException($"Unknown skill '{request.SkillName}'. Ensure the skill exists in the catalog.");
+        }
+
         var reward = new UserSkillReward
         {
             AuthUserId = request.AuthUserId,
             SourceService = request.SourceService,
-            SourceType = request.SourceType,
+            SourceType = parsedSourceType,
             SourceId = request.SourceId,
             SkillName = request.SkillName,
+            SkillId = skill.Id,
             PointsAwarded = request.Points,
             Reason = request.Reason,
             CreatedAt = request.OccurredAt ?? DateTimeOffset.UtcNow

@@ -1,4 +1,5 @@
 using FluentValidation;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.SkillDependencies.Commands.AddSkillDependency;
 
@@ -20,12 +21,9 @@ public sealed class AddSkillDependencyCommandValidator : AbstractValidator<AddSk
             .Must(x => x.SkillId != x.PrerequisiteSkillId)
             .WithMessage("A skill cannot depend on itself.");
 
-        When(x => !string.IsNullOrWhiteSpace(x.RelationshipType), () =>
-        {
-            RuleFor(x => x.RelationshipType!)
-                .MaximumLength(100)
-                .Matches("^[a-zA-Z0-9 _-]+$")
-                .WithMessage("RelationshipType may only contain letters, numbers, spaces, underscores, and hyphens.");
-        });
+        // RelationshipType is optional; when provided, it must be a defined enum value
+        RuleFor(x => x.RelationshipType)
+            .Must(rt => rt == null || Enum.IsDefined(typeof(SkillRelationshipType), rt))
+            .WithMessage("RelationshipType must be one of: Prerequisite, Corequisite, Recommended.");
     }
 }

@@ -3,6 +3,7 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.Skills.Commands.CreateSkill;
 
@@ -42,7 +43,7 @@ public sealed class CreateSkillCommandHandler : IRequestHandler<CreateSkillComma
         {
             Name = request.Name,
             Domain = request.Domain,
-            Tier = request.Tier,
+            Tier = (SkillTierLevel)request.Tier,
             Description = request.Description,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -56,7 +57,7 @@ public sealed class CreateSkillCommandHandler : IRequestHandler<CreateSkillComma
             Id = created.Id,
             Name = created.Name,
             Domain = created.Domain,
-            Tier = created.Tier,
+            Tier = (int)created.Tier,
             Description = created.Description
         };
     }

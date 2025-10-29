@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Achievements.Queries.GetUserAchievementsByAuthId;
 
@@ -55,7 +56,8 @@ public class GetUserAchievementsByAuthIdQueryHandler : IRequestHandler<GetUserAc
                 IconUrl = achievement.IconUrl,
                 SourceService = achievement.SourceService,
                 EarnedAt = ua.EarnedAt,
-                Context = ua.Context
+                // Serialize structured context to JSON string for DTO
+                Context = ua.Context != null ? JsonSerializer.Serialize(ua.Context) : null
             });
         }
 

@@ -26,7 +26,7 @@ public class UpdateCurriculumStructureHandler : IRequestHandler<UpdateCurriculum
             throw new NotFoundException("CurriculumStructure", request.Id);
         }
 
-        curriculumStructure.TermNumber = request.TermNumber;
+        curriculumStructure.Semester = request.TermNumber;
         curriculumStructure.IsMandatory = request.IsMandatory;
         curriculumStructure.PrerequisiteSubjectIds = request.PrerequisiteSubjectIds;
         curriculumStructure.PrerequisitesText = request.PrerequisitesText;

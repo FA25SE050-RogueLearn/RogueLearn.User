@@ -72,7 +72,7 @@ public class GetCurriculumForQuestGenerationQueryHandler : IRequestHandler<GetCu
                 {
                     Code = subject.SubjectCode,
                     Name = subject.SubjectName,
-                    Semester = structure.TermNumber,
+                    Semester = structure.Semester,
                     Credits = subject.Credits,
                     Prerequisites = structure.PrerequisitesText
                 });

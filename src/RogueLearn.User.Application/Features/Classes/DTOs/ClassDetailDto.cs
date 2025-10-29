@@ -20,7 +20,8 @@ public record ClassDetailDto(
         c.Description,
         c.RoadmapUrl,
         c.SkillFocusAreas,
-        c.DifficultyLevel,
+        // Domain enum to int for DTO
+        (int)c.DifficultyLevel,
         c.EstimatedDurationMonths,
         c.IsActive,
         c.CreatedAt,

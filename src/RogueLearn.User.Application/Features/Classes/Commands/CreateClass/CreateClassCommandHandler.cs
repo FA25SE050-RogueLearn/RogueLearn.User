@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.Classes.Commands.CreateClass;
 
@@ -29,7 +30,8 @@ public class CreateClassCommandHandler : IRequestHandler<CreateClassCommand, Cla
             Description = request.Description,
             RoadmapUrl = request.RoadmapUrl,
             SkillFocusAreas = request.SkillFocusAreas,
-            DifficultyLevel = request.DifficultyLevel ?? 1,
+            // Convert incoming int? to domain enum; default to Beginner (1)
+            DifficultyLevel = (DifficultyLevel)(request.DifficultyLevel ?? 1),
             EstimatedDurationMonths = request.EstimatedDurationMonths,
             IsActive = request.IsActive ?? true,
             CreatedAt = DateTimeOffset.UtcNow,

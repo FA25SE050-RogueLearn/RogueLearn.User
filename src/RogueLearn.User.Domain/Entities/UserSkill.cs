@@ -9,6 +9,9 @@ public class UserSkill : BaseEntity
     [Column("auth_user_id")]
     public Guid AuthUserId { get; set; }
 
+    [Column("skill_id")]
+    public Guid SkillId { get; set; }
+
     [Column("skill_name")]
     public string SkillName { get; set; } = string.Empty;
 

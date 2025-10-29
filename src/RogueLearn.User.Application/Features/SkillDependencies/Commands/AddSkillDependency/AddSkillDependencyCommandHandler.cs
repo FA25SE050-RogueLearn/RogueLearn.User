@@ -3,6 +3,7 @@ using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.SkillDependencies.Commands.AddSkillDependency;
 
@@ -41,7 +42,7 @@ public sealed class AddSkillDependencyCommandHandler : IRequestHandler<AddSkillD
         {
             SkillId = request.SkillId,
             PrerequisiteSkillId = request.PrerequisiteSkillId,
-            RelationshipType = string.IsNullOrWhiteSpace(request.RelationshipType) ? "Prerequisite" : request.RelationshipType!,
+            RelationshipType = request.RelationshipType ?? SkillRelationshipType.Prerequisite,
             CreatedAt = DateTimeOffset.UtcNow
         };
 

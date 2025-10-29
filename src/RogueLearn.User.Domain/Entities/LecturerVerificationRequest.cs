@@ -12,14 +12,8 @@ public class LecturerVerificationRequest : BaseEntity
     [Column("auth_user_id")]
     public Guid AuthUserId { get; set; }
 
-    [Column("institution_name")]
-    public string InstitutionName { get; set; } = string.Empty;
-
-    [Column("department")]
-    public string? Department { get; set; }
-
-    [Column("verification_document_url")]
-    public string? VerificationDocumentUrl { get; set; }
+    [Column("documents")]
+    public Dictionary<string, object>? Documents { get; set; }
 
     [Column("status")]
     [JsonConverter(typeof(StringEnumConverter))]
@@ -34,6 +28,12 @@ public class LecturerVerificationRequest : BaseEntity
     [Column("reviewer_id")]
     public Guid? ReviewerId { get; set; }
 
-    [Column("notes")]
-    public string? Notes { get; set; }
+    [Column("review_notes")]
+    public string? ReviewNotes { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [Column("updated_at")]
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

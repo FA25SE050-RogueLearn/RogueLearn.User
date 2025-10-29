@@ -3,7 +3,8 @@ namespace RogueLearn.User.Domain.Enums;
 public enum EnrollmentStatus
 {
     Active,
+    Inactive,
     Graduated,
-    Withdrawn,
+    Dropped,
     Suspended
 }

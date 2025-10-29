@@ -14,4 +14,7 @@ public class UserRole : BaseEntity
 
 	[Column("assigned_at")]
 	public DateTimeOffset AssignedAt { get; set; } = DateTimeOffset.UtcNow;
+
+	[Column("assigned_by")]
+	public Guid? AssignedBy { get; set; }
 }

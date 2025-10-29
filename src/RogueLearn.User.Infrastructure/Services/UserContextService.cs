@@ -85,7 +85,8 @@ public class UserContextService : IUserContextService
                     Id = userClass.Id,
                     Name = userClass.Name,
                     RoadmapUrl = userClass.RoadmapUrl,
-                    DifficultyLevel = userClass.DifficultyLevel,
+                    // Domain enum to int for DTO
+                    DifficultyLevel = (int)userClass.DifficultyLevel,
                     SkillFocusAreas = userClass.SkillFocusAreas
                 };
             }

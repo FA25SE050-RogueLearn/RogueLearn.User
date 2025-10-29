@@ -206,7 +206,10 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                     Description = data.Program.Description,
                     DegreeLevel = data.Program.DegreeLevel,
                     TotalCredits = data.Program.TotalCredits,
-                    DurationYears = data.Program.DurationYears,
+                    // Convert extracted double? to int? for domain entity
+                    DurationYears = data.Program.DurationYears.HasValue
+                        ? (int?)Convert.ToInt32(data.Program.DurationYears.Value)
+                        : null,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow
                 };
@@ -310,7 +313,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 {
                     CurriculumVersionId = curriculumVersion.Id,
                     SubjectId = subject.Id,
-                    TermNumber = structureData.TermNumber,
+                    Semester = structureData.TermNumber,
                     IsMandatory = structureData.IsMandatory,
                     PrerequisiteSubjectIds = prerequisiteIds.ToArray(),
                     PrerequisitesText = structureData.PrerequisitesText,
