@@ -63,7 +63,7 @@ public class GetCurriculumVersionDetailsQueryHandler : IRequestHandler<GetCurric
 
         versionDto.Subjects = new List<CurriculumSubjectDetailsDto>();
 
-        foreach (var structure in curriculumStructures.OrderBy(s => s.TermNumber).ThenBy(s => s.IsMandatory ? 0 : 1))
+        foreach (var structure in curriculumStructures.OrderBy(s => s.Semester).ThenBy(s => s.IsMandatory ? 0 : 1))
         {
             var subject = await _subjectRepository.GetByIdAsync(structure.SubjectId, cancellationToken);
             if (subject == null)
@@ -79,7 +79,7 @@ public class GetCurriculumVersionDetailsQueryHandler : IRequestHandler<GetCurric
                 SubjectName = subject.SubjectName,
                 Credits = subject.Credits,
                 Description = subject.Description,
-                TermNumber = structure.TermNumber,
+                TermNumber = structure.Semester,
                 IsMandatory = structure.IsMandatory,
                 PrerequisiteSubjectIds = structure.PrerequisiteSubjectIds,
                 PrerequisitesText = structure.PrerequisitesText

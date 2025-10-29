@@ -32,7 +32,8 @@ public sealed class GetSkillsQueryHandler : IRequestHandler<GetSkillsQuery, GetS
             Id = s.Id,
             Name = s.Name,
             Domain = s.Domain,
-            Tier = s.Tier,
+            // Domain uses SkillTierLevel enum; API DTO expects int
+            Tier = (int)s.Tier,
             Description = s.Description
         }).ToList();
 

@@ -6,6 +6,7 @@ public enum NotificationType
     QuestComplete,
     PartyInvite,
     GuildInvite,
-    MeetingReminder,
-    System
+    FriendRequest,
+    System,
+    Reminder
 }

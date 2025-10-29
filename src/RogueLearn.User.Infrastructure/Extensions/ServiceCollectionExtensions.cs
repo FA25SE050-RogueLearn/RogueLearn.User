@@ -68,7 +68,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
         // ADDED: Register the new repository for specialization subjects
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
-        services.AddScoped<IStudentTermSubjectRepository, StudentTermSubjectRepository>();
+        services.AddScoped<IStudentSemesterSubjectRepository, StudentSemesterSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
         services.AddScoped<ILecturerVerificationRequestRepository, LecturerVerificationRequestRepository>();
 

@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.Classes.Commands.UpdateClass;
 
@@ -24,7 +25,7 @@ public class UpdateClassCommandHandler : IRequestHandler<UpdateClassCommand, Cla
         if (request.Description is not null) entity.Description = request.Description;
         if (request.RoadmapUrl is not null) entity.RoadmapUrl = request.RoadmapUrl;
         if (request.SkillFocusAreas is not null) entity.SkillFocusAreas = request.SkillFocusAreas;
-        if (request.DifficultyLevel.HasValue) entity.DifficultyLevel = request.DifficultyLevel.Value;
+        if (request.DifficultyLevel.HasValue) entity.DifficultyLevel = (DifficultyLevel)request.DifficultyLevel.Value;
         if (request.EstimatedDurationMonths.HasValue) entity.EstimatedDurationMonths = request.EstimatedDurationMonths.Value;
         if (request.IsActive.HasValue) entity.IsActive = request.IsActive.Value;
 

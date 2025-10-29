@@ -53,7 +53,7 @@ public class GetCurriculumStructureByVersionHandler : IRequestHandler<GetCurricu
                 SubjectCode = subject?.SubjectCode ?? string.Empty,
                 SubjectName = subject?.SubjectName ?? string.Empty,
                 Credits = subject?.Credits ?? 0,
-                TermNumber = structure.TermNumber,
+                TermNumber = structure.Semester,
                 IsMandatory = structure.IsMandatory,
                 PrerequisiteSubjectIds = structure.PrerequisiteSubjectIds,
                 PrerequisitesText = structure.PrerequisitesText,

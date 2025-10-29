@@ -26,7 +26,7 @@ public class Notification : BaseEntity
     public bool IsRead { get; set; } = false;
 
     [Column("metadata")]
-    public string? Metadata { get; set; }
+    public Dictionary<string, object>? Metadata { get; set; }
 
     [Column("read_at")]
     public DateTimeOffset? ReadAt { get; set; }

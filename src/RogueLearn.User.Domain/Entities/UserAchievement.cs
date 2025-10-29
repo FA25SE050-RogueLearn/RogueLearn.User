@@ -16,5 +16,5 @@ public class UserAchievement : BaseEntity
     public DateTimeOffset EarnedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [Column("context")]
-    public string? Context { get; set; }
+    public Dictionary<string, object>? Context { get; set; }
 }

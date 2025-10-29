@@ -1,5 +1,8 @@
 using BuildingBlocks.Shared.Common;
+using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -12,8 +15,9 @@ public class Skill : BaseEntity
     [Column("domain")]
     public string? Domain { get; set; }
 
-    [Column("tier")]
-    public int Tier { get; set; } = 1;
+  [Column("tier")]
+  [JsonConverter(typeof(StringEnumConverter))]
+  public SkillTierLevel Tier { get; set; } = SkillTierLevel.Foundation;
 
     [Column("description")]
     public string? Description { get; set; }

@@ -1,5 +1,8 @@
 using BuildingBlocks.Shared.Common;
+using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -13,13 +16,17 @@ public class UserSkillReward : BaseEntity
     public string SourceService { get; set; } = string.Empty;
 
     [Column("source_type")]
-    public string SourceType { get; set; } = string.Empty;
+    [JsonConverter(typeof(StringEnumConverter))]
+    public SkillRewardSourceType SourceType { get; set; }
 
     [Column("source_id")]
     public Guid? SourceId { get; set; }
 
     [Column("skill_name")]
     public string SkillName { get; set; } = string.Empty;
+
+    [Column("skill_id")]
+    public Guid SkillId { get; set; }
 
     [Column("points_awarded")]
     public int PointsAwarded { get; set; }

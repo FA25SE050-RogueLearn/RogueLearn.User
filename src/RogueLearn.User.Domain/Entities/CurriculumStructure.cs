@@ -12,8 +12,8 @@ public class CurriculumStructure : BaseEntity
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
 
-    [Column("term_number")]
-    public int TermNumber { get; set; }
+    [Column("semester")]
+    public int Semester { get; set; }
 
     [Column("is_mandatory")]
     public bool IsMandatory { get; set; } = true;

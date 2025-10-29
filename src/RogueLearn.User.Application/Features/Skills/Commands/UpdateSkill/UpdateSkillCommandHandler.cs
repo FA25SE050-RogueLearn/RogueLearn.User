@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.Skills.Commands.UpdateSkill;
 
@@ -38,7 +39,8 @@ public sealed class UpdateSkillCommandHandler : IRequestHandler<UpdateSkillComma
 
         existing.Name = request.Name;
         existing.Domain = request.Domain;
-        existing.Tier = request.Tier;
+        // Convert incoming int Tier to domain enum
+        existing.Tier = (SkillTierLevel)request.Tier;
         existing.Description = request.Description;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -50,7 +52,8 @@ public sealed class UpdateSkillCommandHandler : IRequestHandler<UpdateSkillComma
             Id = updated.Id,
             Name = updated.Name,
             Domain = updated.Domain,
-            Tier = updated.Tier,
+            // Map domain enum back to int for API response
+            Tier = (int)updated.Tier,
             Description = updated.Description
         };
     }

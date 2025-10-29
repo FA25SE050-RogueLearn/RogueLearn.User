@@ -3,7 +3,7 @@ using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Domain.Interfaces;
 
-public interface IStudentTermSubjectRepository : IGenericRepository<StudentTermSubject>
+public interface IStudentSemesterSubjectRepository : IGenericRepository<StudentSemesterSubject>
 {
 
 }

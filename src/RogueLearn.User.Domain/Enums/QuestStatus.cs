@@ -7,3 +7,4 @@ public enum QuestStatus
     Completed,
     Abandoned
 }
+

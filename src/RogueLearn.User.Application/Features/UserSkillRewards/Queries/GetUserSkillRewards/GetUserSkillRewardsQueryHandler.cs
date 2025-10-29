@@ -15,19 +15,20 @@ public sealed class GetUserSkillRewardsQueryHandler : IRequestHandler<GetUserSki
     public async Task<GetUserSkillRewardsResponse> Handle(GetUserSkillRewardsQuery request, CancellationToken cancellationToken)
     {
         var rewards = await _repository.FindAsync(r => r.AuthUserId == request.UserId, cancellationToken);
-        return new GetUserSkillRewardsResponse
-        {
-            Rewards = rewards.Select(r => new UserSkillRewardDto
+            return new GetUserSkillRewardsResponse
             {
-                Id = r.Id,
-                SourceService = r.SourceService,
-                SourceType = r.SourceType,
-                SourceId = r.SourceId,
-                SkillName = r.SkillName,
-                PointsAwarded = r.PointsAwarded,
-                Reason = r.Reason,
-                CreatedAt = r.CreatedAt
-            }).ToList()
-        };
+                Rewards = rewards.Select(r => new UserSkillRewardDto
+                {
+                    Id = r.Id,
+                    SourceService = r.SourceService,
+                    // Map enum to string for DTO
+                    SourceType = r.SourceType.ToString(),
+                    SourceId = r.SourceId,
+                    SkillName = r.SkillName,
+                    PointsAwarded = r.PointsAwarded,
+                    Reason = r.Reason,
+                    CreatedAt = r.CreatedAt
+                }).ToList()
+            };
     }
 }

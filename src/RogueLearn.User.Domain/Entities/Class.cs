@@ -1,5 +1,8 @@
 using BuildingBlocks.Shared.Common;
+using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -19,7 +22,8 @@ public class Class : BaseEntity
   public string[]? SkillFocusAreas { get; set; }
 
   [Column("difficulty_level")]
-  public int DifficultyLevel { get; set; } = 1;
+  [JsonConverter(typeof(StringEnumConverter))]
+  public DifficultyLevel DifficultyLevel { get; set; } = DifficultyLevel.Beginner;
 
   [Column("estimated_duration_months")]
   public int? EstimatedDurationMonths { get; set; }

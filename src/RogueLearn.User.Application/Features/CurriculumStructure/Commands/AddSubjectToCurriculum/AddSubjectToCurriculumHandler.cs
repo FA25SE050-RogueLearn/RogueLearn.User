@@ -72,7 +72,7 @@ public class AddSubjectToCurriculumHandler : IRequestHandler<AddSubjectToCurricu
         {
             CurriculumVersionId = request.CurriculumVersionId,
             SubjectId = request.SubjectId,
-            TermNumber = request.TermNumber,
+            Semester = request.TermNumber,
             IsMandatory = request.IsMandatory,
             PrerequisiteSubjectIds = request.PrerequisiteSubjectIds,
             PrerequisitesText = request.PrerequisitesText

@@ -7,3 +7,4 @@ public enum SubjectEnrollmentStatus
     Failed,
     Withdrawn
 }
+

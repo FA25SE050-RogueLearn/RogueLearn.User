@@ -172,7 +172,7 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
                 existing.Description = cls.Description;
                 existing.RoadmapUrl = request.RoadmapUrl ?? cls.RoadmapUrl ?? existing.RoadmapUrl;
                 existing.SkillFocusAreas = cls.SkillFocusAreas;
-                existing.DifficultyLevel = cls.DifficultyLevel;
+                existing.DifficultyLevel = (RogueLearn.User.Domain.Enums.DifficultyLevel)cls.DifficultyLevel;
                 existing.EstimatedDurationMonths = cls.EstimatedDurationMonths;
                 existing.IsActive = cls.IsActive;
                 existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -197,7 +197,7 @@ public class ImportClassRoadmapCommandHandler : IRequestHandler<ImportClassRoadm
             Description = cls.Description,
             RoadmapUrl = request.RoadmapUrl ?? cls.RoadmapUrl,
             SkillFocusAreas = cls.SkillFocusAreas,
-            DifficultyLevel = cls.DifficultyLevel,
+            DifficultyLevel = (RogueLearn.User.Domain.Enums.DifficultyLevel)cls.DifficultyLevel,
             EstimatedDurationMonths = cls.EstimatedDurationMonths,
             IsActive = cls.IsActive,
             CreatedAt = DateTimeOffset.UtcNow,

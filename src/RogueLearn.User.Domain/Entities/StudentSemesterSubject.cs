@@ -6,8 +6,8 @@ using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
-[Table("student_term_subjects")]
-public class StudentTermSubject : BaseEntity
+[Table("student_semester_subjects")]
+public class StudentSemesterSubject : BaseEntity
 {
     [Column("enrollment_id")]
     public Guid EnrollmentId { get; set; }
@@ -15,14 +15,11 @@ public class StudentTermSubject : BaseEntity
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
 
-    [Column("term_number")]
-    public int TermNumber { get; set; }
-
     [Column("academic_year")]
     public string AcademicYear { get; set; } = string.Empty;
 
     [Column("semester")]
-    public string Semester { get; set; } = string.Empty;
+    public int Semester { get; set; }
 
     [Column("status")]
     [JsonConverter(typeof(StringEnumConverter))]
@@ -32,7 +29,7 @@ public class StudentTermSubject : BaseEntity
     public string? Grade { get; set; }
 
     [Column("credits_earned")]
-    public int? CreditsEarned { get; set; } = 0;
+    public int CreditsEarned { get; set; } = 0;
 
     [Column("enrolled_at")]
     public DateTimeOffset EnrolledAt { get; set; } = DateTimeOffset.UtcNow;
