@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/UsersController.cs
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,7 @@ using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileBy
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
 using RogueLearn.User.Application.Models;
 using BuildingBlocks.Shared.Authentication;
-using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord; // This using is now correct
+using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -26,15 +27,27 @@ public class UsersController : ControllerBase
 
     /// <summary>
     /// Processes the authenticated user's raw academic record HTML to update their academic progress and generate/update their questline.
+    /// Accepts multipart/form-data to handle potentially large or complex HTML content.
     /// </summary>
     [HttpPost("me/process-academic-record")]
+    [Consumes("multipart/form-data")] // MODIFIED: Changed from application/json to multipart/form-data
     [ProducesResponseType(typeof(ProcessAcademicRecordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<ProcessAcademicRecordResponse>> ProcessMyAcademicRecord([FromBody] ProcessAcademicRecordCommand command, CancellationToken cancellationToken)
+    public async Task<ActionResult<ProcessAcademicRecordResponse>> ProcessMyAcademicRecord(
+        [FromForm] string fapHtmlContent, // MODIFIED: Attribute changed to [FromForm]
+        [FromForm] Guid curriculumVersionId, // MODIFIED: Attribute changed to [FromForm]
+        CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-        command.AuthUserId = authUserId;
+
+        // MODIFIED: Command is now constructed from form fields instead of a JSON body.
+        var command = new ProcessAcademicRecordCommand
+        {
+            AuthUserId = authUserId,
+            FapHtmlContent = fapHtmlContent,
+            CurriculumVersionId = curriculumVersionId
+        };
 
         var result = await _mediator.Send(command, cancellationToken);
 
