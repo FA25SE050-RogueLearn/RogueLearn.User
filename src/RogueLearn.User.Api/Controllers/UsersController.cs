@@ -1,13 +1,14 @@
+using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
+using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 using RogueLearn.User.Application.Features.UserContext.Queries.GetUserContextByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Commands.UpdateMyProfile;
-using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
+using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Models;
-using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -36,7 +37,23 @@ public class UsersController : ControllerBase
         var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authUserId), cancellationToken);
         return Ok(context);
     }
+    /// <summary>
+    /// Processes the authenticated user's raw academic record HTML to update their academic progress and generate/update their questline.
+    /// </summary>
+    [HttpPost("me/process-academic-record")] // NEW ENDPOINT
+    [ProducesResponseType(typeof(ProcessAcademicRecordResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ProcessAcademicRecordResponse>> ProcessMyAcademicRecord([FromBody] ProcessAcademicRecordCommand command, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        command.AuthUserId = authUserId;
 
+        var result = await _mediator.Send(command, cancellationToken);
+
+        return Ok(result);
+    }
+    
     /// <summary>
     /// Update the authenticated user's profile (multipart/form-data). Allows uploading a profile image file.
     /// The handler will process and upload the image to Supabase 'user-avatars' storage and update the profile's image URL.
