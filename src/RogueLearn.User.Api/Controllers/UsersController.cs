@@ -1,14 +1,14 @@
-using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
-using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 using RogueLearn.User.Application.Features.UserContext.Queries.GetUserContextByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Commands.UpdateMyProfile;
-using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
+using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
 using RogueLearn.User.Application.Models;
+using BuildingBlocks.Shared.Authentication;
+using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord; // This using is now correct
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -25,22 +25,9 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Get the authenticated user's aggregated context (profile, roles, skills, enrollment, etc.).
-    /// </summary>
-    [HttpGet("me")]
-    [ProducesResponseType(typeof(UserContextDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<UserContextDto>> GetMyContext(CancellationToken cancellationToken)
-    {
-        var authUserId = User.GetAuthUserId();
-
-        var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authUserId), cancellationToken);
-        return Ok(context);
-    }
-    /// <summary>
     /// Processes the authenticated user's raw academic record HTML to update their academic progress and generate/update their questline.
     /// </summary>
-    [HttpPost("me/process-academic-record")] // NEW ENDPOINT
+    [HttpPost("me/process-academic-record")]
     [ProducesResponseType(typeof(ProcessAcademicRecordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -53,7 +40,21 @@ public class UsersController : ControllerBase
 
         return Ok(result);
     }
-    
+
+    /// <summary>
+    /// Get the authenticated user's aggregated context (profile, roles, skills, enrollment, etc.).
+    /// </summary>
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(UserContextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserContextDto>> GetMyContext(CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+
+        var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authUserId), cancellationToken);
+        return context is not null ? Ok(context) : NotFound();
+    }
+
     /// <summary>
     /// Update the authenticated user's profile (multipart/form-data). Allows uploading a profile image file.
     /// The handler will process and upload the image to Supabase 'user-avatars' storage and update the profile's image URL.
