@@ -98,6 +98,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INoteSkillRepository, NoteSkillRepository>();
         services.AddScoped<INoteQuestRepository, NoteQuestRepository>();
 
+        // Social/Party repositories
+        services.AddScoped<IPartyRepository, PartyRepository>();
+        services.AddScoped<IPartyMemberRepository, PartyMemberRepository>();
+        services.AddScoped<IPartyInvitationRepository, PartyInvitationRepository>();
+        services.AddScoped<IPartyStashItemRepository, PartyStashItemRepository>();
+
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
         services.AddScoped<IRoadmapImportStorage, RoadmapImportStorage>();
@@ -117,6 +123,9 @@ public static class ServiceCollectionExtensions
 
         // Avatar URL validator
         services.AddScoped<IAvatarUrlValidator, AvatarUrlValidator>();
+
+        // Party notification service
+        services.AddScoped<IPartyNotificationService, PartyNotificationService>();
 
         return services;
     }
