@@ -37,8 +37,9 @@ public static class ServiceCollectionExtensions
 		services.AddScoped<ITagSuggestionPlugin, TagSuggestionPlugin>();
 		// Register TaggingSuggestionService
 		services.AddScoped<ITaggingSuggestionService, TaggingSuggestionService>();
-
-		return services;
+        // Register the new, separate FAP SK plugin. This line was missing.
+        services.AddScoped<IFapExtractionPlugin, FapExtractionPlugin>();
+        return services;
 	}
 
 	public static IServiceCollection AddApiServices(this IServiceCollection services)

@@ -1,5 +1,4 @@
-﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/LearningPaths/Queries/GetMyLearningPath/GetMyLearningPathQueryHandler.cs
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
 
@@ -53,7 +52,10 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         var learningPathQuests = (await _learningPathQuestRepository.FindAsync(lpq => lpq.LearningPathId == learningPath.Id, cancellationToken)).ToList();
         var questIds = learningPathQuests.Select(lpq => lpq.QuestId).ToList();
         var quests = (await _questRepository.GetAllAsync(cancellationToken)).Where(q => questIds.Contains(q.Id)).ToDictionary(q => q.Id);
-        var userProgress = (await _userQuestProgressRepository.FindAsync(p => p.AuthUserId == request.AuthUserId && questIds.Contains(p.QuestId), cancellationToken))
+
+        // MODIFIED: Replaced the failing FindAsync call with our new specialized repository method.
+        // This is now efficient and correctly translated by the Supabase client.
+        var userProgress = (await _userQuestProgressRepository.GetUserProgressForQuestsAsync(request.AuthUserId, questIds, cancellationToken))
             .ToDictionary(p => p.QuestId);
 
         var chapterDtos = new List<QuestChapterDto>();
