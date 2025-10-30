@@ -1,4 +1,5 @@
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -17,7 +18,7 @@ public class PartyInvitation : BaseEntity
     [Column("invitee_id")]
     public Guid InviteeId { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(StringEnumConverter))]
     [Column("status")]
     public InvitationStatus Status { get; set; } = InvitationStatus.Pending;
 
