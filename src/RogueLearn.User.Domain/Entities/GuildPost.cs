@@ -1,5 +1,6 @@
-using System.Text.Json.Serialization;
 using BuildingBlocks.Shared.Common;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
 
@@ -20,8 +21,8 @@ public class GuildPost : BaseEntity
     [Column("content")]
     public string Content { get; set; } = string.Empty;
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     [Column("post_type")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public PostType PostType { get; set; } = PostType.general;
 
     [Column("is_pinned")]

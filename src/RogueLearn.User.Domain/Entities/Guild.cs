@@ -1,5 +1,6 @@
-using System.Text.Json.Serialization;
 using BuildingBlocks.Shared.Common;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
 
@@ -14,8 +15,8 @@ public class Guild : BaseEntity
     [Column("description")]
     public string Description { get; set; } = string.Empty;
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     [Column("guild_type")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public GuildType GuildType { get; set; }
 
     [Column("max_members")]

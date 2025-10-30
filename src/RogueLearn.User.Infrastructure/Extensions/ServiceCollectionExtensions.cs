@@ -90,6 +90,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IQuestRepository, QuestRepository>();
         services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
 
+        // Guild repositories
+        services.AddScoped<IGuildRepository, GuildRepository>();
+        services.AddScoped<IGuildMemberRepository, GuildMemberRepository>();
+        services.AddScoped<IGuildInvitationRepository, GuildInvitationRepository>();
+
         // System repositories
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
