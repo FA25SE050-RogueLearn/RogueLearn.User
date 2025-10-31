@@ -32,17 +32,12 @@ using System.Text.Json;
 using RogueLearn.User.Application.Features.Achievements.Queries.GetAllAchievements;
 using RogueLearn.User.Application.Features.Achievements.Commands.CreateAchievement;
 using RogueLearn.User.Application.Features.Achievements.Commands.UpdateAchievement;
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
+using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 using RogueLearn.User.Application.Features.Parties.DTOs;
 
 namespace RogueLearn.User.Application.Mappings;
 
-/// <summary>
-/// Centralized AutoMapper profile for Application layer DTOs.
-/// - Maps domain entities to response DTOs.
-/// - Avoids side-effects and external calls in mapping.
-/// - Uses ReverseMap only when explicitly needed; otherwise preserves domain invariants.
-/// - Ignores IDs and audit fields when mapping from request DTOs to domain entities; they are set in handlers.
-/// </summary>
 public class MappingProfile : Profile
 {
     public MappingProfile()
@@ -101,7 +96,6 @@ public class MappingProfile : Profile
 
         // Class Specialization mappings
         CreateMap<ClassSpecializationSubject, SpecializationSubjectDto>();
-        // Request -> Domain mapping: do NOT overwrite Id from BaseEntity; set in handler/domain.
         CreateMap<AddSpecializationSubjectCommand, ClassSpecializationSubject>()
             .ForMember(dest => dest.Id, opt => opt.Ignore());
 
@@ -110,7 +104,6 @@ public class MappingProfile : Profile
         CreateMap<Class, ClassDto>();
 
         // Achievement mappings
-        // Non-trivial conversion: serialize RuleConfig JSON string from a structured object. Pure transformation only.
         CreateMap<Achievement, AchievementDto>()
             .ForMember(dest => dest.RuleConfig, opt => opt.Ignore())
             .AfterMap((src, dest) => { dest.RuleConfig = src.RuleConfig != null ? JsonSerializer.Serialize(src.RuleConfig) : null; });
@@ -120,11 +113,20 @@ public class MappingProfile : Profile
         CreateMap<Achievement, UpdateAchievementResponse>()
             .ForMember(dest => dest.RuleConfig, opt => opt.Ignore())
             .AfterMap((src, dest) => { dest.RuleConfig = src.RuleConfig != null ? JsonSerializer.Serialize(src.RuleConfig) : null; });
+        // Mappings for Quest Details
+        CreateMap<Quest, QuestDetailsDto>();
+        CreateMap<QuestStep, QuestStepDto>();
+
+        // MODIFIED: Explicitly provide the default value for the optional parameter to satisfy the expression tree compiler.
+        CreateMap<QuestStep, GeneratedQuestStepDto>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+                !string.IsNullOrWhiteSpace(src.Content) ? JsonDocument.Parse(src.Content, default) : null));
 
         // Parties feature mappings
         CreateMap<Party, PartyDto>();
         CreateMap<PartyMember, PartyMemberDto>();
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
+
     }
 }
