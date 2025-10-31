@@ -36,3 +36,6 @@ CREATE TYPE friendship_status AS ENUM ('Pending', 'Accepted', 'Blocked');
 
 -- Meeting management enums
 CREATE TYPE transcript_segment_status AS ENUM ('Processed', 'Failed');
+
+-- Guild post moderation/status enums
+CREATE TYPE guild_post_status AS ENUM ('published', 'pending', 'rejected');
