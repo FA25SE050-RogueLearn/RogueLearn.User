@@ -1,4 +1,4 @@
-// src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
 using Microsoft.AspNetCore.Http;
@@ -89,6 +89,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
         services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
+        services.AddScoped<IQuestStepRepository, QuestStepRepository>(); 
 
         // System repositories
         services.AddScoped<INotificationRepository, NotificationRepository>();

@@ -32,6 +32,7 @@ using System.Text.Json;
 using RogueLearn.User.Application.Features.Achievements.Queries.GetAllAchievements;
 using RogueLearn.User.Application.Features.Achievements.Commands.CreateAchievement;
 using RogueLearn.User.Application.Features.Achievements.Commands.UpdateAchievement;
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 
 namespace RogueLearn.User.Application.Mappings;
 
@@ -119,5 +120,9 @@ public class MappingProfile : Profile
         CreateMap<Achievement, UpdateAchievementResponse>()
             .ForMember(dest => dest.RuleConfig, opt => opt.Ignore())
             .AfterMap((src, dest) => { dest.RuleConfig = src.RuleConfig != null ? JsonSerializer.Serialize(src.RuleConfig) : null; });
+
+        // Mappings for Quest Details
+        CreateMap<Quest, QuestDetailsDto>();
+        CreateMap<QuestStep, QuestStepDto>();
     }
 }
