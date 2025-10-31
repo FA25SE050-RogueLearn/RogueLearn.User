@@ -6,17 +6,17 @@ using System.Security.Claims;
 namespace RogueLearn.User.Api.Attributes;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class PartyAdminOrPlatformAdminAttribute : Attribute, IAsyncAuthorizationFilter
+public class PartyLeaderOnlyAttribute : Attribute, IAsyncAuthorizationFilter
 {
     private readonly string _partyIdRouteKey;
 
     /// <summary>
-    /// Checks authorization for Party admin endpoints. Allows access only if
+    /// Checks authorization for Party leader-only endpoints. Allows access only if
     /// the caller is the Leader of the party identified by the route value.
-    /// Platform admin role is NOT considered.
+    /// Platform admin role is NOT considered here.
     /// </summary>
     /// <param name="partyIdRouteKey">Route key to read partyId from. Defaults to "partyId".</param>
-    public PartyAdminOrPlatformAdminAttribute(string partyIdRouteKey = "partyId")
+    public PartyLeaderOnlyAttribute(string partyIdRouteKey = "partyId")
     {
         _partyIdRouteKey = partyIdRouteKey;
     }

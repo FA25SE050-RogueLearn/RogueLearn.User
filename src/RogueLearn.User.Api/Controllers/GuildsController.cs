@@ -18,6 +18,9 @@ using RogueLearn.User.Application.Features.Guilds.Queries.GetGuildDashboard;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetGuildInvitations;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetGuildMembers;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyGuild;
+using RogueLearn.User.Application.Features.Guilds.Commands.ManageRoles;
+using RogueLearn.User.Application.Features.Guilds.Queries.GetMemberRoles;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -248,4 +251,72 @@ public class GuildsController : ControllerBase
         var members = await _mediator.Send(new GetGuildMembersQuery(guildId));
         return Ok(members);
     }
+
+    // --- Role Management Endpoints ---
+
+    /// <summary>
+    /// Assign a guild role to a member (GuildMaster only).
+    /// </summary>
+    [HttpPost("{guildId:guid}/members/{memberAuthUserId:guid}/roles/assign")]
+    [GuildMasterOnly("guildId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AssignGuildRole([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] AssignGuildMemberRoleRequest body)
+    {
+        var actorAuthUserId = User.GetAuthUserId();
+        await _mediator.Send(new AssignGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId));
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Revoke a guild role from a member (GuildMaster only). Baseline role remains.
+    /// </summary>
+    [HttpPost("{guildId:guid}/members/{memberAuthUserId:guid}/roles/revoke")]
+    [GuildMasterOnly("guildId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RevokeGuildRole([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] RevokeGuildMemberRoleRequest body)
+    {
+        var actorAuthUserId = User.GetAuthUserId();
+        await _mediator.Send(new RevokeGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId));
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Admin-only: Assign a guild role to a member.
+    /// </summary>
+    [HttpPost("~/api/admin/guilds/{guildId:guid}/members/{memberAuthUserId:guid}/roles/assign")]
+    [AdminOnly]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AdminAssignGuildRole([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] AssignGuildMemberRoleRequest body)
+    {
+        var actorAuthUserId = User.GetAuthUserId();
+        await _mediator.Send(new AssignGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId, IsAdminOverride: true));
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Admin-only: Revoke a guild role from a member.
+    /// </summary>
+    [HttpPost("~/api/admin/guilds/{guildId:guid}/members/{memberAuthUserId:guid}/roles/revoke")]
+    [AdminOnly]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AdminRevokeGuildRole([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] RevokeGuildMemberRoleRequest body)
+    {
+        var actorAuthUserId = User.GetAuthUserId();
+        await _mediator.Send(new RevokeGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId, IsAdminOverride: true));
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Get roles of a guild member. Returns list to support future multi-role.
+    /// </summary>
+    [HttpGet("{guildId:guid}/members/{memberAuthUserId:guid}/roles")]
+    [ProducesResponseType(typeof(IReadOnlyList<GuildRole>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetGuildMemberRoles([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId)
+    {
+        var roles = await _mediator.Send(new GetGuildMemberRolesQuery(guildId, memberAuthUserId));
+        return Ok(roles);
+    }
 }
+
+public record AssignGuildMemberRoleRequest(GuildRole Role);
+public record RevokeGuildMemberRoleRequest(GuildRole Role);
