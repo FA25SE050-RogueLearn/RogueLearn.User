@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/LearningPaths/Queries/GetMyLearningPath/GetMyLearningPathQueryHandler.cs
+using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
 
@@ -12,6 +13,10 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
     private readonly IQuestRepository _questRepository;
     private readonly IUserQuestProgressRepository _userQuestProgressRepository;
     private readonly ILogger<GetMyLearningPathQueryHandler> _logger;
+    // ADDED: Inject the repositories needed to link quests back to semesters.
+    private readonly ICurriculumStructureRepository _curriculumStructureRepository;
+    private readonly ISubjectRepository _subjectRepository;
+
 
     public GetMyLearningPathQueryHandler(
         ILearningPathRepository learningPathRepository,
@@ -19,7 +24,10 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         ILearningPathQuestRepository learningPathQuestRepository,
         IQuestRepository questRepository,
         IUserQuestProgressRepository userQuestProgressRepository,
-        ILogger<GetMyLearningPathQueryHandler> logger)
+        ILogger<GetMyLearningPathQueryHandler> logger,
+        // ADDED: Accept new repositories in the constructor.
+        ICurriculumStructureRepository curriculumStructureRepository,
+        ISubjectRepository subjectRepository)
     {
         _learningPathRepository = learningPathRepository;
         _questChapterRepository = questChapterRepository;
@@ -27,14 +35,15 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         _questRepository = questRepository;
         _userQuestProgressRepository = userQuestProgressRepository;
         _logger = logger;
+        // ADDED: Assign new repositories.
+        _curriculumStructureRepository = curriculumStructureRepository;
+        _subjectRepository = subjectRepository;
     }
 
     public async Task<LearningPathDto?> Handle(GetMyLearningPathQuery request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Fetching primary learning path for user {AuthUserId}", request.AuthUserId);
 
-        // For now, we fetch the most recently created custom learning path for the user.
-        // In the future, this logic would select the "primary" or "active" path.
         var learningPath = (await _learningPathRepository.FindAsync(lp => lp.CreatedBy == request.AuthUserId, cancellationToken))
             .OrderByDescending(lp => lp.CreatedAt)
             .FirstOrDefault();
@@ -53,10 +62,22 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         var questIds = learningPathQuests.Select(lpq => lpq.QuestId).ToList();
         var quests = (await _questRepository.GetAllAsync(cancellationToken)).Where(q => questIds.Contains(q.Id)).ToDictionary(q => q.Id);
 
-        // MODIFIED: Replaced the failing FindAsync call with our new specialized repository method.
-        // This is now efficient and correctly translated by the Supabase client.
         var userProgress = (await _userQuestProgressRepository.GetUserProgressForQuestsAsync(request.AuthUserId, questIds, cancellationToken))
             .ToDictionary(p => p.QuestId);
+
+        // MODIFIED: Fetch curriculum structure to map subjects to semesters.
+        var structures = (await _curriculumStructureRepository.FindAsync(cs => cs.CurriculumVersionId == learningPath.CurriculumVersionId, cancellationToken)).ToList();
+        var subjectToSemesterMap = structures.ToDictionary(s => s.SubjectId, s => s.Semester);
+
+        // MODIFIED: Create a lookup map from Quest ID to Semester.
+        var questToSemesterMap = new Dictionary<Guid, int>();
+        foreach (var quest in quests.Values)
+        {
+            if (quest.SubjectId.HasValue && subjectToSemesterMap.TryGetValue(quest.SubjectId.Value, out var semester))
+            {
+                questToSemesterMap[quest.Id] = semester;
+            }
+        }
 
         var chapterDtos = new List<QuestChapterDto>();
         foreach (var chapter in chapters)
@@ -69,25 +90,30 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                 Status = chapter.Status.ToString(),
             };
 
-            // This logic to associate quests with chapters needs to be refined.
-            // For now, we will add all quests to all chapters for demonstration.
+            // MODIFIED: This logic now correctly filters quests for the current chapter's semester.
             foreach (var lpQuest in learningPathQuests)
             {
-                if (quests.TryGetValue(lpQuest.QuestId, out var quest))
+                // Check if the quest belongs to the current chapter's semester (sequence).
+                if (questToSemesterMap.TryGetValue(lpQuest.QuestId, out var semester) && semester == chapter.Sequence)
                 {
-                    var status = userProgress.TryGetValue(quest.Id, out var progress)
-                        ? progress.Status.ToString()
-                        : "NotStarted";
-
-                    chapterDto.Quests.Add(new QuestSummaryDto
+                    if (quests.TryGetValue(lpQuest.QuestId, out var quest))
                     {
-                        Id = quest.Id,
-                        Title = quest.Title,
-                        Status = status,
-                        SequenceOrder = lpQuest.SequenceOrder
-                    });
+                        var status = userProgress.TryGetValue(quest.Id, out var progress)
+                            ? progress.Status.ToString()
+                            : "NotStarted";
+
+                        chapterDto.Quests.Add(new QuestSummaryDto
+                        {
+                            Id = quest.Id,
+                            Title = quest.Title,
+                            Status = status,
+                            SequenceOrder = lpQuest.SequenceOrder
+                        });
+                    }
                 }
             }
+            // MODIFIED: Ensure quests within the chapter are sorted by their sequence order.
+            chapterDto.Quests = chapterDto.Quests.OrderBy(q => q.SequenceOrder).ToList();
             chapterDtos.Add(chapterDto);
         }
 

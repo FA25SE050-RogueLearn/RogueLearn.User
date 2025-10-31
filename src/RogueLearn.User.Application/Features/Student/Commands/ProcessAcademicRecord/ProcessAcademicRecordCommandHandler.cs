@@ -17,7 +17,6 @@ namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicR
 
 public class FapRecordData
 {
-    // MODIFIED: Changed from double to double? to allow for null values from the AI.
     public double? Gpa { get; set; }
     public List<FapSubjectData> Subjects { get; set; } = new();
 }
@@ -43,6 +42,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ILearningPathQuestRepository _learningPathQuestRepository;
     private readonly ILogger<ProcessAcademicRecordCommandHandler> _logger;
     private readonly ICurriculumImportStorage _storage;
+    private readonly ICurriculumVersionRepository _curriculumVersionRepository;
 
     public ProcessAcademicRecordCommandHandler(
         IFapExtractionPlugin fapPlugin,
@@ -56,7 +56,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         IUserQuestProgressRepository questProgressRepository,
         ILearningPathQuestRepository learningPathQuestRepository,
         ILogger<ProcessAcademicRecordCommandHandler> logger,
-        ICurriculumImportStorage storage)
+        ICurriculumImportStorage storage,
+        ICurriculumVersionRepository curriculumVersionRepository)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -70,11 +71,19 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _learningPathQuestRepository = learningPathQuestRepository;
         _logger = logger;
         _storage = storage;
+        _curriculumVersionRepository = curriculumVersionRepository;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("[START] Processing academic record for user {AuthUserId}", request.AuthUserId);
+
+        var curriculumVersion = await _curriculumVersionRepository.GetByIdAsync(request.CurriculumVersionId, cancellationToken);
+        if (curriculumVersion == null)
+        {
+            _logger.LogWarning("Attempted to process academic record with an invalid CurriculumVersionId: {CurriculumVersionId}", request.CurriculumVersionId);
+            throw new NotFoundException(nameof(CurriculumVersion), request.CurriculumVersionId);
+        }
 
         _logger.LogInformation("Step 1: Pre-processing HTML to extract clean text.");
         string cleanTextForAi = PreprocessFapHtml(request.FapHtmlContent);
@@ -215,6 +224,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         int questsUpdated = 0;
         var semesters = structures.GroupBy(s => s.Semester).OrderBy(g => g.Key);
 
+        // ADDED: 1. Fetch all existing quests for this learning path to determine the next sequence number.
+        var existingLearningPathQuests = (await _learningPathQuestRepository.FindAsync(lpq => lpq.LearningPathId == learningPath.Id, cancellationToken)).ToList();
+        // ADDED: 2. Calculate the next available sequence order. If none exist, start at 1.
+        int nextSequenceOrder = existingLearningPathQuests.Any() ? existingLearningPathQuests.Max(lpq => lpq.SequenceOrder) + 1 : 1;
+
         foreach (var semesterGroup in semesters)
         {
             var chapter = await _questChapterRepository.FirstOrDefaultAsync(qc => qc.LearningPathId == learningPath.Id && qc.Sequence == semesterGroup.Key, cancellationToken);
@@ -254,15 +268,21 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     questsCreated++;
                     _logger.LogInformation("Created new Quest '{QuestTitle}' for Subject {SubjectCode}", quest.Title, subject.SubjectCode);
 
-                    var learningPathQuest = new LearningPathQuest
+                    // MODIFIED: Check if the link already exists before adding to prevent duplicates.
+                    var existingLink = existingLearningPathQuests.FirstOrDefault(lpq => lpq.QuestId == quest.Id);
+                    if (existingLink == null)
                     {
-                        LearningPathId = learningPath.Id,
-                        QuestId = quest.Id,
-                        DifficultyLevel = quest.DifficultyLevel,
-                        SequenceOrder = questsCreated + questsUpdated,
-                        IsMandatory = structure.IsMandatory,
-                    };
-                    await _learningPathQuestRepository.AddAsync(learningPathQuest, cancellationToken);
+                        var learningPathQuest = new LearningPathQuest
+                        {
+                            LearningPathId = learningPath.Id,
+                            QuestId = quest.Id,
+                            DifficultyLevel = quest.DifficultyLevel,
+                            // MODIFIED: 3. Use the new, reliable sequence number and increment it.
+                            SequenceOrder = nextSequenceOrder++,
+                            IsMandatory = structure.IsMandatory,
+                        };
+                        await _learningPathQuestRepository.AddAsync(learningPathQuest, cancellationToken);
+                    }
                 }
 
                 var userRecord = fapData.Subjects.FirstOrDefault(s => s.SubjectCode == subject.SubjectCode);
@@ -305,7 +325,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             LearningPathId = learningPath.Id,
             SubjectsProcessed = fapData.Subjects.Count,
             QuestsGenerated = questsCreated,
-            // MODIFIED: Safely access the nullable Gpa. Use 0.0 as a default if it's null.
             CalculatedGpa = fapData.Gpa ?? 0.0
         };
     }

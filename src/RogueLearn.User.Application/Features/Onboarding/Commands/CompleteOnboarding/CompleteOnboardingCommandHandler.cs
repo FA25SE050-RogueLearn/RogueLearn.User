@@ -55,8 +55,6 @@ public class CompleteOnboardingCommandHandler : IRequestHandler<CompleteOnboardi
         }
 
         // 2. Find the latest active version for the selected program.
-        // MODIFIED: Changed `v.IsActive` to `v.IsActive == true` for explicit comparison.
-        // This resolves the NullReferenceException in the Supabase LINQ provider.
         var versions = await _curriculumVersionRepository.FindAsync(
             v => v.ProgramId == request.CurriculumProgramId && v.IsActive == true,
             cancellationToken);
@@ -73,15 +71,30 @@ public class CompleteOnboardingCommandHandler : IRequestHandler<CompleteOnboardi
             throw new BadRequestException($"Invalid CareerRoadmapId: {request.CareerRoadmapId}");
         }
 
-        // 4. Create the student enrollment record using the found version ID.
-        var enrollment = new StudentEnrollment
+        // 4. MODIFIED: Check for an existing enrollment to ensure idempotency.
+        var existingEnrollment = await _studentEnrollmentRepository.FirstOrDefaultAsync(
+            e => e.AuthUserId == request.AuthUserId && e.CurriculumVersionId == latestVersion.Id,
+            cancellationToken);
+
+        if (existingEnrollment == null)
         {
-            AuthUserId = request.AuthUserId,
-            CurriculumVersionId = latestVersion.Id,
-            EnrollmentDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            Status = Domain.Enums.EnrollmentStatus.Active
-        };
-        await _studentEnrollmentRepository.AddAsync(enrollment, cancellationToken);
+            // If no enrollment exists, create it.
+            var enrollment = new StudentEnrollment
+            {
+                AuthUserId = request.AuthUserId,
+                CurriculumVersionId = latestVersion.Id,
+                EnrollmentDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                Status = Domain.Enums.EnrollmentStatus.Active
+            };
+            await _studentEnrollmentRepository.AddAsync(enrollment, cancellationToken);
+            _logger.LogInformation("Created new enrollment for user {AuthUserId} in curriculum version {VersionId}", request.AuthUserId, latestVersion.Id);
+        }
+        else
+        {
+            // If enrollment already exists, log it and proceed.
+            _logger.LogInformation("Existing enrollment found for user {AuthUserId} in curriculum version {VersionId}. Skipping creation.", request.AuthUserId, latestVersion.Id);
+        }
+
 
         // 5. Update the user's profile with their final choices.
         userProfile.RouteId = curriculumProgram.Id;
