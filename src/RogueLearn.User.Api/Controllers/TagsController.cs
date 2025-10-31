@@ -29,6 +29,7 @@ public class TagsController : ControllerBase
   /// </summary>
   [HttpGet("me")]
   [ProducesResponseType(typeof(GetMyTagsResponse), StatusCodes.Status200OK)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<ActionResult<GetMyTagsResponse>> GetMyTags([FromQuery] string? search, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();
@@ -42,6 +43,7 @@ public class TagsController : ControllerBase
   [HttpPost]
   [ProducesResponseType(typeof(CreateTagResponse), StatusCodes.Status201Created)]
   [ProducesResponseType(StatusCodes.Status400BadRequest)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<ActionResult<CreateTagResponse>> CreateTag([FromBody] CreateTagCommand command, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();
@@ -55,6 +57,7 @@ public class TagsController : ControllerBase
   /// </summary>
   [HttpDelete("{id:guid}")]
   [ProducesResponseType(StatusCodes.Status204NoContent)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<IActionResult> DeleteTag(Guid id, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();
@@ -67,6 +70,9 @@ public class TagsController : ControllerBase
   /// </summary>
   [HttpGet("~/api/notes/{noteId:guid}/tags")]
   [ProducesResponseType(typeof(GetTagsForNoteResponse), StatusCodes.Status200OK)]
+  [ProducesResponseType(StatusCodes.Status403Forbidden)]
+  [ProducesResponseType(StatusCodes.Status404NotFound)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<ActionResult<GetTagsForNoteResponse>> GetTagsForNote(Guid noteId, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();
@@ -80,6 +86,7 @@ public class TagsController : ControllerBase
   [HttpPost("~/api/notes/{noteId:guid}/tags/attach")]
   [ProducesResponseType(typeof(AttachTagToNoteResponse), StatusCodes.Status200OK)]
   [ProducesResponseType(StatusCodes.Status400BadRequest)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<ActionResult<AttachTagToNoteResponse>> AttachTag(Guid noteId, [FromBody] Guid tagId, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();
@@ -94,6 +101,7 @@ public class TagsController : ControllerBase
   [HttpPost("~/api/notes/{noteId:guid}/tags/create-and-attach")]
   [ProducesResponseType(typeof(CreateTagAndAttachToNoteResponse), StatusCodes.Status200OK)]
   [ProducesResponseType(StatusCodes.Status400BadRequest)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<ActionResult<CreateTagAndAttachToNoteResponse>> CreateAndAttach(Guid noteId, [FromBody] CreateTagAndAttachToNoteCommand command, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();
@@ -108,6 +116,7 @@ public class TagsController : ControllerBase
   /// </summary>
   [HttpDelete("~/api/notes/{noteId:guid}/tags/{tagId:guid}")]
   [ProducesResponseType(StatusCodes.Status204NoContent)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
   public async Task<IActionResult> RemoveTag(Guid noteId, Guid tagId, CancellationToken cancellationToken)
   {
     var authUserId = User.GetAuthUserId();

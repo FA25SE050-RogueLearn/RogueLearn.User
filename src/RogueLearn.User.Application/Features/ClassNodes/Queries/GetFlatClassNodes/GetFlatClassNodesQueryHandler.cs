@@ -15,7 +15,17 @@ public class GetFlatClassNodesQueryHandler : IRequestHandler<GetFlatClassNodesQu
 
     public async Task<IReadOnlyList<ClassNode>> Handle(GetFlatClassNodesQuery request, CancellationToken cancellationToken)
     {
-        var nodes = await _classNodeRepository.FindAsync(x => x.ClassId == request.ClassId && (!request.OnlyActive || x.IsActive), cancellationToken);
+        // Avoid complex OR logic in expression trees which the Supabase/Postgrest translator may not support.
+        // Build the predicate conditionally to prevent null filters in PrepareFilter.
+        IEnumerable<ClassNode> nodes;
+        if (request.OnlyActive)
+        {
+            nodes = await _classNodeRepository.FindAsync(x => x.ClassId == request.ClassId && x.IsActive, cancellationToken);
+        }
+        else
+        {
+            nodes = await _classNodeRepository.FindAsync(x => x.ClassId == request.ClassId, cancellationToken);
+        }
         var ordered = nodes
             .OrderBy(x => x.ParentId.HasValue ? 1 : 0)
             .ThenBy(x => x.ParentId)

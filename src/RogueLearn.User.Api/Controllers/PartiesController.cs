@@ -36,6 +36,7 @@ public class PartiesController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(CreatePartyResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreatePartyResponse>> CreateParty([FromBody] CreatePartyCommand command, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
@@ -50,6 +51,7 @@ public class PartiesController : ControllerBase
     [HttpGet("{partyId:guid}")]
     [ProducesResponseType(typeof(PartyDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<PartyDto>> GetPartyById(Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPartyByIdQuery(partyId), cancellationToken);
@@ -61,6 +63,7 @@ public class PartiesController : ControllerBase
     /// </summary>
     [HttpGet("{partyId:guid}/members")]
     [ProducesResponseType(typeof(IReadOnlyList<PartyMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<IReadOnlyList<PartyMemberDto>>> GetMembers(Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPartyMembersQuery(partyId), cancellationToken);
@@ -73,6 +76,8 @@ public class PartiesController : ControllerBase
     [HttpPost("{partyId:guid}/invite")]
     [PartyLeaderOnly("partyId")]
     [ProducesResponseType(typeof(PartyInvitationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<PartyInvitationDto>> InviteMember(Guid partyId, [FromBody] InviteMemberRequest body, CancellationToken cancellationToken)
     {
         var inviterId = User.GetAuthUserId();
@@ -103,6 +108,8 @@ public class PartiesController : ControllerBase
     [HttpGet("{partyId:guid}/invitations/pending")]
     [PartyLeaderOnly("partyId")]
     [ProducesResponseType(typeof(IReadOnlyList<PartyInvitationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<IReadOnlyList<PartyInvitationDto>>> GetPendingInvitations(Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPendingInvitationsQuery(partyId), cancellationToken);
@@ -127,6 +134,8 @@ public class PartiesController : ControllerBase
     [HttpPost("{partyId:guid}/stash")]
     [PartyLeaderOnly("partyId")]
     [ProducesResponseType(typeof(PartyStashItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<PartyStashItemDto>> AddResource(Guid partyId, [FromBody] AddPartyResourceRequest body, CancellationToken cancellationToken)
     {
         var userId = User.GetAuthUserId();
@@ -154,6 +163,7 @@ public class PartiesController : ControllerBase
     /// </summary>
     [HttpGet("{partyId:guid}/stash")]
     [ProducesResponseType(typeof(IReadOnlyList<PartyStashItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<IReadOnlyList<PartyStashItemDto>>> GetResources(Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPartyResourcesQuery(partyId), cancellationToken);
@@ -166,6 +176,8 @@ public class PartiesController : ControllerBase
     [HttpGet("/api/admin/parties")]
     [AdminOnly]
     [ProducesResponseType(typeof(IReadOnlyList<PartyDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<IReadOnlyList<PartyDto>>> GetAllParties(CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetAllPartiesQuery(), cancellationToken);
