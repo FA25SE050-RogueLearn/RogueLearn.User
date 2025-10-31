@@ -30,10 +30,16 @@ public sealed class GetTagsForNoteQueryHandler : IRequestHandler<GetTagsForNoteQ
   public async Task<GetTagsForNoteResponse> Handle(GetTagsForNoteQuery request, CancellationToken cancellationToken)
   {
     var note = await _noteRepository.GetByIdAsync(request.NoteId, cancellationToken);
-    if (note is null || note.AuthUserId != request.AuthUserId)
+    if (note is null)
     {
-      _logger.LogWarning("GetTagsForNote denied: note not found or not owned. NoteId={NoteId}, AuthUserId={AuthUserId}", request.NoteId, request.AuthUserId);
-      throw new InvalidOperationException("Note not found or access denied.");
+      _logger.LogWarning("GetTagsForNote failed: note not found. NoteId={NoteId}", request.NoteId);
+      throw new RogueLearn.User.Application.Exceptions.NotFoundException("Note", request.NoteId.ToString());
+    }
+
+    if (note.AuthUserId != request.AuthUserId)
+    {
+      _logger.LogWarning("GetTagsForNote denied: note not owned. NoteId={NoteId}, AuthUserId={AuthUserId}", request.NoteId, request.AuthUserId);
+      throw new RogueLearn.User.Application.Exceptions.ForbiddenException("Access denied to note.");
     }
 
     var tagIds = (await _noteTagRepository.GetTagIdsForNoteAsync(note.Id, cancellationToken)).ToList();

@@ -15,7 +15,17 @@ public class GetTreeClassNodesQueryHandler : IRequestHandler<GetTreeClassNodesQu
 
     public async Task<IReadOnlyList<ClassNodeTreeItem>> Handle(GetTreeClassNodesQuery request, CancellationToken cancellationToken)
     {
-        var nodes = await _classNodeRepository.FindAsync(x => x.ClassId == request.ClassId && (!request.OnlyActive || x.IsActive), cancellationToken);
+        // Avoid complex OR logic in expression trees which the Supabase/Postgrest translator may not support.
+        // Build the predicate conditionally to prevent null filters in PrepareFilter.
+        IEnumerable<ClassNode> nodes;
+        if (request.OnlyActive)
+        {
+            nodes = await _classNodeRepository.FindAsync(x => x.ClassId == request.ClassId && x.IsActive, cancellationToken);
+        }
+        else
+        {
+            nodes = await _classNodeRepository.FindAsync(x => x.ClassId == request.ClassId, cancellationToken);
+        }
 
         // Build lookup for non-root parents to avoid null dictionary keys
         var byParent = nodes
