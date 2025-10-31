@@ -224,9 +224,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         int questsUpdated = 0;
         var semesters = structures.GroupBy(s => s.Semester).OrderBy(g => g.Key);
 
-        // ADDED: 1. Fetch all existing quests for this learning path to determine the next sequence number.
+        // MODIFIED: 1. Fetch all existing quests for this learning path to determine the next sequence number.
         var existingLearningPathQuests = (await _learningPathQuestRepository.FindAsync(lpq => lpq.LearningPathId == learningPath.Id, cancellationToken)).ToList();
-        // ADDED: 2. Calculate the next available sequence order. If none exist, start at 1.
+        // MODIFIED: 2. Calculate the next available sequence order. If none exist, start at 1.
         int nextSequenceOrder = existingLearningPathQuests.Any() ? existingLearningPathQuests.Max(lpq => lpq.SequenceOrder) + 1 : 1;
 
         foreach (var semesterGroup in semesters)

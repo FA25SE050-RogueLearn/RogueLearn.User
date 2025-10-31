@@ -5,7 +5,8 @@ using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 
-public class GenerateQuestStepsCommand : IRequest<List<QuestStep>>
+// MODIFIED: The command now returns a list of DTOs.
+public class GenerateQuestStepsCommand : IRequest<List<GeneratedQuestStepDto>>
 {
     [JsonIgnore]
     public Guid AuthUserId { get; set; }

@@ -19,9 +19,6 @@ public class QuestsController : ControllerBase
         _mediator = mediator;
     }
 
-    /// <summary>
-    /// Gets a single quest by its ID, including its steps.
-    /// </summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(QuestDetailsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -31,19 +28,15 @@ public class QuestsController : ControllerBase
         return result is not null ? Ok(result) : NotFound();
     }
 
-    /// <summary>
-    /// Transaction 4: Generates the detailed, playable steps (modules, challenges)
-    /// for a single Quest on-demand, using AI to process the underlying syllabus content.
-    /// </summary>
     [HttpPost("{questId:guid}/generate-steps")]
-    [ProducesResponseType(typeof(List<QuestStep>), StatusCodes.Status201Created)]
+    // MODIFIED: The response type is now the new DTO.
+    [ProducesResponseType(typeof(List<GeneratedQuestStepDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GenerateQuestSteps(Guid questId)
     {
         var authUserId = User.GetAuthUserId();
         var command = new GenerateQuestStepsCommand { AuthUserId = authUserId, QuestId = questId };
         var result = await _mediator.Send(command);
-        // Correctly references the newly added GetQuestById action.
         return CreatedAtAction(nameof(GetQuestById), new { id = questId }, result);
     }
 }
