@@ -91,6 +91,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>(); 
 
+        // Guild repositories
+        services.AddScoped<IGuildRepository, GuildRepository>();
+        services.AddScoped<IGuildMemberRepository, GuildMemberRepository>();
+        services.AddScoped<IGuildInvitationRepository, GuildInvitationRepository>();
+        // Guild posts repository
+        services.AddScoped<IGuildPostRepository, GuildPostRepository>();
+
         // System repositories
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<INoteRepository, NoteRepository>();
@@ -98,6 +105,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INoteTagRepository, NoteTagRepository>();
         services.AddScoped<INoteSkillRepository, NoteSkillRepository>();
         services.AddScoped<INoteQuestRepository, NoteQuestRepository>();
+
+        // Social/Party repositories
+        services.AddScoped<IPartyRepository, PartyRepository>();
+        services.AddScoped<IPartyMemberRepository, PartyMemberRepository>();
+        services.AddScoped<IPartyInvitationRepository, PartyInvitationRepository>();
+        services.AddScoped<IPartyStashItemRepository, PartyStashItemRepository>();
 
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
@@ -118,6 +131,9 @@ public static class ServiceCollectionExtensions
 
         // Avatar URL validator
         services.AddScoped<IAvatarUrlValidator, AvatarUrlValidator>();
+
+        // Party notification service
+        services.AddScoped<IPartyNotificationService, PartyNotificationService>();
 
         return services;
     }

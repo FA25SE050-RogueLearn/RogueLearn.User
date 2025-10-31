@@ -1,4 +1,5 @@
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -11,7 +12,7 @@ public class PartyActivity : BaseEntity
     [Column("party_id")]
     public Guid PartyId { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(StringEnumConverter))]
     [Column("activity_type")]
     public ActivityType ActivityType { get; set; }
 

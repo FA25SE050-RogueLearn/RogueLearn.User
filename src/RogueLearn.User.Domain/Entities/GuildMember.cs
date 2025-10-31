@@ -1,5 +1,6 @@
-using System.Text.Json.Serialization;
 using BuildingBlocks.Shared.Common;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
 
@@ -14,12 +15,12 @@ public class GuildMember : BaseEntity
     [Column("auth_user_id")]
     public Guid AuthUserId { get; set; }
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     [Column("role")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public GuildRole Role { get; set; } = GuildRole.Member;
 
-    [JsonConverter(typeof(JsonStringEnumConverter))]
     [Column("status")]
+    [JsonConverter(typeof(StringEnumConverter))]
     public MemberStatus Status { get; set; } = MemberStatus.Active;
 
     [Column("joined_at")]
