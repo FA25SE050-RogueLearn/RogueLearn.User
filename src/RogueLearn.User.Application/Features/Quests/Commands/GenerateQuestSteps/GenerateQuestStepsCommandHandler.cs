@@ -13,6 +13,16 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestStep
 
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
+    // ADDED: A private record to represent the exact structure of the AI's JSON output.
+    // The key change is that `Content` is a `JsonElement`, which can hold any valid JSON structure.
+    private record AiQuestStep(
+        [property: JsonPropertyName("stepNumber")] int StepNumber,
+        [property: JsonPropertyName("title")] string Title,
+        [property: JsonPropertyName("description")] string Description,
+        [property: JsonPropertyName("stepType")] string StepType,
+        [property: JsonPropertyName("content")] JsonElement Content
+    );
+
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _questStepRepository;
     private readonly ISubjectRepository _subjectRepository;
@@ -85,15 +95,12 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(syllabus.Content, userContext, cancellationToken);
 
-        // MODIFIED: Enhanced Logging and Validation
         if (string.IsNullOrWhiteSpace(generatedStepsJson))
         {
-            // This now captures if the plugin itself failed or returned nothing.
             _logger.LogError("AI plugin returned null or empty JSON for Quest {QuestId}. The AI call may have failed or produced no output.", request.QuestId);
             throw new InvalidOperationException("AI failed to generate valid quest steps.");
         }
 
-        // ADDED: Log the raw JSON from the AI *before* trying to parse it.
         _logger.LogInformation("Attempting to deserialize AI-generated JSON for Quest {QuestId}: {JsonContent}", request.QuestId, generatedStepsJson);
 
         var serializerOptions = new JsonSerializerOptions
@@ -102,30 +109,44 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
         };
 
-        List<QuestStep>? generatedSteps;
+        // MODIFIED: Deserialize into the temporary AiQuestStep record first.
+        List<AiQuestStep>? aiGeneratedSteps;
         try
         {
-            generatedSteps = JsonSerializer.Deserialize<List<QuestStep>>(generatedStepsJson, serializerOptions);
+            aiGeneratedSteps = JsonSerializer.Deserialize<List<AiQuestStep>>(generatedStepsJson, serializerOptions);
         }
         catch (JsonException jsonEx)
         {
-            // ADDED: Catch deserialization errors and provide a much more detailed log.
             _logger.LogError(jsonEx, "JSON deserialization failed for Quest {QuestId}. The AI returned malformed JSON. Raw response was: {JsonContent}", request.QuestId, generatedStepsJson);
             throw new InvalidOperationException("AI failed to generate valid quest steps. The response was not in the correct format.", jsonEx);
         }
 
-        if (generatedSteps is null || !generatedSteps.Any())
+        if (aiGeneratedSteps is null || !aiGeneratedSteps.Any())
         {
             _logger.LogError("AI failed to generate valid quest steps from syllabus content. Deserialized JSON was empty or invalid for Quest {QuestId}.", request.QuestId);
             throw new InvalidOperationException("AI failed to generate valid quest steps.");
         }
 
-        foreach (var step in generatedSteps)
+        // MODIFIED: Manually map from the AiQuestStep DTO to the QuestStep domain entity.
+        var generatedSteps = new List<QuestStep>();
+        foreach (var aiStep in aiGeneratedSteps)
         {
-            step.Id = Guid.NewGuid();
-            step.QuestId = request.QuestId;
+            // TryParse the string from the AI to our strongly-typed enum.
+            Enum.TryParse<Domain.Enums.StepType>(aiStep.StepType, true, out var stepType);
 
-            await _questStepRepository.AddAsync(step, cancellationToken);
+            var newStep = new QuestStep
+            {
+                Id = Guid.NewGuid(),
+                QuestId = request.QuestId,
+                StepNumber = aiStep.StepNumber,
+                Title = aiStep.Title,
+                Description = aiStep.Description,
+                StepType = stepType,
+                // This is the crucial conversion: turn the JsonElement back into a string for the database.
+                Content = aiStep.Content.GetRawText()
+            };
+            generatedSteps.Add(newStep);
+            await _questStepRepository.AddAsync(newStep, cancellationToken);
         }
 
         _logger.LogInformation("Successfully generated and saved {StepCount} steps for Quest {QuestId}", generatedSteps.Count, request.QuestId);
