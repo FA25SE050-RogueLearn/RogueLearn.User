@@ -113,11 +113,16 @@ public class MappingProfile : Profile
         CreateMap<Achievement, UpdateAchievementResponse>()
             .ForMember(dest => dest.RuleConfig, opt => opt.Ignore())
             .AfterMap((src, dest) => { dest.RuleConfig = src.RuleConfig != null ? JsonSerializer.Serialize(src.RuleConfig) : null; });
+
+        // --- MODIFICATION START ---
         // Mappings for Quest Details
         CreateMap<Quest, QuestDetailsDto>();
-        CreateMap<QuestStep, QuestStepDto>();
+        // This mapping now populates the `Content` property by parsing the JSON string from the database.
+        CreateMap<QuestStep, QuestStepDto>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+                !string.IsNullOrWhiteSpace(src.Content) ? JsonDocument.Parse(src.Content, default) : null));
+        // --- MODIFICATION END ---
 
-        // MODIFIED: Explicitly provide the default value for the optional parameter to satisfy the expression tree compiler.
         CreateMap<QuestStep, GeneratedQuestStepDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
                 !string.IsNullOrWhiteSpace(src.Content) ? JsonDocument.Parse(src.Content, default) : null));
@@ -127,6 +132,5 @@ public class MappingProfile : Profile
         CreateMap<PartyMember, PartyMemberDto>();
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
-
     }
 }
