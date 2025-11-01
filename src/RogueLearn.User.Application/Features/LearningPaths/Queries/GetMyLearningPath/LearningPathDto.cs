@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/LearningPaths/Queries/GetMyLearningPath/LearningPathDto.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/LearningPaths/Queries/GetMyLearningPath/LearningPathDto.cs
 namespace RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
 
 public class LearningPathDto
@@ -25,4 +25,8 @@ public class QuestSummaryDto
     public string Title { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public int SequenceOrder { get; set; }
+    // ADDED: Include the parent LearningPath ID for context.
+    public Guid LearningPathId { get; set; }
+    // ADDED: Include the parent Chapter ID for constructing navigation URLs.
+    public Guid ChapterId { get; set; }
 }
