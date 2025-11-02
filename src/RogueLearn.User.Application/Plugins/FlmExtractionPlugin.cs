@@ -111,9 +111,9 @@ Return only the JSON, no additional text or formatting.";
   ""materials"": [{""materialDescription"": ""string"", ""author"": ""string"", ""publisher"": ""string"", ""publishedDate"": ""YYYY-MM-DD"", ""edition"": ""string"", ""isbn"": ""string"", ""isMainMaterial"": boolean, ""isHardCopy"": boolean, ""isOnline"": boolean, ""note"": ""string""}],
   ""content"": {
     ""courseDescription"": ""string"",
-    ""weeklySchedule"": [{""weekNumber"": 1-10, ""topic"": ""string"", ""activities"": [""string""], ""readings"": [""string""]}],
+    ""weeklySchedule"": [{""weekNumber"": 1-10, ""topic"": ""string"", ""activities"": [""string""], ""readings"": [""string""], ""constructiveQuestions"": [{""question"": ""string"", ""answer"": ""string"", ""category"": ""string"", ""sessionNumber"": number (optional)}]}],
     ""assessments"": [{""name"": ""string"", ""type"": ""string"", ""weightPercentage"": integer, ""description"": ""string""}],
-    ""constructiveQuestions"": [{""question"": ""string"", ""answer"": ""string"", ""category"": ""string""}],
+    ""courseLearningOutcomes"": [{""id"": ""string"", ""details"": ""string""}],
     ""requiredTexts"": [""string""],
     ""recommendedTexts"": [""string""],
     ""gradingPolicy"": ""string"",
@@ -124,6 +124,8 @@ Return only the JSON, no additional text or formatting.";
 RULES:
 - versionNumber: Numeric YYYYMMDD from approvedDate; if missing, use current date in YYYYMMDD
 - weeklySchedule: If text indicates 30 sessions, generate 5 weeks (1-5); otherwise 10 weeks (1-10). Distribute content logically
+- constructiveQuestions: Attach questions to the appropriate week. If session numbers are available, use them to map questions to weeks; otherwise, group logically by topic.
+- courseLearningOutcomes: Extract CLO id (e.g., ""CLO1"") and full details to populate LO Details
 - Dates: Use YYYY-MM-DD format, null if missing
 - Missing values: empty strings/arrays, false, 0, null for dates
 - For the root field 'description', summarize into a concise overview (≤ 300 characters)

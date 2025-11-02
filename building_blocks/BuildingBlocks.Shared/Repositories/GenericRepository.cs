@@ -101,6 +101,19 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         return response.Models.First();
     }
 
+    public async Task<IEnumerable<T>> AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
+    {
+        var entitiesList = entities.ToList();
+        if (!entitiesList.Any())
+            return Enumerable.Empty<T>();
+
+        var response = await _supabaseClient
+            .From<T>()
+            .Insert(entitiesList, cancellationToken: cancellationToken);
+
+        return response.Models;
+    }
+
     public virtual async Task<T> UpdateAsync(T entity, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
@@ -111,11 +124,44 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         return response.Models.First();
     }
 
+    public virtual async Task<IEnumerable<T>> UpdateRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
+    {
+        if (!entities.Any())
+            return Enumerable.Empty<T>();
+
+        var updatedEntities = new List<T>();
+        
+        // Supabase doesn't support bulk updates with different conditions, so we batch them
+        foreach (var entity in entities)
+        {
+            var response = await _supabaseClient
+                .From<T>()
+                .Where(x => x.Id == entity.Id)
+                .Update(entity, cancellationToken: cancellationToken);
+            
+            updatedEntities.AddRange(response.Models);
+        }
+
+        return updatedEntities;
+    }
+
     public virtual async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await _supabaseClient
             .From<T>()
             .Where(x => x.Id == id)
+            .Delete(cancellationToken: cancellationToken);
+    }
+
+    public virtual async Task DeleteRangeAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        if (!ids.Any())
+            return;
+
+        // Supabase supports bulk delete with IN clause
+        await _supabaseClient
+            .From<T>()
+            .Where(x => ids.Contains(x.Id))
             .Delete(cancellationToken: cancellationToken);
     }
 

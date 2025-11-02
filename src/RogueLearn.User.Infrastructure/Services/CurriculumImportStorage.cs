@@ -310,10 +310,11 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         try
         {
             const string bucketName = "curriculum-imports";
+            // Version folder naming for syllabus follows the raw version number
             var data = await TryGetLatestJsonAsync(
                 bucketName,
                 $"syllabus/{subjectCode}",
-                $"v{version}",
+                version.ToString(),
                 cancellationToken);
 
             if (data != null)
