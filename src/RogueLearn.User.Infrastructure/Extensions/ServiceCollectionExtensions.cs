@@ -89,7 +89,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
         services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
-        services.AddScoped<IQuestStepRepository, QuestStepRepository>(); 
+        services.AddScoped<IQuestStepRepository, QuestStepRepository>();
+        // ADDED: Repositories for tracking quest attempts and step progress.
+        services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
+        services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();
+
 
         // Guild repositories
         services.AddScoped<IGuildRepository, GuildRepository>();
