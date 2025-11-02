@@ -5,9 +5,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.LearningPaths.Commands.AnalyzeLearningGap;
 using RogueLearn.User.Application.Features.LearningPaths.Commands.ForgeLearningPath;
+using RogueLearn.User.Application.Features.LearningPaths.Commands.DeleteLearningPath;
 using RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
-using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 using RogueLearn.User.Application.Models;
+using RogueLearn.User.Api.Attributes;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -66,5 +67,18 @@ public class LearningPathsController : ControllerBase
         var command = new ForgeLearningPathCommand { AuthUserId = authUserId, ForgingPayload = payload };
         var result = await _mediator.Send(command);
         return CreatedAtAction(nameof(GetMyLearningPath), new { /* route params if any */ }, result);
+    }
+
+    /// <summary>
+    /// Admin-only: Deletes a learning path by its ID, including related quest chapters and quests.
+    /// </summary>
+    [HttpDelete("~/api/admin/learning-paths/{id}")]
+    [AdminOnly]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteLearningPath(Guid id, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new DeleteLearningPathCommand { Id = id }, cancellationToken);
+        return NoContent();
     }
 }

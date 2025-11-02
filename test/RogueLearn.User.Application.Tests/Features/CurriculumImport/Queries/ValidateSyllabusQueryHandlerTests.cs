@@ -12,7 +12,7 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Queries;
 
 public class ValidateSyllabusQueryHandlerTests
 {
-    private readonly Mock<SyllabusDataValidator> _mockValidator;
+    private readonly Mock<FluentValidation.IValidator<SyllabusData>> _mockValidator;
     private readonly Mock<ICurriculumImportStorage> _mockStorage;
     private readonly Mock<ILogger<ValidateSyllabusQueryHandler>> _mockLogger;
     private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
@@ -20,7 +20,7 @@ public class ValidateSyllabusQueryHandlerTests
 
     public ValidateSyllabusQueryHandlerTests()
     {
-        _mockValidator = new Mock<SyllabusDataValidator>();
+        _mockValidator = new Mock<FluentValidation.IValidator<SyllabusData>>();
         _mockStorage = new Mock<ICurriculumImportStorage>();
         _mockLogger = new Mock<ILogger<ValidateSyllabusQueryHandler>>();
         _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
