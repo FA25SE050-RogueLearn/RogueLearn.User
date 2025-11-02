@@ -12,6 +12,9 @@ public class FapRecordData
     [JsonPropertyName("gpa")]
     public double? Gpa { get; set; }
 
+    [JsonPropertyName("totalCredits")]
+    public int? TotalCredits { get; set; } // Optional: total credits calculated
+
     [JsonPropertyName("subjects")]
     public List<FapSubjectData> Subjects { get; set; } = new();
 }
@@ -26,6 +29,9 @@ public class FapSubjectData
 
     [JsonPropertyName("mark")]
     public double? Mark { get; set; }
+
+    [JsonPropertyName("credits")]
+    public int? Credits { get; set; } // Optional: credits for this subject
 }
 
 /// <summary>

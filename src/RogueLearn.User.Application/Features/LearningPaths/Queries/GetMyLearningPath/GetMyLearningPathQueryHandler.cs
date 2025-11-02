@@ -2,6 +2,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Enums; // Required for QuestStatus and PathProgressStatus enums
 
 namespace RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
 
@@ -82,7 +83,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                 Id = chapter.Id,
                 Title = chapter.Title,
                 Sequence = chapter.Sequence,
-                Status = chapter.Status.ToString(),
+                // Status is now calculated dynamically below
             };
 
             foreach (var lpQuest in learningPathQuests)
@@ -101,15 +102,41 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                             Title = quest.Title,
                             Status = status,
                             SequenceOrder = lpQuest.SequenceOrder,
-                            // MODIFIED: Populate the LearningPathId for each quest.
                             LearningPathId = learningPath.Id,
-                            // MODIFIED: Populate the ChapterId for each quest.
                             ChapterId = chapter.Id
                         });
                     }
                 }
             }
             chapterDto.Quests = chapterDto.Quests.OrderBy(q => q.SequenceOrder).ToList();
+
+            // MODIFICATION: This is the robust, corrected logic for dynamic chapter status.
+            // It correctly handles all combinations of quest statuses within a chapter.
+            if (chapterDto.Quests.Any())
+            {
+                bool allCompleted = chapterDto.Quests.All(q => q.Status == QuestStatus.Completed.ToString());
+                bool anyInProgress = chapterDto.Quests.Any(q => q.Status == QuestStatus.InProgress.ToString());
+                bool anyCompleted = chapterDto.Quests.Any(q => q.Status == QuestStatus.Completed.ToString());
+
+                if (allCompleted)
+                {
+                    chapterDto.Status = PathProgressStatus.Completed.ToString();
+                }
+                else if (anyInProgress || anyCompleted) // If any are in progress, OR if some are completed (but not all), the chapter is in progress.
+                {
+                    chapterDto.Status = PathProgressStatus.InProgress.ToString();
+                }
+                else // The only remaining case is that all quests are "NotStarted"
+                {
+                    chapterDto.Status = PathProgressStatus.NotStarted.ToString();
+                }
+            }
+            else
+            {
+                // If a chapter has no quests, default to its stored status.
+                chapterDto.Status = chapter.Status.ToString();
+            }
+
             chapterDtos.Add(chapterDto);
         }
 

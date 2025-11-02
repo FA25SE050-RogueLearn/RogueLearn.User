@@ -162,10 +162,22 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             _logger.LogInformation("Found existing enrollment with ID {EnrollmentId}", enrollment.Id);
         }
 
+        var allDbSubjects = (await _subjectRepository.GetAllAsync(cancellationToken)).ToDictionary(s => s.SubjectCode);
+        var missingSubjectCodes = fapData.Subjects
+            .Select(s => s.SubjectCode)
+            .Where(sc => !allDbSubjects.ContainsKey(sc))
+            .Distinct()
+            .ToList();
+
+        if (missingSubjectCodes.Any())
+        {
+            _logger.LogWarning("Missing {Count} subjects in the database from the user's transcript. These subjects will be skipped: {MissingSubjects}",
+                missingSubjectCodes.Count, string.Join(", ", missingSubjectCodes));
+        }
+
         foreach (var subjectRecord in fapData.Subjects)
         {
-            var subject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectRecord.SubjectCode, cancellationToken);
-            if (subject == null)
+            if (!allDbSubjects.TryGetValue(subjectRecord.SubjectCode, out var subject))
             {
                 _logger.LogWarning("Subject with code {SubjectCode} from transcript not found in database. Skipping.", subjectRecord.SubjectCode);
                 continue;
@@ -224,10 +236,38 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         int questsUpdated = 0;
         var semesters = structures.GroupBy(s => s.Semester).OrderBy(g => g.Key);
 
-        // MODIFIED: 1. Fetch all existing quests for this learning path to determine the next sequence number.
         var existingLearningPathQuests = (await _learningPathQuestRepository.FindAsync(lpq => lpq.LearningPathId == learningPath.Id, cancellationToken)).ToList();
-        // MODIFIED: 2. Calculate the next available sequence order. If none exist, start at 1.
         int nextSequenceOrder = existingLearningPathQuests.Any() ? existingLearningPathQuests.Max(lpq => lpq.SequenceOrder) + 1 : 1;
+
+        var fapPassedSubjects = fapData.Subjects
+            .Where(s => "Passed".Equals(s.Status, StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.SubjectCode)
+            .ToHashSet();
+
+        int firstInProgressSemester = -1;
+        // MODIFICATION: The logic to find the first incomplete semester is corrected here.
+        // It now correctly looks up the subject entity from the `allDbSubjects` dictionary values
+        // to get the subject code, instead of trying to access a non-existent navigation property.
+        foreach (var semesterGroup in semesters)
+        {
+            bool allPassedInSemester = semesterGroup.All(structure =>
+            {
+                var subjectEntity = allDbSubjects.Values.FirstOrDefault(s => s.Id == structure.SubjectId);
+                if (subjectEntity == null) return false; // Subject not in our master list, so not passed.
+                return fapPassedSubjects.Contains(subjectEntity.SubjectCode);
+            });
+
+            if (!allPassedInSemester)
+            {
+                firstInProgressSemester = semesterGroup.Key;
+                break;
+            }
+        }
+        if (firstInProgressSemester == -1 && semesters.Any())
+        {
+            firstInProgressSemester = semesters.Last().Key;
+        }
+
 
         foreach (var semesterGroup in semesters)
         {
@@ -239,7 +279,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     LearningPathId = learningPath.Id,
                     Title = $"Semester {semesterGroup.Key}",
                     Sequence = semesterGroup.Key,
-                    Status = PathProgressStatus.NotStarted
+                    Status = (semesterGroup.Key == firstInProgressSemester) ? PathProgressStatus.InProgress : PathProgressStatus.NotStarted
                 };
                 await _questChapterRepository.AddAsync(chapter, cancellationToken);
                 _logger.LogInformation("Created new Quest Chapter for Semester {Semester}", semesterGroup.Key);
@@ -247,7 +287,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
             foreach (var structure in semesterGroup)
             {
-                var subject = await _subjectRepository.GetByIdAsync(structure.SubjectId, cancellationToken);
+                var subject = allDbSubjects.Values.FirstOrDefault(s => s.Id == structure.SubjectId);
                 if (subject == null) continue;
 
                 var quest = await _questRepository.FirstOrDefaultAsync(q => q.SubjectId == subject.Id && q.CreatedBy == request.AuthUserId, cancellationToken);
@@ -268,7 +308,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     questsCreated++;
                     _logger.LogInformation("Created new Quest '{QuestTitle}' for Subject {SubjectCode}", quest.Title, subject.SubjectCode);
 
-                    // MODIFIED: Check if the link already exists before adding to prevent duplicates.
                     var existingLink = existingLearningPathQuests.FirstOrDefault(lpq => lpq.QuestId == quest.Id);
                     if (existingLink == null)
                     {
@@ -277,7 +316,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                             LearningPathId = learningPath.Id,
                             QuestId = quest.Id,
                             DifficultyLevel = quest.DifficultyLevel,
-                            // MODIFIED: 3. Use the new, reliable sequence number and increment it.
                             SequenceOrder = nextSequenceOrder++,
                             IsMandatory = structure.IsMandatory,
                         };
@@ -295,17 +333,20 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 var progress = await _questProgressRepository.FirstOrDefaultAsync(p => p.AuthUserId == request.AuthUserId && p.QuestId == quest.Id, cancellationToken);
                 if (progress == null)
                 {
-                    progress = new UserQuestProgress
+                    if (userRecord != null)
                     {
-                        AuthUserId = request.AuthUserId,
-                        QuestId = quest.Id,
-                        Status = questStatus,
-                        CompletedAt = questStatus == QuestStatus.Completed ? DateTimeOffset.UtcNow : null
-                    };
-                    await _questProgressRepository.AddAsync(progress, cancellationToken);
-                    _logger.LogInformation("Created new UserQuestProgress for Quest '{QuestTitle}' with Status {Status}", quest.Title, questStatus);
+                        progress = new UserQuestProgress
+                        {
+                            AuthUserId = request.AuthUserId,
+                            QuestId = quest.Id,
+                            Status = questStatus,
+                            CompletedAt = questStatus == QuestStatus.Completed ? DateTimeOffset.UtcNow : null
+                        };
+                        await _questProgressRepository.AddAsync(progress, cancellationToken);
+                        _logger.LogInformation("Created new UserQuestProgress for Quest '{QuestTitle}' with Status {Status}", quest.Title, questStatus);
+                    }
                 }
-                else
+                else if (userRecord != null)
                 {
                     progress.Status = questStatus;
                     progress.CompletedAt = questStatus == QuestStatus.Completed ? DateTimeOffset.UtcNow : null;

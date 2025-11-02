@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Domain.Entities;
+// ADDED: New using directives for the update command
+using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestProgress;
+using RogueLearn.User.Domain.Enums;
 
 [ApiController]
 [Route("api/quests")]
@@ -29,7 +32,6 @@ public class QuestsController : ControllerBase
     }
 
     [HttpPost("{questId:guid}/generate-steps")]
-    // MODIFIED: The response type is now the new DTO.
     [ProducesResponseType(typeof(List<GeneratedQuestStepDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GenerateQuestSteps(Guid questId)
@@ -39,4 +41,30 @@ public class QuestsController : ControllerBase
         var result = await _mediator.Send(command);
         return CreatedAtAction(nameof(GetQuestById), new { id = questId }, result);
     }
+
+    // MODIFICATION: Added a new endpoint for manually updating quest progress.
+    /// <summary>
+    /// Manually updates the status of a specific quest for the authenticated user.
+    /// </summary>
+    [HttpPost("{questId:guid}/progress")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateQuestProgress(Guid questId, [FromBody] UpdateQuestProgressRequest body)
+    {
+        var authUserId = User.GetAuthUserId();
+        var command = new UpdateQuestProgressCommand
+        {
+            AuthUserId = authUserId,
+            QuestId = questId,
+            Status = body.Status
+        };
+        await _mediator.Send(command);
+        return NoContent();
+    }
+}
+
+// DTO for the new endpoint's request body
+public class UpdateQuestProgressRequest
+{
+    public QuestStatus Status { get; set; }
 }

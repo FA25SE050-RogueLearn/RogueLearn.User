@@ -24,9 +24,8 @@ public class FapExtractionPlugin : IFapExtractionPlugin
     {
         var header = @"
 Analyze the following academic transcript text and extract the grade information for each subject. Return it as JSON following this exact schema:
-
 {
-  ""gpa"": number (optional, find if present),
+  ""gpa"": number (optional, calculate if possible using the formula below),
   ""subjects"": [
     {
       ""subjectCode"": ""string (e.g., 'CSI104')"",
@@ -42,11 +41,26 @@ Important Rules:
 - Map the status text directly to 'Passed', 'Failed', or 'Studying'.
 - Ignore header rows or rows that do not contain a subject code.
 - If a grade is not present for a subject (e.g., for 'Studying' courses), the 'mark' property should be null.
-- Return ONLY the JSON object, with no additional text or markdown formatting.
+
+GPA CALCULATION (IMPORTANT):
+- Calculate GPA using the weighted average formula: GPA = Σ(mark × credits) / Σ(credits)
+- ONLY include subjects with status 'Passed' and a valid mark > 0 in the calculation
+- Use these credit values based on subject patterns:
+  * TRS*** subjects (e.g., TRS601): 0 credits - EXCLUDE from GPA entirely
+  * LAB*** subjects (e.g., LAB211): 1 credit
+  * VOV*** subjects (e.g., VOV114, VOV124): 2 credits
+  * SSL***, SSG*** (soft skills): 2 credits
+  * OTP*** (physical education): 2 credits
+  * All other subjects: 3 credits (default)
+- Round the final GPA to 2 decimal places
+- If no subjects can be used for GPA calculation, set gpa to null
+- Example: If you have PRF192 (mark: 8.1, 3 credits) and LAB211 (mark: 3.0, 1 credit):
+  GPA = (8.1×3 + 3.0×1) / (3+1) = 27.3 / 4 = 6.825 → 6.83
+
+Return ONLY the JSON object, with no additional text or markdown formatting.
 
 Text to extract from:
 ";
-
         var prompt = header + rawTranscriptText + @"
 
 Return only the JSON, no additional text or formatting.";
@@ -68,6 +82,7 @@ Return only the JSON, no additional text or formatting.";
     private static string CleanToJson(string rawResponse)
     {
         var cleanedResponse = rawResponse.Trim();
+
         if (cleanedResponse.StartsWith("```"))
         {
             var firstNewline = cleanedResponse.IndexOf('\n');
@@ -76,6 +91,7 @@ Return only the JSON, no additional text or formatting.";
                 cleanedResponse = cleanedResponse[(firstNewline + 1)..];
             }
         }
+
         if (cleanedResponse.EndsWith("```") && cleanedResponse.Length >= 3)
         {
             var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
@@ -84,12 +100,14 @@ Return only the JSON, no additional text or formatting.";
                 cleanedResponse = cleanedResponse[..lastFenceIndex];
             }
         }
+
         var startIdx = cleanedResponse.IndexOf('{');
         var endIdx = cleanedResponse.LastIndexOf('}');
         if (startIdx >= 0 && endIdx > startIdx)
         {
             cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
         }
+
         return cleanedResponse.Trim();
     }
 }
