@@ -234,7 +234,7 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         try
         {
             const string bucketName = "curriculum-imports"; // Use same bucket but different folder
-            
+
             if (string.IsNullOrEmpty(subjectCode))
             {
                 _logger.LogWarning("Subject code is empty, using fallback storage key");
@@ -248,7 +248,7 @@ public class CurriculumImportStorage : ICurriculumImportStorage
                     string.Empty,
                     inputHash,
                     cancellationToken);
-                
+
                 _logger.LogInformation("Saved syllabus validation data with temporary key: {Key}", tempKey);
                 return;
             }
@@ -269,7 +269,7 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, 
+            _logger.LogError(ex,
                 "Failed to save syllabus data for subject: {SubjectCode} version: {Version}",
                 subjectCode, version);
             throw;

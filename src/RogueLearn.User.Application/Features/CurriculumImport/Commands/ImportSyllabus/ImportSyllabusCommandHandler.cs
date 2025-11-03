@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Commands/ImportSyllabus/ImportSyllabusCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -843,13 +844,15 @@ public class ImportSyllabusCommandHandler : IRequestHandler<ImportSyllabusComman
         {
             SubjectId = subject.Id,
             VersionNumber = data.VersionNumber,
-            Content = JsonSerializer.Serialize(
+            // MODIFIED: This is the key change. Instead of serializing the content object to a string,
+            // we deserialize it into a Dictionary<string, object> to match the updated entity property.
+            Content = JsonSerializer.Deserialize<Dictionary<string, object>>(JsonSerializer.Serialize(
                 data.Content,
                 new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                     WriteIndented = false
-                }),
+                })),
             EffectiveDate = data.EffectiveDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = createdBy

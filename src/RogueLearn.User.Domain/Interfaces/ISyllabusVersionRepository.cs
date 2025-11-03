@@ -6,6 +6,5 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface ISyllabusVersionRepository : IGenericRepository<SyllabusVersion>
 {
-    // MODIFICATION: Using the new, more specific method name.
     Task<IEnumerable<SyllabusVersion>> GetActiveBySubjectIdAsync(Guid subjectId, CancellationToken cancellationToken = default);
 }

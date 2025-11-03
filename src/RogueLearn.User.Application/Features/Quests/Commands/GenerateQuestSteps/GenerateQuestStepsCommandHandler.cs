@@ -13,7 +13,7 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestStep
 
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
-    // MODIFICATION: The internal record now includes ExperiencePoints.
+    // The internal record now includes ExperiencePoints.
     private record AiQuestStep(
         [property: JsonPropertyName("stepNumber")] int StepNumber,
         [property: JsonPropertyName("title")] string Title,
@@ -74,7 +74,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             .OrderByDescending(s => s.VersionNumber)
             .FirstOrDefault();
 
-        if (syllabus is null || string.IsNullOrWhiteSpace(syllabus.Content))
+        // MODIFICATION: The check is updated to handle the new Dictionary type.
+        // It now verifies that the Content dictionary is not null and contains entries.
+        if (syllabus is null || syllabus.Content is null || !syllabus.Content.Any())
         {
             throw new BadRequestException("No active syllabus content available for this quest's subject.");
         }
@@ -93,7 +95,10 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         }
         string userContext = $"The user's career goal is '{userCareerClass}'. Tailor the content to be relevant for this role.";
 
-        var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(syllabus.Content, userContext, cancellationToken);
+        // MODIFICATION: The syllabus.Content dictionary is serialized back into a JSON string
+        // before being passed to the AI plugin, which expects string input.
+        var syllabusJson = JsonSerializer.Serialize(syllabus.Content);
+        var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(syllabusJson, userContext, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(generatedStepsJson))
         {
@@ -139,7 +144,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 Title = aiStep.Title,
                 Description = aiStep.Description,
                 StepType = stepType,
-                // MODIFICATION: The ExperiencePoints property is now mapped from the AI response.
+                // The ExperiencePoints property is now mapped from the AI response.
                 ExperiencePoints = aiStep.ExperiencePoints,
                 Content = aiStep.Content.GetRawText()
             };

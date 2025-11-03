@@ -1,17 +1,17 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommandHandler.cs
+using HtmlAgilityPack;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-using System.Text.Json;
-using HtmlAgilityPack;
 using System.Security.Cryptography;
 using System.Text;
-using RogueLearn.User.Application.Interfaces;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
@@ -47,7 +47,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ISkillRepository _skillRepository;
     private readonly IUserSkillRepository _userSkillRepository;
 
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     public ProcessAcademicRecordCommandHandler(
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         IFapExtractionPlugin fapPlugin,
         IStudentEnrollmentRepository enrollmentRepository,
         IStudentSemesterSubjectRepository semesterSubjectRepository,
@@ -274,7 +276,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             firstInProgressSemester = semesters.Last().Key;
         }
 
-
         foreach (var semesterGroup in semesters)
         {
             var chapter = await _questChapterRepository.FirstOrDefaultAsync(qc => qc.LearningPathId == learningPath.Id && qc.Sequence == semesterGroup.Key, cancellationToken);
@@ -392,21 +393,19 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         foreach (var subjectId in subjectIds)
         {
-            // MODIFICATION: Use the new specialized repository method instead of complex LINQ
-            var activeSyllabi = (await _syllabusVersionRepository.GetActiveBySubjectIdAsync(subjectId, cancellationToken))
-                                    .OrderByDescending(sv => sv.VersionNumber)
-                                    .ToList();
-
+            var activeSyllabi = await _syllabusVersionRepository.GetActiveBySubjectIdAsync(subjectId, cancellationToken);
             var activeSyllabus = activeSyllabi.FirstOrDefault();
 
-            if (activeSyllabus != null && !string.IsNullOrWhiteSpace(activeSyllabus.Content))
+            // MODIFIED: Check if syllabus content is not null before proceeding.
+            if (activeSyllabus != null && activeSyllabus.Content != null)
             {
                 try
                 {
-                    using var jsonDoc = JsonDocument.Parse(activeSyllabus.Content);
-                    if (jsonDoc.RootElement.TryGetProperty("sessions", out var sessions) && sessions.ValueKind == JsonValueKind.Array)
+                    // MODIFIED: Because SyllabusVersion.Content is now a Dictionary, we don't need to parse it from a string.
+                    // We can access its properties directly.
+                    if (activeSyllabus.Content.TryGetValue("sessions", out var sessionsObj) && sessionsObj is JsonElement sessionsElement && sessionsElement.ValueKind == JsonValueKind.Array)
                     {
-                        foreach (var session in sessions.EnumerateArray())
+                        foreach (var session in sessionsElement.EnumerateArray())
                         {
                             if (session.TryGetProperty("lo", out var loElement) && loElement.ValueKind == JsonValueKind.String)
                             {
@@ -419,9 +418,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                         }
                     }
                 }
-                catch (JsonException ex)
+                catch (Exception ex) // Catch a broader exception since direct dictionary access can have various issues.
                 {
-                    _logger.LogWarning(ex, "Could not parse syllabus content for SubjectId {SubjectId} during skill initialization.", subjectId);
+                    _logger.LogWarning(ex, "Could not process syllabus content for SubjectId {SubjectId} during skill initialization.", subjectId);
                 }
             }
         }
@@ -467,7 +466,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             }
         }
 
-        _logger.LogInformation("Skill tree initialization completed for User {AuthUserId}. Total unique skills: {SkillCount}", authUserId, uniqueSkillTags.Count);
+        _logger.LogInformation("Skill tree initialization completed for User {AuthUserId}. Total unique skills found in syllabus: {SkillCount}", authUserId, uniqueSkillTags.Count);
     }
 
     private string PreprocessFapHtml(string rawHtml)

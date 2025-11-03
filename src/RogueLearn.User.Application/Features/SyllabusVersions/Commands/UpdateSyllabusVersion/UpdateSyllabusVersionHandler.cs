@@ -1,7 +1,9 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/SyllabusVersions/Commands/UpdateSyllabusVersion/UpdateSyllabusVersionHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Interfaces;
+using System.Text.Json; // ADDED: To handle JSON deserialization.
 
 namespace RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 
@@ -26,7 +28,11 @@ public class UpdateSyllabusVersionHandler : IRequestHandler<UpdateSyllabusVersio
             throw new NotFoundException("SyllabusVersion", request.Id);
         }
 
-        syllabusVersion.Content = request.Content;
+        // MODIFIED: Deserialize the incoming JSON string from the command into the Dictionary
+        // required by the domain entity. A null/empty string results in a null dictionary.
+        syllabusVersion.Content = !string.IsNullOrWhiteSpace(request.Content)
+            ? JsonSerializer.Deserialize<Dictionary<string, object>>(request.Content)
+            : null;
         syllabusVersion.EffectiveDate = request.EffectiveDate;
         syllabusVersion.IsActive = request.IsActive;
 

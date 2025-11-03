@@ -1,8 +1,10 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/SyllabusVersions/Commands/CreateSyllabusVersion/CreateSyllabusVersionHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using System.Text.Json; // ADDED: To handle JSON deserialization.
 
 namespace RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
 
@@ -46,7 +48,11 @@ public class CreateSyllabusVersionHandler : IRequestHandler<CreateSyllabusVersio
         {
             SubjectId = request.SubjectId,
             VersionNumber = request.VersionNumber,
-            Content = request.Content,
+            // MODIFIED: Deserialize the incoming JSON string from the command into the Dictionary
+            // required by the domain entity. A null/empty string results in a null dictionary.
+            Content = !string.IsNullOrWhiteSpace(request.Content)
+                ? JsonSerializer.Deserialize<Dictionary<string, object>>(request.Content)
+                : null,
             EffectiveDate = request.EffectiveDate,
             IsActive = request.IsActive,
             CreatedBy = request.CreatedBy

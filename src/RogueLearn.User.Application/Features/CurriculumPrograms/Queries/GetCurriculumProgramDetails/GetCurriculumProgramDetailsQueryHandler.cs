@@ -4,7 +4,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Domain.Entities; // ADD THIS USING
+using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 
@@ -142,7 +142,9 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
                         IsActive = sv.IsActive,
                         CreatedBy = sv.CreatedBy,
                         CreatedAt = sv.CreatedAt,
-                        HasContent = !string.IsNullOrWhiteSpace(sv.Content)
+                        // MODIFIED: This check is updated to work with the Dictionary<string, object>? type.
+                        // It now checks if the dictionary is not null and contains any elements.
+                        HasContent = sv.Content != null && sv.Content.Any()
                     })
                     .ToList();
 

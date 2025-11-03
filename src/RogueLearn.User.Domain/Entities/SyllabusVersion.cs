@@ -1,5 +1,7 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/SyllabusVersion.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
+using System.Collections.Generic; // ADDED: To support Dictionary type.
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -12,8 +14,10 @@ public class SyllabusVersion : BaseEntity
     [Column("version_number")]
     public int VersionNumber { get; set; }
 
+    // MODIFIED: Changed the type from 'string' to 'Dictionary<string, object>?' to correctly map the JSONB column from the database.
+    // This allows the Supabase client's deserializer to correctly handle the structured JSON content.
     [Column("content")]
-    public string Content { get; set; } = string.Empty;
+    public Dictionary<string, object>? Content { get; set; }
 
     [Column("effective_date")]
     public DateOnly EffectiveDate { get; set; }

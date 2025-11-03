@@ -77,10 +77,18 @@ public class MappingProfile : Profile
         CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
         CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
 
+        // MODIFICATION: Added explicit mapping rules for SyllabusVersion.Content to handle the type mismatch.
+        // It now serializes the Dictionary from the entity to a JSON string for all relevant DTOs.
         // SyllabusVersion mappings
-        CreateMap<SyllabusVersion, SyllabusVersionDto>();
-        CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>();
-        CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>();
+        CreateMap<SyllabusVersion, SyllabusVersionDto>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+                src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
+        CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+                src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
+        CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+                src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
 
         // CurriculumProgramDetails mappings
         CreateMap<CurriculumProgram, CurriculumProgramDetailsResponse>();
@@ -114,14 +122,12 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.RuleConfig, opt => opt.Ignore())
             .AfterMap((src, dest) => { dest.RuleConfig = src.RuleConfig != null ? JsonSerializer.Serialize(src.RuleConfig) : null; });
 
-        // --- MODIFICATION START ---
         // Mappings for Quest Details
         CreateMap<Quest, QuestDetailsDto>();
         // This mapping now populates the `Content` property by parsing the JSON string from the database.
         CreateMap<QuestStep, QuestStepDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
                 !string.IsNullOrWhiteSpace(src.Content) ? JsonDocument.Parse(src.Content, default) : null));
-        // --- MODIFICATION END ---
 
         CreateMap<QuestStep, GeneratedQuestStepDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
