@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
@@ -6,7 +7,8 @@ using Serilog;
 using DotNetEnv;
 using BuildingBlocks.Shared.Authentication;
 using Microsoft.SemanticKernel;
-using System.Text.Json.Serialization; // ADD THIS USING
+using Newtonsoft.Json.Converters; // MODIFIED: Changed from System.Text.Json to Newtonsoft.
+using Newtonsoft.Json.Serialization; // ADDED: For CamelCasePropertyNamesContractResolver.
 
 // Load environment variables from .env file
 Env.Load();
@@ -58,19 +60,20 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructureServices();
 
-    // MODIFIED: Chain the AddApiServices call to configure JSON options
-    builder.Services.AddApiServices()
-        .ConfigureHttpJsonOptions(options =>
+    // MODIFICATION: The call to AddControllers() is now chained with AddNewtonsoftJson().
+    // This instructs the entire ASP.NET Core pipeline to use Newtonsoft.Json for serialization,
+    // resolving the conflict with the Supabase client library.
+    builder.Services.AddControllers()
+        .AddNewtonsoftJson(options =>
         {
-            // This converter allows the API to accept and return enums as strings (e.g., "Bachelor")
-            // instead of integers (e.g., 1).
-            options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-        })
-        .Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
-        {
-            // This does the same for controllers that use MVC's formatter (e.g., returning Ok(object)).
-            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            // Configure Newtonsoft to serialize enums as strings (e.g., "Bachelor" instead of 1).
+            options.SerializerSettings.Converters.Add(new StringEnumConverter());
+            // Use camelCase for JSON properties to maintain the API contract.
+            options.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
         });
+
+    // The old AddApiServices() extension method is now simplified as its work is done above.
+    builder.Services.AddApiServices();
 
     var app = builder.Build();
 

@@ -48,7 +48,8 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddApiServices(this IServiceCollection services)
     {
-        services.AddControllers();
+        // MODIFICATION: The services.AddControllers() call was moved to Program.cs to configure NewtonsoftJson.
+        // This method now only configures Swagger and CORS.
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(c =>
         {

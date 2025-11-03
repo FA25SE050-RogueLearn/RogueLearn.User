@@ -14,12 +14,15 @@ public sealed class GetUserSkillsQueryHandler : IRequestHandler<GetUserSkillsQue
 
     public async Task<GetUserSkillsResponse> Handle(GetUserSkillsQuery request, CancellationToken cancellationToken)
     {
-        var skills = await _userSkillRepository.FindAsync(s => s.AuthUserId == request.AuthUserId, cancellationToken);
+        // MODIFICATION: Changed the call from the unreliable generic FindAsync to our new, specialized method.
+        var skills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
 
         return new GetUserSkillsResponse
         {
             Skills = skills.Select(s => new UserSkillDto
             {
+                // ADDED: Mapping the SkillId for a more complete DTO.
+                SkillId = s.SkillId,
                 SkillName = s.SkillName,
                 ExperiencePoints = s.ExperiencePoints,
                 Level = s.Level,

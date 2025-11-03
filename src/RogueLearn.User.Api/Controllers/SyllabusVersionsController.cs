@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/SyllabusVersionsController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
@@ -5,6 +6,8 @@ using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusV
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 using RogueLearn.User.Application.Features.SyllabusVersions.Commands.DeleteSyllabusVersion;
+using RogueLearn.User.Domain.Interfaces; // ADDED: To directly access the repository.
+using System.Text.Json; // ADDED: To handle JSON serialization if needed.
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -20,11 +23,44 @@ namespace RogueLearn.User.Api.Controllers;
 public class SyllabusVersionsController : ControllerBase
 {
     private readonly IMediator _mediator;
+    // ADDED: Inject the repository directly for our diagnostic endpoint.
+    private readonly ISyllabusVersionRepository _syllabusVersionRepository;
 
-    public SyllabusVersionsController(IMediator mediator)
+    public SyllabusVersionsController(IMediator mediator, ISyllabusVersionRepository syllabusVersionRepository)
     {
         _mediator = mediator;
+        // ADDED: Assign the injected repository.
+        _syllabusVersionRepository = syllabusVersionRepository;
     }
+
+    // ADDED: A new diagnostic endpoint to directly inspect the content the API is receiving.
+    /// <summary>
+    /// [DIAGNOSTIC] Gets the raw 'content' field for a specific syllabus version.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to verify exactly what JSON content the application layer is receiving from the database for a given syllabus version ID.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the syllabus version.</param>
+    /// <returns>The raw JSONB content as a JSON object.</returns>
+    [HttpGet("{id:guid}/content")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyllabusContentById(Guid id)
+    {
+        var syllabusVersion = await _syllabusVersionRepository.GetByIdAsync(id, CancellationToken.None);
+        if (syllabusVersion == null)
+        {
+            return NotFound(new { message = "Syllabus version not found." });
+        }
+        if (syllabusVersion.Content == null)
+        {
+            return NoContent();
+        }
+        // This will return the Dictionary<string, object> as a JSON object response.
+        return Ok(syllabusVersion.Content);
+    }
+
 
     /// <summary>
     /// Gets syllabus versions by subject ID.

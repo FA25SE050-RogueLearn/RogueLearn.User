@@ -17,20 +17,22 @@ public class SyllabusVersionRepository : GenericRepository<SyllabusVersion>, ISy
     {
     }
 
+    // MODIFIED: The previous single-ID method is replaced with an efficient, batch-capable method.
     /// <summary>
-    /// Finds all active syllabus versions for a given subject, ordered by version descending.
-    /// This now correctly relies on the generic repository's handling of the updated entity model.
+    /// Fetches all active syllabus versions for a given list of subject IDs in a single query.
+    /// This implementation uses the native Supabase 'in' filter, which is more reliable than complex LINQ expressions.
     /// </summary>
-    public async Task<IEnumerable<SyllabusVersion>> GetActiveBySubjectIdAsync(Guid subjectId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<SyllabusVersion>> GetActiveBySubjectIdsAsync(List<Guid> subjectIds, CancellationToken cancellationToken = default)
     {
-        // MODIFIED: The previous manual parsing was incorrect and causing deserialization issues.
-        // By fixing the SyllabusVersion entity, we can now use the standard, reliable FindAsync method
-        // from the generic repository. The Supabase client will handle the JSONB mapping automatically.
+        if (subjectIds == null || !subjectIds.Any())
+        {
+            return Enumerable.Empty<SyllabusVersion>();
+        }
+
         var response = await _supabaseClient
             .From<SyllabusVersion>()
-            .Filter("subject_id", Operator.Equals, subjectId.ToString())
+            .Filter("subject_id", Operator.In, subjectIds.Select(id => id.ToString()).ToList())
             .Filter("is_active", Operator.Equals, "true")
-            .Order("version_number", Ordering.Descending)
             .Get(cancellationToken);
 
         return response.Models;

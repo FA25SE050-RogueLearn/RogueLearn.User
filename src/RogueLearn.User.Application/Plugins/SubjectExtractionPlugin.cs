@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/SubjectExtractionPlugin.cs
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -56,6 +57,42 @@ Return only the JSON object.";
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to extract single subject data using AI");
+            return string.Empty;
+        }
+    }
+
+    // ADDED: Implementation of the new method to extract a skill from a learning objective.
+    public async Task<string> ExtractSkillFromObjectiveAsync(string learningObjectiveText, CancellationToken cancellationToken = default)
+    {
+        var prompt = $@"
+From the following learning objective sentence, extract the single most important, concise skill or topic name.
+
+RULES:
+- The output MUST be 2-4 words maximum.
+- The output should be a noun phrase representing the core concept.
+- Examples:
+  - Input: 'To master the contents regarding the emergence, stages of development, subject, methodology, and significance of studying Scientific Socialism.'
+    Output: 'Scientific Socialism'
+  - Input: 'Develop skills of argument, writing, presentations, critical thinking, handling social relations and group activities.'
+    Output: 'Critical Thinking and Communication'
+  - Input: 'Master the Marxist-Leninist views on socialist democracy and the socialist state...'
+    Output: 'Socialist Democracy'
+
+Return ONLY the skill name, with no other text.
+
+Learning Objective:
+""{learningObjectiveText}""
+
+Extracted Skill Name:
+";
+        try
+        {
+            var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+            return result.GetValue<string>()?.Trim() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to extract skill from learning objective using AI for text: '{ObjectiveText}'", learningObjectiveText);
             return string.Empty;
         }
     }

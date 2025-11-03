@@ -46,6 +46,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ISyllabusVersionRepository _syllabusVersionRepository;
     private readonly ISkillRepository _skillRepository;
     private readonly IUserSkillRepository _userSkillRepository;
+    private readonly ISubjectExtractionPlugin _subjectExtractionPlugin;
 
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     public ProcessAcademicRecordCommandHandler(
@@ -65,7 +66,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         ICurriculumVersionRepository curriculumVersionRepository,
         ISyllabusVersionRepository syllabusVersionRepository,
         ISkillRepository skillRepository,
-        IUserSkillRepository userSkillRepository)
+        IUserSkillRepository userSkillRepository,
+        ISubjectExtractionPlugin subjectExtractionPlugin)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -83,10 +85,12 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _syllabusVersionRepository = syllabusVersionRepository;
         _skillRepository = skillRepository;
         _userSkillRepository = userSkillRepository;
+        _subjectExtractionPlugin = subjectExtractionPlugin;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
     {
+        // ... (The beginning of the method remains unchanged as it is working correctly)
         _logger.LogInformation("[START] Processing academic record for user {AuthUserId}", request.AuthUserId);
 
         var curriculumVersion = await _curriculumVersionRepository.GetByIdAsync(request.CurriculumVersionId, cancellationToken);
@@ -386,42 +390,67 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var structures = (await _curriculumStructureRepository.FindAsync(
             cs => cs.CurriculumVersionId == curriculumVersionId,
             cancellationToken)).ToList();
+        _logger.LogDebug("Found {Count} structures for curriculum version.", structures.Count);
 
         var subjectIds = structures.Select(s => s.SubjectId).Distinct().ToList();
+        _logger.LogDebug("Found {Count} unique subjects in curriculum.", subjectIds.Count);
+
+        var allSyllabiResults = await _syllabusVersionRepository.GetActiveBySubjectIdsAsync(subjectIds, cancellationToken);
+
+        var allSyllabi = allSyllabiResults
+            .GroupBy(sv => sv.SubjectId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(sv => sv.VersionNumber).FirstOrDefault());
+        _logger.LogDebug("Fetched {Count} active syllabi for the subjects in the curriculum.", allSyllabi.Count);
 
         var uniqueSkillTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var subjectId in subjectIds)
         {
-            var activeSyllabi = await _syllabusVersionRepository.GetActiveBySubjectIdAsync(subjectId, cancellationToken);
-            var activeSyllabus = activeSyllabi.FirstOrDefault();
-
-            // MODIFIED: Check if syllabus content is not null before proceeding.
-            if (activeSyllabus != null && activeSyllabus.Content != null)
+            if (allSyllabi.TryGetValue(subjectId, out var activeSyllabus) && activeSyllabus?.Content != null)
             {
+                var syllabusContentJson = JsonSerializer.Serialize(activeSyllabus.Content);
+                _logger.LogInformation("Processing syllabus content for SubjectId {SubjectId}: {SyllabusContent}", subjectId, syllabusContentJson);
+
                 try
                 {
-                    // MODIFIED: Because SyllabusVersion.Content is now a Dictionary, we don't need to parse it from a string.
-                    // We can access its properties directly.
-                    if (activeSyllabus.Content.TryGetValue("sessions", out var sessionsObj) && sessionsObj is JsonElement sessionsElement && sessionsElement.ValueKind == JsonValueKind.Array)
+                    // MODIFICATION: The object returned from the Supabase client, when deserialized into a Dictionary,
+                    // contains Newtonsoft.Json.Linq.JArray. We must handle this specific type.
+                    if (activeSyllabus.Content.TryGetValue("sessions", out var sessionsObj) && sessionsObj is Newtonsoft.Json.Linq.JArray sessionsArray)
                     {
-                        foreach (var session in sessionsElement.EnumerateArray())
+                        foreach (var session in sessionsArray)
                         {
-                            if (session.TryGetProperty("lo", out var loElement) && loElement.ValueKind == JsonValueKind.String)
+                            // Treat each item in the JArray as a JObject to access its properties.
+                            var sessionObject = session as Newtonsoft.Json.Linq.JObject;
+                            if (sessionObject != null && sessionObject.TryGetValue("lo", StringComparison.OrdinalIgnoreCase, out var loToken) && loToken.Type == Newtonsoft.Json.Linq.JTokenType.String)
                             {
-                                var skillTag = loElement.GetString();
-                                if (!string.IsNullOrWhiteSpace(skillTag))
+                                var learningObjective = loToken.ToString();
+                                if (!string.IsNullOrWhiteSpace(learningObjective))
                                 {
-                                    uniqueSkillTags.Add(skillTag);
+                                    var extractedSkill = await _subjectExtractionPlugin.ExtractSkillFromObjectiveAsync(learningObjective, cancellationToken);
+
+                                    _logger.LogInformation("AI Skill Extraction: Input LO='{LearningObjective}', AI Output Skill='{ExtractedSkill}'", learningObjective, extractedSkill);
+
+                                    if (!string.IsNullOrWhiteSpace(extractedSkill))
+                                    {
+                                        uniqueSkillTags.Add(extractedSkill);
+                                    }
                                 }
                             }
                         }
                     }
+                    else
+                    {
+                        _logger.LogWarning("Syllabus content for SubjectId {SubjectId} is missing a 'sessions' array or it is not a JSON array.", subjectId);
+                    }
                 }
-                catch (Exception ex) // Catch a broader exception since direct dictionary access can have various issues.
+                catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Could not process syllabus content for SubjectId {SubjectId} during skill initialization.", subjectId);
                 }
+            }
+            else
+            {
+                _logger.LogWarning("No active syllabus with content found for SubjectId {SubjectId}. Cannot extract skills for this subject.", subjectId);
             }
         }
 
