@@ -61,8 +61,8 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .When(x => x.RequiredTexts != null);
 
         RuleForEach(x => x.RequiredTexts)
-            .MaximumLength(300)
-            .WithMessage("Each required text cannot exceed 300 characters.")
+            .MaximumLength(1000)
+            .WithMessage("Each required text cannot exceed 1000 characters.")
             .When(x => x.RequiredTexts != null);
 
         RuleFor(x => x.RecommendedTexts)
@@ -71,8 +71,8 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .When(x => x.RecommendedTexts != null);
 
         RuleForEach(x => x.RecommendedTexts)
-            .MaximumLength(300)
-            .WithMessage("Each recommended text cannot exceed 300 characters.")
+            .MaximumLength(1000)
+            .WithMessage("Each recommended text cannot exceed 1000 characters.")
             .When(x => x.RecommendedTexts != null);
 
         RuleFor(x => x.GradingPolicy)
@@ -109,8 +109,8 @@ public class SyllabusWeekValidator : AbstractValidator<SyllabusWeek>
             .When(x => x.Activities != null);
 
         RuleForEach(x => x.Activities)
-            .MaximumLength(300)
-            .WithMessage("Each activity cannot exceed 300 characters.")
+            .MaximumLength(1000)
+            .WithMessage("Each activity cannot exceed 1000 characters.")
             .When(x => x.Activities != null);
 
         RuleFor(x => x.Readings)
