@@ -23,6 +23,21 @@ public class CreateGuildCommandHandler : IRequestHandler<CreateGuildCommand, Cre
 
     public async Task<CreateGuildResponse> Handle(CreateGuildCommand request, CancellationToken cancellationToken)
     {
+        // Enforce one-guild-per-user constraints
+        // 1) If the user is already an active member of any guild, they cannot create another guild
+        var existingMemberships = await _guildMemberRepository.GetMembershipsByUserAsync(request.CreatorAuthUserId, cancellationToken);
+        if (existingMemberships.Any(m => m.Status == MemberStatus.Active))
+        {
+            throw new Exceptions.BadRequestException("User already belongs to a guild and cannot create another guild.");
+        }
+
+        // 2) If the user has already created a guild, they cannot create another guild
+        var createdGuilds = await _guildRepository.GetGuildsByCreatorAsync(request.CreatorAuthUserId, cancellationToken);
+        if (createdGuilds.Any())
+        {
+            throw new Exceptions.BadRequestException("User has already created a guild and cannot create another.");
+        }
+
         var isPublic = request.Privacy.Equals("public", StringComparison.OrdinalIgnoreCase);
 
         var guild = new Guild

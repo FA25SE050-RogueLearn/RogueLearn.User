@@ -41,6 +41,21 @@ public class AcceptGuildInvitationCommandHandler : IRequestHandler<AcceptGuildIn
             throw new Exceptions.ForbiddenException("Invitation not intended for this user.");
         }
 
+        // Enforce one-guild-per-user constraints before adding membership
+        // 1) If the user is already an active member of any other guild, they cannot join another guild
+        var memberships = await _memberRepository.GetMembershipsByUserAsync(request.AuthUserId, cancellationToken);
+        if (memberships.Any(m => m.Status == MemberStatus.Active && m.GuildId != request.GuildId))
+        {
+            throw new Exceptions.BadRequestException("User already belongs to a guild and cannot join another guild.");
+        }
+
+        // 2) If the user has already created a guild, they cannot participate in any other guild
+        var createdGuilds = await _guildRepository.GetGuildsByCreatorAsync(request.AuthUserId, cancellationToken);
+        if (createdGuilds.Any(g => g.Id != request.GuildId))
+        {
+            throw new Exceptions.BadRequestException("User is the creator of another guild and cannot join a different guild.");
+        }
+
         // Capacity check
         var count = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
         if (count >= guild.MaxMembers)

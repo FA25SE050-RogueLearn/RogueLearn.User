@@ -14,9 +14,10 @@ public class PartyInvitationRepository : GenericRepository<PartyInvitation>, IPa
 
     public async Task<IEnumerable<PartyInvitation>> GetInvitationsByPartyAsync(Guid partyId, CancellationToken cancellationToken = default)
     {
+        // Use explicit filters to avoid enum serialization issues in PostgREST
         var response = await _supabaseClient
             .From<PartyInvitation>()
-            .Where(pi => pi.PartyId == partyId)
+            .Filter("party_id", Supabase.Postgrest.Constants.Operator.Equals, partyId.ToString())
             .Get(cancellationToken);
 
         return response.Models;
@@ -24,9 +25,12 @@ public class PartyInvitationRepository : GenericRepository<PartyInvitation>, IPa
 
     public async Task<IEnumerable<PartyInvitation>> GetPendingInvitationsByPartyAsync(Guid partyId, CancellationToken cancellationToken = default)
     {
+        // IMPORTANT: Do not compare enum values via lambda Where; it serializes to numeric (e.g., "0"),
+        // which causes Postgres enum type to reject the value. Use string representation via Filter instead.
         var response = await _supabaseClient
             .From<PartyInvitation>()
-            .Where(pi => pi.PartyId == partyId && pi.Status == InvitationStatus.Pending)
+            .Filter("party_id", Supabase.Postgrest.Constants.Operator.Equals, partyId.ToString())
+            .Filter("status", Supabase.Postgrest.Constants.Operator.Equals, InvitationStatus.Pending.ToString())
             .Get(cancellationToken);
 
         return response.Models;
