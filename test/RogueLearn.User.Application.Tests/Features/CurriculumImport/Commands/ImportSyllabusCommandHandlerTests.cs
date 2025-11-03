@@ -20,7 +20,7 @@ public class ImportSyllabusCommandHandlerTests
     private readonly Mock<ISubjectRepository> _mockSubjectRepository;
     private readonly Mock<ISyllabusVersionRepository> _mockSyllabusVersionRepository;
     private readonly Mock<ICurriculumImportStorage> _mockStorage;
-    private readonly Mock<SyllabusDataValidator> _mockValidator;
+    private readonly Mock<FluentValidation.IValidator<SyllabusData>> _mockValidator;
     private readonly Mock<ILogger<ImportSyllabusCommandHandler>> _mockLogger;
     private readonly Mock<IFlmExtractionPlugin> _mockFlmPlugin;
     private readonly ImportSyllabusCommandHandler _handler;
@@ -30,7 +30,7 @@ public class ImportSyllabusCommandHandlerTests
         _mockSubjectRepository = new Mock<ISubjectRepository>();
         _mockSyllabusVersionRepository = new Mock<ISyllabusVersionRepository>();
         _mockStorage = new Mock<ICurriculumImportStorage>();
-        _mockValidator = new Mock<SyllabusDataValidator>();
+        _mockValidator = new Mock<FluentValidation.IValidator<SyllabusData>>();
         _mockLogger = new Mock<ILogger<ImportSyllabusCommandHandler>>();
         _mockFlmPlugin = new Mock<IFlmExtractionPlugin>();
 

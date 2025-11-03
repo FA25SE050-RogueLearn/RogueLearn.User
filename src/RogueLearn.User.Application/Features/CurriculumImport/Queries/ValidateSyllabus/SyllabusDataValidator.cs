@@ -42,11 +42,10 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .WithMessage("Course description cannot exceed 2000 characters.")
             .When(x => !string.IsNullOrEmpty(x.CourseDescription));
 
-        // Learning outcomes removed from schema to reduce duplication and token usage
-        // Add validation for constructive questions now part of content
-        RuleForEach(x => x.ConstructiveQuestions)
-            .SetValidator(new ConstructiveQuestionValidator())
-            .When(x => x.ConstructiveQuestions != null);
+        // Course Learning Outcomes
+        RuleForEach(x => x.CourseLearningOutcomes)
+            .SetValidator(new CourseLearningOutcomeValidator())
+            .When(x => x.CourseLearningOutcomes != null);
 
         RuleForEach(x => x.WeeklySchedule)
             .SetValidator(new SyllabusWeekValidator())
@@ -123,6 +122,11 @@ public class SyllabusWeekValidator : AbstractValidator<SyllabusWeek>
             .MaximumLength(300)
             .WithMessage("Each reading material cannot exceed 300 characters.")
             .When(x => x.Readings != null);
+
+        // Per-week constructive questions
+        RuleForEach(x => x.ConstructiveQuestions)
+            .SetValidator(new ConstructiveQuestionValidator())
+            .When(x => x.ConstructiveQuestions != null);
     }
 }
 
@@ -157,13 +161,30 @@ public class ConstructiveQuestionValidator : AbstractValidator<ConstructiveQuest
         RuleFor(x => x.Question)
             .NotEmpty()
             .WithMessage("Question is required.")
-            .MaximumLength(500);
-
-        RuleFor(x => x.Answer)
             .MaximumLength(2000);
 
-        RuleFor(x => x.Category)
-            .MaximumLength(100)
-            .When(x => !string.IsNullOrEmpty(x.Category));
+        RuleFor(x => x.Name)
+            .MaximumLength(100);
+
+        RuleFor(x => x.SessionNumber)
+            .GreaterThan(0)
+            .WithMessage("Session number must be greater than 0.")
+            .When(x => x.SessionNumber.HasValue);
+    }
+}
+
+public class CourseLearningOutcomeValidator : AbstractValidator<CourseLearningOutcome>
+{
+    public CourseLearningOutcomeValidator()
+    {
+        RuleFor(x => x.Id)
+            .NotEmpty()
+            .WithMessage("CLO Id is required.")
+            .MaximumLength(50);
+
+        RuleFor(x => x.Details)
+            .NotEmpty()
+            .WithMessage("CLO details are required.")
+            .MaximumLength(2000);
     }
 }

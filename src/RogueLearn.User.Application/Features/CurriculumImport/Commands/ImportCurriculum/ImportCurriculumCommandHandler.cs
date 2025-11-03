@@ -4,13 +4,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Linq;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
-using System.Linq.Expressions;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum
 {
@@ -105,7 +105,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                     }
 
                     // Step 4: Save extracted data to storage for future use
-                    await SaveDataToStorageAsync(curriculumData, request.RawText, textHash, cancellationToken);
+                    // await SaveDataToStorageAsync(curriculumData, request.RawText, textHash, cancellationToken);
                 }
 
                 // Step 5: Validate extracted data
@@ -254,25 +254,41 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             _logger.LogInformation("Created new curriculum version with ID {VersionId}", curriculumVersion.Id);
             response.CurriculumVersionId = curriculumVersion.Id;
 
-            // Create or update subjects
+            // Bulk create/update subjects
+            var subjectCodes = data.Subjects
+                .Select(s => s.SubjectCode)
+                .Union(data.Structure.SelectMany(st => st.PrerequisiteSubjectCodes ?? Enumerable.Empty<string>()))
+                .Distinct()
+                .ToList();
+            
+            // Fetch existing subjects by individual queries to avoid LINQ expression issues
+            var existingSubjects = new List<Subject>();
+            foreach (var code in subjectCodes)
+            {
+                var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == code, cancellationToken);
+                if (existing != null)
+                {
+                    existingSubjects.Add(existing);
+                }
+            }
+            var existingSubjectsByCode = existingSubjects.ToDictionary(s => s.SubjectCode, s => s);
+
+            var subjectsToUpdate = new List<Subject>();
+            var subjectsToInsert = new List<Subject>();
+
             foreach (var subjectData in data.Subjects)
             {
-                var existingSubject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectData.SubjectCode, cancellationToken);
-
-                Subject subject;
-                if (existingSubject != null)
+                if (existingSubjectsByCode.TryGetValue(subjectData.SubjectCode, out var existing))
                 {
-                    subject = existingSubject;
-                    subject.SubjectName = subjectData.SubjectName;
-                    subject.Credits = subjectData.Credits;
-                    subject.Description = subjectData.Description;
-                    subject.UpdatedAt = DateTime.UtcNow;
-                    await _subjectRepository.UpdateAsync(subject, cancellationToken);
-                    _logger.LogInformation("Updated subject with ID {SubjectId}", subject.Id);
+                    existing.SubjectName = subjectData.SubjectName;
+                    existing.Credits = subjectData.Credits;
+                    existing.Description = subjectData.Description;
+                    existing.UpdatedAt = DateTimeOffset.UtcNow;
+                    subjectsToUpdate.Add(existing);
                 }
                 else
                 {
-                    subject = new Subject
+                    subjectsToInsert.Add(new Subject
                     {
                         SubjectCode = subjectData.SubjectCode,
                         SubjectName = subjectData.SubjectName,
@@ -280,48 +296,80 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                         Description = subjectData.Description,
                         CreatedAt = DateTimeOffset.UtcNow,
                         UpdatedAt = DateTimeOffset.UtcNow
-                    };
-
-                    subject = await _subjectRepository.AddAsync(subject, cancellationToken);
-                    _logger.LogInformation("Created new subject with ID {SubjectId}", subject.Id);
+                    });
                 }
-
-                response.SubjectIds.Add(subject.Id);
             }
 
-            // Create curriculum structure
+            IEnumerable<Subject> updatedSubjects = Enumerable.Empty<Subject>();
+            IEnumerable<Subject> insertedSubjects = Enumerable.Empty<Subject>();
+
+            if (subjectsToUpdate.Any())
+            {
+                updatedSubjects = await _subjectRepository.UpdateRangeAsync(subjectsToUpdate, cancellationToken);
+                _logger.LogInformation("Bulk updated {Count} subjects", subjectsToUpdate.Count);
+            }
+
+            if (subjectsToInsert.Any())
+            {
+                insertedSubjects = await _subjectRepository.AddRangeAsync(subjectsToInsert, cancellationToken);
+                _logger.LogInformation("Bulk created {Count} subjects", subjectsToInsert.Count);
+            }
+
+            var allSubjects = updatedSubjects.Concat(insertedSubjects).ToList();
+            response.SubjectIds.AddRange(allSubjects.Select(s => s.Id));
+
+            // Build a lookup for subject code -> subject id for structures and prerequisites
+            var subjectIdByCode = allSubjects.ToDictionary(s => s.SubjectCode, s => s.Id);
+            // For any subjects that were already existing but weren't updated/inserted, ensure they are present in the lookup
+            foreach (var kvp in existingSubjectsByCode)
+            {
+                if (!subjectIdByCode.ContainsKey(kvp.Key))
+                {
+                    subjectIdByCode[kvp.Key] = kvp.Value.Id;
+                }
+            }
+
+            // Bulk create curriculum structures
+            var structuresToInsert = new List<Domain.Entities.CurriculumStructure>();
             foreach (var structureData in data.Structure)
             {
-                var subject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == structureData.SubjectCode, cancellationToken);
-                if (subject == null) continue;
-
-                // Get prerequisite subject IDs
-                var prerequisiteIds = new List<Guid>();
-                if (structureData.PrerequisiteSubjectCodes?.Any() == true)
+                if (!subjectIdByCode.TryGetValue(structureData.SubjectCode, out var subjectId))
                 {
-                    foreach (var prereqCode in structureData.PrerequisiteSubjectCodes)
-                    {
-                        var prereqSubject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == prereqCode, cancellationToken);
-                        if (prereqSubject != null)
-                        {
-                            prerequisiteIds.Add(prereqSubject.Id);
-                        }
-                    }
+                    // Subject not found; skip this structure
+                    continue;
                 }
 
-                var structure = new Domain.Entities.CurriculumStructure
+                // Map prerequisite subject codes to IDs
+                Guid[]? prerequisiteIds = null;
+                if (structureData.PrerequisiteSubjectCodes?.Any() == true)
+                {
+                    var ids = new List<Guid>();
+                    foreach (var prereqCode in structureData.PrerequisiteSubjectCodes)
+                    {
+                        if (subjectIdByCode.TryGetValue(prereqCode, out var prereqId))
+                        {
+                            ids.Add(prereqId);
+                        }
+                    }
+                    prerequisiteIds = ids.Any() ? ids.ToArray() : null;
+                }
+
+                structuresToInsert.Add(new Domain.Entities.CurriculumStructure
                 {
                     CurriculumVersionId = curriculumVersion.Id,
-                    SubjectId = subject.Id,
+                    SubjectId = subjectId,
                     Semester = structureData.TermNumber,
                     IsMandatory = structureData.IsMandatory,
-                    PrerequisiteSubjectIds = prerequisiteIds.ToArray(),
+                    PrerequisiteSubjectIds = prerequisiteIds,
                     PrerequisitesText = structureData.PrerequisitesText,
                     CreatedAt = DateTimeOffset.UtcNow
-                };
+                });
+            }
 
-                structure = await _curriculumStructureRepository.AddAsync(structure, cancellationToken);
-                _logger.LogInformation("Created new curriculum structure with ID {StructureId}", structure.Id);
+            if (structuresToInsert.Any())
+            {
+                var insertedStructures = await _curriculumStructureRepository.AddRangeAsync(structuresToInsert, cancellationToken);
+                _logger.LogInformation("Bulk created {Count} curriculum structures", structuresToInsert.Count);
             }
 
             response.Message = "Curriculum imported successfully";

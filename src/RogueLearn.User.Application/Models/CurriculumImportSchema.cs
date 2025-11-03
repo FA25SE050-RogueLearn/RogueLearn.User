@@ -149,7 +149,7 @@ public class SyllabusContent
     public string? CourseDescription { get; set; }
     public List<SyllabusWeek>? WeeklySchedule { get; set; }
     public List<AssessmentItem>? Assessments { get; set; }
-    public List<ConstructiveQuestion>? ConstructiveQuestions { get; set; }
+    public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
     public List<string>? RequiredTexts { get; set; }
     public List<string>? RecommendedTexts { get; set; }
     public string? GradingPolicy { get; set; }
@@ -162,6 +162,7 @@ public class SyllabusWeek
     public string? Topic { get; set; }
     public List<string>? Activities { get; set; }
     public List<string>? Readings { get; set; }
+    public List<ConstructiveQuestion>? ConstructiveQuestions { get; set; }
 }
 
 public class AssessmentItem
@@ -203,9 +204,15 @@ public class SyllabusSession
 
 public class ConstructiveQuestion
 {
+    public string Name { get; set; } = string.Empty;
     public string Question { get; set; } = string.Empty;
-    public string Answer { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
+    public int? SessionNumber { get; set; }
+}
+
+public class CourseLearningOutcome
+{
+    public string Id { get; set; } = string.Empty;
+    public string Details { get; set; } = string.Empty;
 }
 
 // Removed duplicate top-level assessments; use content assessments (AssessmentItem)
