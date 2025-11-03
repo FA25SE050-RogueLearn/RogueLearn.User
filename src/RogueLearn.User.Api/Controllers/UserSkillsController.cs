@@ -13,7 +13,7 @@ using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEve
 namespace RogueLearn.User.Api.Controllers;
 
 [ApiController]
-[Route("api/users/me/skills")]
+[Route("api/users")]
 [Authorize]
 public class UserSkillsController : ControllerBase
 {
@@ -27,7 +27,7 @@ public class UserSkillsController : ControllerBase
     /// <summary>
     /// List all skills for the authenticated user
     /// </summary>
-    [HttpGet]
+    [HttpGet("me/skills")]
     [ProducesResponseType(typeof(GetUserSkillsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserSkillsResponse>> GetAll()
@@ -45,7 +45,7 @@ public class UserSkillsController : ControllerBase
     /// <summary>
     /// Get a specific skill for the authenticated user by skill name
     /// </summary>
-    [HttpGet("{skillName}")]
+    [HttpGet("me/skills/{skillName}")]
     [ProducesResponseType(typeof(GetUserSkillResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserSkillResponse>> GetOne([FromRoute] string skillName)
@@ -64,7 +64,7 @@ public class UserSkillsController : ControllerBase
     /// <summary>
     /// Track/assign a skill to the authenticated user; idempotent upsert
     /// </summary>
-    [HttpPost]
+    [HttpPost("me/skills")]
     [ProducesResponseType(typeof(AddUserSkillResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -80,7 +80,7 @@ public class UserSkillsController : ControllerBase
     /// <summary>
     /// Untrack/remove a skill from the authenticated user; idempotent
     /// </summary>
-    [HttpDelete("{skillName}")]
+    [HttpDelete("me/skills/{skillName}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Remove([FromRoute] string skillName)
@@ -117,7 +117,7 @@ public class UserSkillsController : ControllerBase
     /// Ingest an XP event for a user's skill (moved from UserAchievementsController)
     /// Only the authenticated user can ingest via this non-admin endpoint.
     /// </summary>
-    [HttpPost("~/api/users/me/xp-events")]
+    [HttpPost("me/xp-events")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -13,13 +13,13 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestStep
 
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
-    // ADDED: A private record to represent the exact structure of the AI's JSON output.
-    // The key change is that `Content` is a `JsonElement`, which can hold any valid JSON structure.
+    // MODIFICATION: The internal record now includes ExperiencePoints.
     private record AiQuestStep(
         [property: JsonPropertyName("stepNumber")] int StepNumber,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("description")] string Description,
         [property: JsonPropertyName("stepType")] string StepType,
+        [property: JsonPropertyName("experiencePoints")] int ExperiencePoints,
         [property: JsonPropertyName("content")] JsonElement Content
     );
 
@@ -109,7 +109,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
         };
 
-        // MODIFIED: Deserialize into the temporary AiQuestStep record first.
         List<AiQuestStep>? aiGeneratedSteps;
         try
         {
@@ -127,11 +126,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new InvalidOperationException("AI failed to generate valid quest steps.");
         }
 
-        // MODIFIED: Manually map from the AiQuestStep DTO to the QuestStep domain entity.
         var generatedSteps = new List<QuestStep>();
         foreach (var aiStep in aiGeneratedSteps)
         {
-            // TryParse the string from the AI to our strongly-typed enum.
             Enum.TryParse<Domain.Enums.StepType>(aiStep.StepType, true, out var stepType);
 
             var newStep = new QuestStep
@@ -142,7 +139,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 Title = aiStep.Title,
                 Description = aiStep.Description,
                 StepType = stepType,
-                // This is the crucial conversion: turn the JsonElement back into a string for the database.
+                // MODIFICATION: The ExperiencePoints property is now mapped from the AI response.
+                ExperiencePoints = aiStep.ExperiencePoints,
                 Content = aiStep.Content.GetRawText()
             };
             generatedSteps.Add(newStep);

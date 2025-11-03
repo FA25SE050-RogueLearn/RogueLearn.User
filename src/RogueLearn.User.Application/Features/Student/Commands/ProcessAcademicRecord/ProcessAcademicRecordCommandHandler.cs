@@ -43,6 +43,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ILogger<ProcessAcademicRecordCommandHandler> _logger;
     private readonly ICurriculumImportStorage _storage;
     private readonly ICurriculumVersionRepository _curriculumVersionRepository;
+    private readonly ISyllabusVersionRepository _syllabusVersionRepository;
+    private readonly ISkillRepository _skillRepository;
+    private readonly IUserSkillRepository _userSkillRepository;
 
     public ProcessAcademicRecordCommandHandler(
         IFapExtractionPlugin fapPlugin,
@@ -57,7 +60,10 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         ILearningPathQuestRepository learningPathQuestRepository,
         ILogger<ProcessAcademicRecordCommandHandler> logger,
         ICurriculumImportStorage storage,
-        ICurriculumVersionRepository curriculumVersionRepository)
+        ICurriculumVersionRepository curriculumVersionRepository,
+        ISyllabusVersionRepository syllabusVersionRepository,
+        ISkillRepository skillRepository,
+        IUserSkillRepository userSkillRepository)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -72,6 +78,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _logger = logger;
         _storage = storage;
         _curriculumVersionRepository = curriculumVersionRepository;
+        _syllabusVersionRepository = syllabusVersionRepository;
+        _skillRepository = skillRepository;
+        _userSkillRepository = userSkillRepository;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
@@ -245,15 +254,12 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             .ToHashSet();
 
         int firstInProgressSemester = -1;
-        // MODIFICATION: The logic to find the first incomplete semester is corrected here.
-        // It now correctly looks up the subject entity from the `allDbSubjects` dictionary values
-        // to get the subject code, instead of trying to access a non-existent navigation property.
         foreach (var semesterGroup in semesters)
         {
             bool allPassedInSemester = semesterGroup.All(structure =>
             {
                 var subjectEntity = allDbSubjects.Values.FirstOrDefault(s => s.Id == structure.SubjectId);
-                if (subjectEntity == null) return false; // Subject not in our master list, so not passed.
+                if (subjectEntity == null) return false;
                 return fapPassedSubjects.Contains(subjectEntity.SubjectCode);
             });
 
@@ -358,6 +364,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             }
         }
 
+        await InitializeUserSkillsForCurriculum(request.AuthUserId, request.CurriculumVersionId, cancellationToken);
+
         _logger.LogInformation("[END] Finished processing academic record. Quests Created: {QuestsCreated}, Quests Updated: {QuestsUpdated}", questsCreated, questsUpdated);
         return new ProcessAcademicRecordResponse
         {
@@ -368,6 +376,98 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             QuestsGenerated = questsCreated,
             CalculatedGpa = fapData.Gpa ?? 0.0
         };
+    }
+
+    private async Task InitializeUserSkillsForCurriculum(Guid authUserId, Guid curriculumVersionId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Initializing skill tree for User {AuthUserId} and CurriculumVersion {CurriculumVersionId}", authUserId, curriculumVersionId);
+
+        var structures = (await _curriculumStructureRepository.FindAsync(
+            cs => cs.CurriculumVersionId == curriculumVersionId,
+            cancellationToken)).ToList();
+
+        var subjectIds = structures.Select(s => s.SubjectId).Distinct().ToList();
+
+        var uniqueSkillTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var subjectId in subjectIds)
+        {
+            // MODIFICATION: Use the new specialized repository method instead of complex LINQ
+            var activeSyllabi = (await _syllabusVersionRepository.GetActiveBySubjectIdAsync(subjectId, cancellationToken))
+                                    .OrderByDescending(sv => sv.VersionNumber)
+                                    .ToList();
+
+            var activeSyllabus = activeSyllabi.FirstOrDefault();
+
+            if (activeSyllabus != null && !string.IsNullOrWhiteSpace(activeSyllabus.Content))
+            {
+                try
+                {
+                    using var jsonDoc = JsonDocument.Parse(activeSyllabus.Content);
+                    if (jsonDoc.RootElement.TryGetProperty("sessions", out var sessions) && sessions.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var session in sessions.EnumerateArray())
+                        {
+                            if (session.TryGetProperty("lo", out var loElement) && loElement.ValueKind == JsonValueKind.String)
+                            {
+                                var skillTag = loElement.GetString();
+                                if (!string.IsNullOrWhiteSpace(skillTag))
+                                {
+                                    uniqueSkillTags.Add(skillTag);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Could not parse syllabus content for SubjectId {SubjectId} during skill initialization.", subjectId);
+                }
+            }
+        }
+
+        if (!uniqueSkillTags.Any())
+        {
+            _logger.LogWarning("No skill tags found in syllabus content for CurriculumVersion {CurriculumVersionId}. Skill tree will be empty.", curriculumVersionId);
+            return;
+        }
+
+        var existingUserSkills = (await _userSkillRepository.FindAsync(
+            us => us.AuthUserId == authUserId,
+            cancellationToken))
+            .ToDictionary(us => us.SkillName, StringComparer.OrdinalIgnoreCase);
+
+        var allCatalogSkills = (await _skillRepository.GetAllAsync(cancellationToken))
+                                    .ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var skillTag in uniqueSkillTags)
+        {
+            if (existingUserSkills.ContainsKey(skillTag))
+            {
+                continue;
+            }
+
+            if (allCatalogSkills.TryGetValue(skillTag, out var catalogSkill))
+            {
+                var newUserSkill = new UserSkill
+                {
+                    AuthUserId = authUserId,
+                    SkillId = catalogSkill.Id,
+                    SkillName = catalogSkill.Name,
+                    ExperiencePoints = 0,
+                    Level = 1,
+                    LastUpdatedAt = DateTimeOffset.UtcNow
+                };
+                await _userSkillRepository.AddAsync(newUserSkill, cancellationToken);
+                _logger.LogInformation("Initialized UserSkill '{SkillName}' for User {AuthUserId}", newUserSkill.SkillName, authUserId);
+            }
+            else
+            {
+                _logger.LogWarning("Skill tag '{SkillTag}' found in syllabus but does not exist in the skill catalog. Skipping initialization for this skill.", skillTag);
+            }
+        }
+
+        _logger.LogInformation("Skill tree initialization completed for User {AuthUserId}. Total unique skills: {SkillCount}", authUserId, uniqueSkillTags.Count);
     }
 
     private string PreprocessFapHtml(string rawHtml)

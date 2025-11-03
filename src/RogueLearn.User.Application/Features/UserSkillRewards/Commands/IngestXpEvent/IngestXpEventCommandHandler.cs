@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/UserSkillRewards/Commands/IngestXpEvent/IngestXpEventCommandHandler.cs
 using MediatR;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -26,8 +27,12 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
         // Basic idempotency check: skip if a reward with same source exists for this user
         if (!string.IsNullOrWhiteSpace(request.SourceService) && request.SourceId.HasValue)
         {
-            var existingReward = await _userSkillRewardRepository.FirstOrDefaultAsync(
-                r => r.AuthUserId == request.AuthUserId && r.SourceService == request.SourceService && r.SourceId == request.SourceId,
+            // MODIFICATION: Replaced the failing FirstOrDefaultAsync with the new, specialized GetBySourceAsync method.
+            // This bypasses the faulty LINQ translation and uses the Supabase client's native filtering, resolving the error.
+            var existingReward = await _userSkillRewardRepository.GetBySourceAsync(
+                request.AuthUserId,
+                request.SourceService,
+                request.SourceId.Value,
                 cancellationToken);
 
             if (existingReward is not null)

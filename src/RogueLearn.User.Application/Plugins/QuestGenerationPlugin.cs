@@ -15,9 +15,9 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         _logger = logger;
     }
 
-    // MODIFIED: The return type is now nullable to better signal a failure.
     public async Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, CancellationToken cancellationToken = default)
     {
+        // MODIFIED: The prompt now includes instructions for generating experiencePoints for each step.
         var prompt = $@"
 Analyze the following syllabus content and generate a series of interactive, gamified quest steps for a learning application.
 
@@ -28,25 +28,38 @@ Analyze the following syllabus content and generate a series of interactive, gam
 {syllabusJson}
 
 **TASK:**
-Generate a JSON array of objects representing the quest steps. Follow these rules:
-1.  Create between 5 and 8 steps to cover the main topics.
-2.  Vary the 'stepType'. Use 'Reading' for introductions, 'Quiz' for knowledge checks, and 'Coding' or 'Interactive' for practical application.
-3.  The content for each step should be engaging and directly related to the syllabus and user context. For 'Quiz' steps, include a 'questions' array in the content. For 'Coding', include a 'template' or 'challenge' string.
-4.  Ensure the steps follow a logical learning progression.
+Generate a JSON array of 5 to 8 quest step objects. You MUST adhere to the following rules:
 
-**REQUIRED OUTPUT FORMAT:**
-Return ONLY a JSON array of objects with this exact schema:
-[
-  {{
-    ""stepNumber"": number,
-    ""title"": ""string"",
-    ""description"": ""string"",
-    ""stepType"": ""string (MUST be one of these exact, case-sensitive values: 'Reading', 'Video', 'Interactive', 'Coding', 'Quiz', 'Discussion', 'Submission', 'Reflection')"",
-    ""content"": {{ ""key"": ""value"" }}
-  }}
-]
+1.  Each object in the array MUST have the properties: `stepNumber`, `title`, `description`, `stepType`, `experiencePoints`, and `content`.
+2.  The `stepType` property MUST be one of these exact, case-sensitive strings: 'Reading', 'Interactive', 'Quiz', 'Coding', 'Submission', 'Reflection'.
+3.  The `experiencePoints` property MUST be an integer between 10 and 50, based on the step's complexity.
+4.  The `content` object for each `stepType` MUST follow the specific schema defined below AND MUST include a `skillTag`.
 
-Return only the JSON array, with no additional text or markdown formatting.
+**CONTENT SCHEMAS (MANDATORY):**
+
+- If `stepType` is **'Reading'**:
+  `""content"": {{ ""skillTag"": ""string"", ""articleTitle"": ""string"", ""summary"": ""string"", ""url"": ""string"" }}`
+
+- If `stepType` is **'Interactive'**:
+  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""questions"": [{{ ""task"": ""string"", ""options"": [""string""], ""answer"": ""string"" }}] }}`
+
+- If `stepType` is **'Quiz'**:
+  `""content"": {{ ""skillTag"": ""string"", ""questions"": [{{ ""question"": ""string"", ""options"": [""string""], ""correctAnswer"": ""string"", ""explanation"": ""string"" }}] }}`
+
+- If `stepType` is **'Coding'**: (This is a descriptive challenge, not an executable one)
+  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""template"": ""string (starter code)"", ""expectedOutput"": ""string"" }}`
+
+- If `stepType` is **'Submission'**:
+  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""submissionFormat"": ""string"" }}`
+
+- If `stepType` is **'Reflection'**:
+  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""reflectionPrompt"": ""string"", ""expectedOutcome"": ""string"" }}`
+
+**CRITICAL RULE FOR `skillTag`:**
+The `skillTag` value MUST be the name of the single, most relevant skill from the syllabus that this specific step teaches. Examples: 'Servlet Lifecycle Management', 'JSP Expression Language', 'MVC Pattern Implementation'.
+
+**OUTPUT REQUIREMENT:**
+Return ONLY the raw JSON array. Do NOT wrap it in markdown backticks or add any other text.
 ";
 
         try
@@ -59,7 +72,6 @@ Return only the JSON array, with no additional text or markdown formatting.
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to generate quest steps using AI.");
-            // MODIFIED: Return null to signal a hard failure in the AI call.
             return null;
         }
     }

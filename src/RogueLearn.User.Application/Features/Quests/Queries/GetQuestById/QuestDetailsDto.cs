@@ -1,5 +1,5 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestById/QuestDetailsDto.cs
-using System.Text.Json; // ADDED: Import for JsonDocument
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 
@@ -18,6 +18,7 @@ public class QuestStepDto
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string StepType { get; set; } = string.Empty;
-    // MODIFICATION: Added the Content property to carry the step's detailed payload.
+    // ADDED: This property will now be included in the API response.
+    public int ExperiencePoints { get; set; }
     public JsonDocument? Content { get; set; }
 }
