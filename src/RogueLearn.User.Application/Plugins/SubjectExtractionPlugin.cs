@@ -1,6 +1,7 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/SubjectExtractionPlugin.cs
+﻿// RogueLearn.User/src/RogueLearn.User/Application/Plugins/SubjectExtractionPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -43,6 +44,7 @@ Important Rules:
 Text to extract from:
 ";
 
+        // MODIFIED: Corrected the variable name from 'rawText' to 'rawSubjectText' to match the method parameter.
         var prompt = header + rawSubjectText + @"
 
 Return only the JSON object.";
@@ -61,41 +63,65 @@ Return only the JSON object.";
         }
     }
 
-    // ADDED: Implementation of the new method to extract a skill from a learning objective.
-    public async Task<string> ExtractSkillFromObjectiveAsync(string learningObjectiveText, CancellationToken cancellationToken = default)
+    public async Task<List<string>> ExtractSkillsFromObjectivesAsync(List<string> learningObjectives, CancellationToken cancellationToken = default)
     {
+        if (learningObjectives == null || !learningObjectives.Any())
+        {
+            return new List<string>();
+        }
+
+        var objectivesList = string.Join("\n", learningObjectives.Select((lo, i) => $"{i + 1}. {lo}"));
+
         var prompt = $@"
-From the following learning objective sentence, extract the single most important, concise skill or topic name.
+Analyze the following numbered list of learning objectives. For each objective, extract the single most important, concise skill or topic name.
 
 RULES:
-- The output MUST be 2-4 words maximum.
-- The output should be a noun phrase representing the core concept.
-- Examples:
-  - Input: 'To master the contents regarding the emergence, stages of development, subject, methodology, and significance of studying Scientific Socialism.'
-    Output: 'Scientific Socialism'
-  - Input: 'Develop skills of argument, writing, presentations, critical thinking, handling social relations and group activities.'
-    Output: 'Critical Thinking and Communication'
-  - Input: 'Master the Marxist-Leninist views on socialist democracy and the socialist state...'
-    Output: 'Socialist Democracy'
+- Your response MUST be a single JSON object with a single key ""skills"", which is an array of strings.
+- The array MUST contain exactly {learningObjectives.Count} strings.
+- The Nth string in the array MUST correspond to the Nth learning objective in the input list.
+- Each skill name MUST be 2-4 words maximum and represent a core noun phrase.
+- If you cannot determine a skill for an objective, return an empty string for that position in the array.
+- Do NOT include markdown fences or any text outside the single JSON object.
 
-Return ONLY the skill name, with no other text.
+EXAMPLE INPUT:
+1. To master the contents regarding the emergence, stages of development, subject, methodology, and significance of studying Scientific Socialism.
+2. Develop skills of argument, writing, presentations, critical thinking, handling social relations and group activities.
 
-Learning Objective:
-""{learningObjectiveText}""
+EXAMPLE OUTPUT:
+{{
+  ""skills"": [
+    ""Scientific Socialism"",
+    ""Critical Thinking and Communication""
+  ]
+}}
 
-Extracted Skill Name:
+Learning Objectives to process:
+{objectivesList}
+
+Return ONLY the JSON object:
 ";
         try
         {
             var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
-            return result.GetValue<string>()?.Trim() ?? string.Empty;
+            var jsonResponse = CleanToJson(result.GetValue<string>() ?? "{}");
+
+            _logger.LogInformation("AI Batch Skill Extraction Raw Response: {JsonResponse}", jsonResponse);
+
+            var skillResponse = JsonSerializer.Deserialize<SkillExtractionResponse>(jsonResponse, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return skillResponse?.Skills ?? new List<string>();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to extract skill from learning objective using AI for text: '{ObjectiveText}'", learningObjectiveText);
-            return string.Empty;
+            _logger.LogError(ex, "Failed to extract skills in batch from learning objectives using AI.");
+            return Enumerable.Repeat(string.Empty, learningObjectives.Count).ToList();
         }
     }
+
+    private class SkillExtractionResponse
+    {
+        public List<string> Skills { get; set; } = new();
+    }
+
 
     private static string CleanToJson(string rawResponse)
     {

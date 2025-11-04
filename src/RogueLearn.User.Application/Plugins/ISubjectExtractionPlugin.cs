@@ -14,12 +14,12 @@ public interface ISubjectExtractionPlugin
     /// <returns>A JSON string matching the SubjectData schema used in CurriculumImport.</returns>
     Task<string> ExtractSubjectJsonAsync(string rawSubjectText, CancellationToken cancellationToken = default);
 
-    // ADDED: A new method contract to extract a concise skill name from a verbose learning objective.
+    // MODIFIED: The method is renamed and now accepts a list of objectives to process them in a single batch.
     /// <summary>
-    /// Analyzes a descriptive learning objective and extracts the primary, concise skill name.
+    /// Analyzes a list of descriptive learning objectives and extracts the primary, concise skill name for each.
     /// </summary>
-    /// <param name="learningObjectiveText">The full text of the learning objective (e.g., "To master the contents regarding...").</param>
+    /// <param name="learningObjectives">A list of full learning objective sentences.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The extracted skill name (e.g., "Scientific Socialism") or an empty string if none is found.</returns>
-    Task<string> ExtractSkillFromObjectiveAsync(string learningObjectiveText, CancellationToken cancellationToken = default);
+    /// <returns>A list of extracted skill names, corresponding to the input list order.</returns>
+    Task<List<string>> ExtractSkillsFromObjectivesAsync(List<string> learningObjectives, CancellationToken cancellationToken = default);
 }

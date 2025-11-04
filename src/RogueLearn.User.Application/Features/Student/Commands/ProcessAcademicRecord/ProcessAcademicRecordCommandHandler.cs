@@ -402,8 +402,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             .ToDictionary(g => g.Key, g => g.OrderByDescending(sv => sv.VersionNumber).FirstOrDefault());
         _logger.LogDebug("Fetched {Count} active syllabi for the subjects in the curriculum.", allSyllabi.Count);
 
-        var uniqueSkillTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
+        // MODIFICATION: Collect all learning objectives first before making the batch AI call.
+        var allLearningObjectives = new List<string>();
         foreach (var subjectId in subjectIds)
         {
             if (allSyllabi.TryGetValue(subjectId, out var activeSyllabus) && activeSyllabus?.Content != null)
@@ -413,27 +413,17 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
                 try
                 {
-                    // MODIFICATION: The object returned from the Supabase client, when deserialized into a Dictionary,
-                    // contains Newtonsoft.Json.Linq.JArray. We must handle this specific type.
                     if (activeSyllabus.Content.TryGetValue("sessions", out var sessionsObj) && sessionsObj is Newtonsoft.Json.Linq.JArray sessionsArray)
                     {
                         foreach (var session in sessionsArray)
                         {
-                            // Treat each item in the JArray as a JObject to access its properties.
                             var sessionObject = session as Newtonsoft.Json.Linq.JObject;
                             if (sessionObject != null && sessionObject.TryGetValue("lo", StringComparison.OrdinalIgnoreCase, out var loToken) && loToken.Type == Newtonsoft.Json.Linq.JTokenType.String)
                             {
                                 var learningObjective = loToken.ToString();
                                 if (!string.IsNullOrWhiteSpace(learningObjective))
                                 {
-                                    var extractedSkill = await _subjectExtractionPlugin.ExtractSkillFromObjectiveAsync(learningObjective, cancellationToken);
-
-                                    _logger.LogInformation("AI Skill Extraction: Input LO='{LearningObjective}', AI Output Skill='{ExtractedSkill}'", learningObjective, extractedSkill);
-
-                                    if (!string.IsNullOrWhiteSpace(extractedSkill))
-                                    {
-                                        uniqueSkillTags.Add(extractedSkill);
-                                    }
+                                    allLearningObjectives.Add(learningObjective);
                                 }
                             }
                         }
@@ -454,9 +444,21 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             }
         }
 
+        // MODIFICATION: Make a single, efficient batch call to the AI plugin.
+        List<string> extractedSkills = new List<string>();
+        if (allLearningObjectives.Any())
+        {
+            _logger.LogInformation("Sending {Count} learning objectives to AI for batch skill extraction.", allLearningObjectives.Count);
+            extractedSkills = await _subjectExtractionPlugin.ExtractSkillsFromObjectivesAsync(allLearningObjectives, cancellationToken);
+            _logger.LogInformation("AI returned {Count} skill extractions.", extractedSkills.Count);
+        }
+
+        // Use a HashSet to get unique, non-empty skill tags from the batch response.
+        var uniqueSkillTags = extractedSkills.Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         if (!uniqueSkillTags.Any())
         {
-            _logger.LogWarning("No skill tags found in syllabus content for CurriculumVersion {CurriculumVersionId}. Skill tree will be empty.", curriculumVersionId);
+            _logger.LogWarning("No skill tags were successfully extracted from any syllabus content for CurriculumVersion {CurriculumVersionId}. Skill tree will be empty.", curriculumVersionId);
             return;
         }
 
@@ -491,11 +493,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             }
             else
             {
-                _logger.LogWarning("Skill tag '{SkillTag}' found in syllabus but does not exist in the skill catalog. Skipping initialization for this skill.", skillTag);
+                _logger.LogWarning("Skill tag '{SkillTag}' extracted by AI but does not exist in the skill catalog. Skipping initialization for this skill.", skillTag);
             }
         }
 
-        _logger.LogInformation("Skill tree initialization completed for User {AuthUserId}. Total unique skills found in syllabus: {SkillCount}", authUserId, uniqueSkillTags.Count);
+        _logger.LogInformation("Skill tree initialization completed for User {AuthUserId}. Total unique skills found and processed from syllabus: {SkillCount}", authUserId, uniqueSkillTags.Count);
     }
 
     private string PreprocessFapHtml(string rawHtml)
