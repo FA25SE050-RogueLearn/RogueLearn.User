@@ -11,6 +11,7 @@ using RogueLearn.User.Application.Features.Parties.Queries.GetPartyMembers;
 using RogueLearn.User.Application.Features.Parties.Queries.GetPendingInvitations;
 using RogueLearn.User.Application.Features.Parties.Queries.GetPartyResources;
 using RogueLearn.User.Application.Features.Parties.Queries.GetAllParties;
+using RogueLearn.User.Application.Features.Parties.Queries.GetMyParties;
 using BuildingBlocks.Shared.Authentication;
 using RogueLearn.User.Application.Features.Parties.Commands.ManageRoles;
 using RogueLearn.User.Application.Features.Parties.Queries.GetMemberRoles;
@@ -167,6 +168,19 @@ public class PartiesController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<PartyStashItemDto>>> GetResources(Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPartyResourcesQuery(partyId), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get all parties for the current user (created by user or where user is an active member).
+    /// </summary>
+    [HttpGet("mine")]
+    [ProducesResponseType(typeof(IReadOnlyList<PartyDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<PartyDto>>> GetMyParties(CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var result = await _mediator.Send(new GetMyPartiesQuery(authUserId), cancellationToken);
         return Ok(result);
     }
 

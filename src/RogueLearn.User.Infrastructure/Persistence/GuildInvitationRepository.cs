@@ -16,7 +16,7 @@ public class GuildInvitationRepository : GenericRepository<GuildInvitation>, IGu
     {
         var response = await _supabaseClient
             .From<GuildInvitation>()
-            .Where(i => i.GuildId == guildId)
+            .Filter("guild_id", Supabase.Postgrest.Constants.Operator.Equals, guildId.ToString())
             .Get(cancellationToken);
 
         return response.Models;
@@ -26,7 +26,8 @@ public class GuildInvitationRepository : GenericRepository<GuildInvitation>, IGu
     {
         var response = await _supabaseClient
             .From<GuildInvitation>()
-            .Where(i => i.GuildId == guildId && i.Status == InvitationStatus.Pending)
+            .Filter("guild_id", Supabase.Postgrest.Constants.Operator.Equals, guildId.ToString())
+            .Filter("status", Supabase.Postgrest.Constants.Operator.Equals, InvitationStatus.Pending.ToString())
             .Get(cancellationToken);
 
         return response.Models;
