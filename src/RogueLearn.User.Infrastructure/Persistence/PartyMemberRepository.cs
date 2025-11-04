@@ -34,6 +34,16 @@ public class PartyMemberRepository : GenericRepository<PartyMember>, IPartyMembe
         return response;
     }
 
+    public async Task<IEnumerable<PartyMember>> GetMembershipsByUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<PartyMember>()
+            .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
+            .Get(cancellationToken);
+
+        return response.Models;
+    }
+
     public async Task<bool> IsLeaderAsync(Guid partyId, Guid authUserId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient

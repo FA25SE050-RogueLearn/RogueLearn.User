@@ -10,4 +10,5 @@ public interface IPartyMemberRepository : IGenericRepository<PartyMember>
     Task<PartyMember?> GetMemberAsync(Guid partyId, Guid authUserId, CancellationToken cancellationToken = default);
     Task<bool> IsLeaderAsync(Guid partyId, Guid authUserId, CancellationToken cancellationToken = default);
     Task<int> CountActiveMembersAsync(Guid partyId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<PartyMember>> GetMembershipsByUserAsync(Guid authUserId, CancellationToken cancellationToken = default);
 }
