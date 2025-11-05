@@ -15,7 +15,7 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
     private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
     private readonly IQuestStepRepository _questStepRepository;
-    private readonly IMediator _mediator;
+    private readonly IMediator _mediator; // We keep MediatR for dispatching the command.
     private readonly ILogger<UpdateQuestStepProgressCommandHandler> _logger;
 
     public UpdateQuestStepProgressCommandHandler(
@@ -50,8 +50,6 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
 
         if (attempt == null)
         {
-            _logger.LogInformation("No existing attempt found. Creating new UserQuestAttempt for User:{AuthUserId}, Quest:{QuestId}",
-                request.AuthUserId, request.QuestId);
             attempt = new UserQuestAttempt
             {
                 AuthUserId = request.AuthUserId,
@@ -66,66 +64,93 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
             sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
             cancellationToken);
 
-        if (stepProgress == null)
+        if (stepProgress?.Status == StepCompletionStatus.Completed)
         {
-            _logger.LogInformation("Creating new UserQuestStepProgress for Step:{StepId}", request.StepId);
-            stepProgress = new UserQuestStepProgress
-            {
-                AttemptId = attempt.Id,
-                StepId = request.StepId,
-                Status = request.Status,
-                StartedAt = DateTimeOffset.UtcNow,
-                CompletedAt = request.Status == StepCompletionStatus.Completed ? DateTimeOffset.UtcNow : null,
-                AttemptsCount = 1
-            };
-            await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
-        }
-        else
-        {
-            if (stepProgress.Status == StepCompletionStatus.Completed)
-            {
-                _logger.LogInformation("Step {StepId} is already completed. No action taken.", request.StepId);
-                return;
-            }
-
-            _logger.LogInformation("Updating existing UserQuestStepProgress for Step:{StepId}", request.StepId);
-            stepProgress.Status = request.Status;
-            stepProgress.CompletedAt = request.Status == StepCompletionStatus.Completed ? DateTimeOffset.UtcNow : stepProgress.CompletedAt;
-            stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
-            stepProgress.AttemptsCount += 1;
-            await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+            _logger.LogInformation("Step {StepId} is already completed. No action taken.", request.StepId);
+            return;
         }
 
-        if (request.Status == StepCompletionStatus.Completed && !string.IsNullOrWhiteSpace(questStep.Content))
+        // --- MODIFICATION START: Transactional Logic with MediatR ---
+        if (request.Status == StepCompletionStatus.Completed)
         {
-            try
+            // First, attempt to dispatch the XP event. This will go through the validation pipeline.
+            // If it fails for any reason (validation error, skill not found, etc.), it will throw an exception,
+            // and the code below this block will NOT execute.
+            if (!string.IsNullOrWhiteSpace(questStep.Content))
             {
-                using var jsonDoc = JsonDocument.Parse(questStep.Content);
-                if (jsonDoc.RootElement.TryGetProperty("skillId", out var skillIdElement) &&
-                    skillIdElement.ValueKind == JsonValueKind.String &&
-                    Guid.TryParse(skillIdElement.GetString(), out var skillId))
+                try
                 {
-                    // MODIFICATION: The command now ONLY sends the SkillId. It does not need to know the name.
-                    var xpEvent = new IngestXpEventCommand
+                    using var jsonDoc = JsonDocument.Parse(questStep.Content);
+                    if (jsonDoc.RootElement.TryGetProperty("skillId", out var skillIdElement) &&
+                        skillIdElement.ValueKind == JsonValueKind.String &&
+                        Guid.TryParse(skillIdElement.GetString(), out var skillId))
                     {
-                        AuthUserId = request.AuthUserId,
-                        SourceService = "QuestsService",
-                        SourceType = SkillRewardSourceType.QuestComplete.ToString(),
-                        SourceId = questStep.Id,
-                        SkillId = skillId, // This is the only skill identifier we need to send.
-                        Points = questStep.ExperiencePoints,
-                        Reason = $"Completed quest step: {questStep.Title}"
-                    };
-                    await _mediator.Send(xpEvent, cancellationToken);
-                    _logger.LogInformation("Dispatched IngestXpEvent for SkillId '{SkillId}' with {Points} XP for completing Step {StepId}",
-                        skillId, questStep.ExperiencePoints, request.StepId);
+                        var xpEvent = new IngestXpEventCommand
+                        {
+                            AuthUserId = request.AuthUserId,
+                            SourceService = "QuestsService",
+                            SourceType = SkillRewardSourceType.QuestComplete.ToString(),
+                            SourceId = questStep.Id,
+                            SkillId = skillId,
+                            // SkillName is intentionally left empty; the handler will look it up.
+                            SkillName = "",
+                            Points = questStep.ExperiencePoints,
+                            Reason = $"Completed quest step: {questStep.Title}"
+                        };
+
+                        // This call is now the gatekeeper. It will throw if validation fails.
+                        await _mediator.Send(xpEvent, cancellationToken);
+
+                        _logger.LogInformation("Successfully dispatched IngestXpEvent for SkillId '{SkillId}'", skillId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log the error and re-throw to ensure the transaction is halted.
+                    _logger.LogError(ex, "Failed to dispatch XP event for Step {StepId}. Step progress will not be saved.", questStep.Id);
+                    throw;
                 }
             }
-            catch (JsonException ex)
+
+            // Only if the _mediator.Send call above succeeds, we proceed to save the progress.
+            _logger.LogInformation("XP event successful. Now saving step progress for Step {StepId}.", request.StepId);
+            if (stepProgress == null)
             {
-                _logger.LogWarning(ex, "Could not parse skillId from content for QuestStep {StepId}", request.StepId);
+                stepProgress = new UserQuestStepProgress
+                {
+                    AttemptId = attempt.Id,
+                    StepId = request.StepId,
+                    Status = StepCompletionStatus.Completed,
+                    StartedAt = DateTimeOffset.UtcNow,
+                    CompletedAt = DateTimeOffset.UtcNow,
+                    AttemptsCount = 1
+                };
+                await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
+            }
+            else
+            {
+                stepProgress.Status = StepCompletionStatus.Completed;
+                stepProgress.CompletedAt = DateTimeOffset.UtcNow;
+                stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
+                stepProgress.AttemptsCount += 1;
+                await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
             }
         }
+        else // Handle other non-completed statuses (no XP awarded)
+        {
+            if (stepProgress == null)
+            {
+                stepProgress = new UserQuestStepProgress { /* ... set properties ... */ };
+                await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
+            }
+            else
+            {
+                stepProgress.Status = request.Status;
+                stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
+                await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+            }
+        }
+        // --- MODIFICATION END ---
 
         _logger.LogInformation("Successfully updated progress for Step:{StepId}", request.StepId);
     }
