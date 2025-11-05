@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestById/QuestDetailsDto.cs
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 
@@ -18,7 +17,8 @@ public class QuestStepDto
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string StepType { get; set; } = string.Empty;
-    // ADDED: This property will now be included in the API response.
     public int ExperiencePoints { get; set; }
-    public JsonDocument? Content { get; set; }
+
+    // Use object type - this will properly serialize the deserialized JSON
+    public object? Content { get; set; }
 }

@@ -77,9 +77,6 @@ public class MappingProfile : Profile
         CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
         CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
 
-        // MODIFICATION: Added explicit mapping rules for SyllabusVersion.Content to handle the type mismatch.
-        // It now serializes the Dictionary from the entity to a JSON string for all relevant DTOs.
-        // SyllabusVersion mappings
         CreateMap<SyllabusVersion, SyllabusVersionDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
                 src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
@@ -124,19 +121,42 @@ public class MappingProfile : Profile
 
         // Mappings for Quest Details
         CreateMap<Quest, QuestDetailsDto>();
-        // This mapping now populates the `Content` property by parsing the JSON string from the database.
+
         CreateMap<QuestStep, QuestStepDto>()
-            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
-                !string.IsNullOrWhiteSpace(src.Content) ? JsonDocument.Parse(src.Content, default) : null));
-
-        CreateMap<QuestStep, GeneratedQuestStepDto>()
-            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
-                !string.IsNullOrWhiteSpace(src.Content) ? JsonDocument.Parse(src.Content, default) : null));
-
+    .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
         // Parties feature mappings
         CreateMap<Party, PartyDto>();
         CreateMap<PartyMember, PartyMemberDto>();
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
+    }
+    // Add this helper method to your MappingProfile class:
+    private static object? ParseJsonContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return null;
+
+        var element = JsonSerializer.Deserialize<JsonElement>(content, (JsonSerializerOptions?)null);
+        return ConvertJsonElement(element);
+    }
+
+    private static object? ConvertJsonElement(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => element.EnumerateObject()
+                .ToDictionary(p => p.Name, p => ConvertJsonElement(p.Value)),
+            JsonValueKind.Array => element.EnumerateArray()
+                .Select(ConvertJsonElement)
+                .ToList(),
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.TryGetInt32(out var intValue)
+                ? (object)intValue
+                : element.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => element.ToString()
+        };
     }
 }
