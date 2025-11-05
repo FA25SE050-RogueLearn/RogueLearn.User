@@ -124,6 +124,10 @@ public class MappingProfile : Profile
 
         CreateMap<QuestStep, QuestStepDto>()
     .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
+
+        // Mapping for GenerateQuestSteps command (returns GeneratedQuestStepDto):
+        CreateMap<QuestStep, GeneratedQuestStepDto>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
         // Parties feature mappings
         CreateMap<Party, PartyDto>();
         CreateMap<PartyMember, PartyMemberDto>();

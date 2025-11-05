@@ -12,5 +12,5 @@ public class GeneratedQuestStepDto
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public StepType StepType { get; set; }
-    public JsonDocument? Content { get; set; }
+    public object? Content { get; set; }
 }
