@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/UserSkillRewards/Commands/IngestXpEvent/IngestXpEventCommandValidator.cs
 using FluentValidation;
 
 namespace RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
@@ -7,7 +8,9 @@ public class IngestXpEventCommandValidator : AbstractValidator<IngestXpEventComm
     public IngestXpEventCommandValidator()
     {
         RuleFor(x => x.AuthUserId).NotEmpty();
-        RuleFor(x => x.SkillName).NotEmpty().MaximumLength(255);
+        // MODIFICATION: Validate the SkillId, which is now the primary identifier.
+        RuleFor(x => x.SkillId).NotEmpty().WithMessage("'Skill Id' must not be empty.");
+        // MODIFICATION: SkillName is no longer a required input, as it will be looked up by the handler.
         RuleFor(x => x.Points).GreaterThan(0);
         RuleFor(x => x.SourceService).NotEmpty().MaximumLength(255);
         RuleFor(x => x.SourceId)

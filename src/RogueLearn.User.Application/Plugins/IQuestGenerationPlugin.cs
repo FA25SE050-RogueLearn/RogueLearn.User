@@ -1,4 +1,6 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/IQuestGenerationPlugin.cs
+using RogueLearn.User.Domain.Entities;
+
 namespace RogueLearn.User.Application.Plugins;
 
 /// <summary>
@@ -11,7 +13,8 @@ public interface IQuestGenerationPlugin
     /// </summary>
     /// <param name="syllabusJson">The structured syllabus content as a JSON string.</param>
     /// <param name="userContext">A string describing the user's career goals for personalization.</param>
+    /// <param name="relevantSkills">A list of pre-approved skills for the AI to use.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A JSON string representing an array of quest steps.</returns>
-    Task<string> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, CancellationToken cancellationToken = default);
+    Task<string> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default);
 }

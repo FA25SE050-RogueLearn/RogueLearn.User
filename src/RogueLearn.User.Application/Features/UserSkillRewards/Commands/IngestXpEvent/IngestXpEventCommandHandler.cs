@@ -24,11 +24,8 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
 
     public async Task<IngestXpEventResponse> Handle(IngestXpEventCommand request, CancellationToken cancellationToken)
     {
-        // Basic idempotency check: skip if a reward with same source exists for this user
         if (!string.IsNullOrWhiteSpace(request.SourceService) && request.SourceId.HasValue)
         {
-            // MODIFICATION: Replaced the failing FirstOrDefaultAsync with the new, specialized GetBySourceAsync method.
-            // This bypasses the faulty LINQ translation and uses the Supabase client's native filtering, resolving the error.
             var existingReward = await _userSkillRewardRepository.GetBySourceAsync(
                 request.AuthUserId,
                 request.SourceService,
@@ -49,8 +46,6 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
             }
         }
 
-        // Persist reward entry
-        // Parse SourceType string to enum; default to QuestComplete if invalid
         var parsedSourceType = SkillRewardSourceType.QuestComplete;
         if (!string.IsNullOrWhiteSpace(request.SourceType))
         {
@@ -60,11 +55,16 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
             }
         }
 
-        // Resolve skill catalog entry to obtain SkillId (required by schema)
-        var skill = await _skillRepository.FirstOrDefaultAsync(s => s.Name == request.SkillName, cancellationToken);
+        if (!request.SkillId.HasValue)
+        {
+            throw new RogueLearn.User.Application.Exceptions.BadRequestException("SkillId is required to ingest an XP event.");
+        }
+
+        // MODIFICATION: The skill is now fetched from the database using the reliable SkillId.
+        var skill = await _skillRepository.GetByIdAsync(request.SkillId.Value, cancellationToken);
         if (skill is null)
         {
-            throw new RogueLearn.User.Application.Exceptions.BadRequestException($"Unknown skill '{request.SkillName}'. Ensure the skill exists in the catalog.");
+            throw new RogueLearn.User.Application.Exceptions.BadRequestException($"Unknown skill with ID '{request.SkillId.Value}'. Ensure the skill exists in the catalog.");
         }
 
         var reward = new UserSkillReward
@@ -73,7 +73,7 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
             SourceService = request.SourceService,
             SourceType = parsedSourceType,
             SourceId = request.SourceId,
-            SkillName = request.SkillName,
+            SkillName = skill.Name, // We get the name from the skill object we just fetched.
             SkillId = skill.Id,
             PointsAwarded = request.Points,
             Reason = request.Reason,
@@ -81,16 +81,17 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
         };
         await _userSkillRewardRepository.AddAsync(reward, cancellationToken);
 
-        // Update or create the user's skill record
         var userSkill = await _userSkillRepository.FirstOrDefaultAsync(
-            s => s.AuthUserId == request.AuthUserId && s.SkillName == request.SkillName,
+            s => s.AuthUserId == request.AuthUserId && s.SkillId == request.SkillId.Value,
             cancellationToken);
+
         if (userSkill is null)
         {
             userSkill = new UserSkill
             {
                 AuthUserId = request.AuthUserId,
-                SkillName = request.SkillName,
+                SkillId = skill.Id,
+                SkillName = skill.Name,
                 ExperiencePoints = Math.Max(0, request.Points),
                 Level = CalculateLevel(Math.Max(0, request.Points)),
                 LastUpdatedAt = DateTimeOffset.UtcNow
@@ -116,10 +117,8 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
         };
     }
 
-    // Minimal leveling function; can be replaced by a more sophisticated progression curve later.
     private static int CalculateLevel(int experiencePoints)
     {
-        // Level 1 at 0 XP, then +1 level every 1000 XP
         var baseLevel = 1;
         var additional = experiencePoints / 1000;
         return Math.Max(baseLevel, baseLevel + additional);

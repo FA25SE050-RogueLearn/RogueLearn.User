@@ -1,3 +1,4 @@
+// test/RogueLearn.User.Api.Tests/Controllers/SyllabusVersionsControllerTests.cs
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
@@ -46,7 +47,6 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
 
             builder.ConfigureServices(services =>
             {
-                // Remove existing registrations
                 var syllabusVersionDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(ISyllabusVersionRepository));
                 if (syllabusVersionDescriptor != null)
                     services.Remove(syllabusVersionDescriptor);
@@ -55,11 +55,9 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
                 if (subjectDescriptor != null)
                     services.Remove(subjectDescriptor);
 
-                // Replace with mocks
                 services.AddScoped(typeof(ISyllabusVersionRepository), _ => _mockSyllabusVersionRepository.Object);
                 services.AddScoped(typeof(ISubjectRepository), _ => _mockSubjectRepository.Object);
 
-                // Align JWT bearer options with test configuration to avoid remote metadata lookups
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 {
                     options.Authority = "https://test.supabase.co";
@@ -67,7 +65,6 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
                     options.Audience = "authenticated";
                     options.TokenValidationParameters.ValidIssuer = "https://test.supabase.co/auth/v1";
                     options.TokenValidationParameters.ValidAudience = "authenticated";
-                    // Relax issuer/audience validation in tests; signing key and lifetime are still enforced
                     options.TokenValidationParameters.ValidateIssuer = false;
                     options.TokenValidationParameters.ValidateAudience = false;
                     options.TokenValidationParameters.ValidateLifetime = true;
@@ -97,7 +94,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
                 Id = Guid.NewGuid(),
                 SubjectId = subjectId,
                 VersionNumber = 1,
-                Content = "Initial syllabus content",
+                // MODIFICATION: Use a Dictionary to match the entity's property type.
+                Content = new Dictionary<string, object> { { "summary", "Initial syllabus content" } },
                 EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
                 IsActive = false,
                 CreatedBy = adminUserId,
@@ -108,7 +106,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
                 Id = Guid.NewGuid(),
                 SubjectId = subjectId,
                 VersionNumber = 2,
-                Content = "Updated syllabus content",
+                // MODIFICATION: Use a Dictionary to match the entity's property type.
+                Content = new Dictionary<string, object> { { "summary", "Updated syllabus content" } },
                 EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 IsActive = true,
                 CreatedBy = adminUserId,
@@ -117,7 +116,7 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         };
 
         _mockSyllabusVersionRepository.Setup(x => x.FindAsync(
-             It.Is<Expression<Func<SyllabusVersion, bool>>>(expr => true), 
+             It.Is<Expression<Func<SyllabusVersion, bool>>>(expr => true),
              It.IsAny<CancellationToken>()))
              .ReturnsAsync(syllabusVersions);
 
@@ -128,7 +127,7 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var content = await response.Content.ReadAsStringAsync();
         var result = JsonSerializer.Deserialize<List<SyllabusVersionDto>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        
+
         result.Should().NotBeNull();
         result!.Should().HaveCount(2);
         result![0].SubjectId.Should().Be(subjectId);
@@ -144,11 +143,13 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var subjectId = Guid.NewGuid();
+        // MODIFICATION: The Content in the command is now a JSON string.
+        var commandContent = new { summary = "Initial syllabus content" };
         var command = new CreateSyllabusVersionCommand
         {
             SubjectId = subjectId,
             VersionNumber = 1,
-            Content = "Initial syllabus content",
+            Content = JsonSerializer.Serialize(commandContent),
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = adminUserId
@@ -158,7 +159,7 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         {
             Id = subjectId,
             SubjectCode = "CS101",
-             SubjectName = "Introduction to Computer Science",
+            SubjectName = "Introduction to Computer Science",
             Credits = 3,
             Description = "Basic computer science concepts"
         };
@@ -168,7 +169,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             Id = Guid.NewGuid(),
             SubjectId = subjectId,
             VersionNumber = 1,
-            Content = "Initial syllabus content",
+            // MODIFICATION: Use a Dictionary to match the entity's property type.
+            Content = new Dictionary<string, object> { { "summary", "Initial syllabus content" } },
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = adminUserId,
@@ -179,7 +181,7 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             .ReturnsAsync(subject);
 
         _mockSyllabusVersionRepository.Setup(x => x.FindAsync(
-             It.Is<Expression<Func<SyllabusVersion, bool>>>(expr => true), 
+             It.Is<Expression<Func<SyllabusVersion, bool>>>(expr => true),
              It.IsAny<CancellationToken>()))
              .ReturnsAsync(new List<SyllabusVersion>());
 
@@ -196,11 +198,12 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         var responseContent = await response.Content.ReadAsStringAsync();
         var result = JsonSerializer.Deserialize<CreateSyllabusVersionResponse>(responseContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        
+
         result.Should().NotBeNull();
         result!.SubjectId.Should().Be(subjectId);
         result.VersionNumber.Should().Be(1);
-        result.Content.Should().Be("Initial syllabus content");
+        // MODIFICATION: Assert that the response Content is a valid serialized JSON string.
+        result.Content.Should().Contain("\"summary\":\"Initial syllabus content\"");
         result.IsActive.Should().BeTrue();
         result.CreatedBy.Should().Be(adminUserId);
     }
@@ -214,11 +217,13 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var subjectId = Guid.NewGuid();
+        // MODIFICATION: The Content in the command is now a JSON string.
+        var commandContent = new { summary = "Initial syllabus content" };
         var command = new CreateSyllabusVersionCommand
         {
             SubjectId = subjectId,
             VersionNumber = 1,
-            Content = "Initial syllabus content",
+            Content = JsonSerializer.Serialize(commandContent),
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = adminUserId
@@ -246,11 +251,13 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var subjectId = Guid.NewGuid();
+        // MODIFICATION: The Content in the command is now a JSON string.
+        var commandContent = new { summary = "Initial syllabus content" };
         var command = new CreateSyllabusVersionCommand
         {
             SubjectId = subjectId,
             VersionNumber = 1,
-            Content = "Initial syllabus content",
+            Content = JsonSerializer.Serialize(commandContent),
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = adminUserId
@@ -260,7 +267,7 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         {
             Id = subjectId,
             SubjectCode = "CS101",
-             SubjectName = "Introduction to Computer Science",
+            SubjectName = "Introduction to Computer Science",
             Credits = 3,
             Description = "Basic computer science concepts"
         };
@@ -270,7 +277,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             Id = Guid.NewGuid(),
             SubjectId = subjectId,
             VersionNumber = 1,
-            Content = "Existing syllabus content",
+            // MODIFICATION: Use a Dictionary to match the entity's property type.
+            Content = new Dictionary<string, object> { { "summary", "Existing syllabus content" } },
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30)),
             IsActive = false,
             CreatedBy = adminUserId,
@@ -281,7 +289,7 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             .ReturnsAsync(subject);
 
         _mockSyllabusVersionRepository.Setup(x => x.FindAsync(
-             It.Is<Expression<Func<SyllabusVersion, bool>>>(expr => true), 
+             It.Is<Expression<Func<SyllabusVersion, bool>>>(expr => true),
              It.IsAny<CancellationToken>()))
              .ReturnsAsync(new List<SyllabusVersion> { existingSyllabusVersion });
 
@@ -304,10 +312,12 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var syllabusVersionId = Guid.NewGuid();
+        // MODIFICATION: The Content in the command is now a JSON string.
+        var commandContent = new { summary = "Updated syllabus content" };
         var command = new UpdateSyllabusVersionCommand
         {
             Id = syllabusVersionId,
-            Content = "Updated syllabus content",
+            Content = JsonSerializer.Serialize(commandContent),
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
             IsActive = false
         };
@@ -317,7 +327,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             Id = syllabusVersionId,
             SubjectId = Guid.NewGuid(),
             VersionNumber = 1,
-            Content = "Original syllabus content",
+            // MODIFICATION: Use a Dictionary to match the entity's property type.
+            Content = new Dictionary<string, object> { { "summary", "Original syllabus content" } },
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = adminUserId,
@@ -329,7 +340,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             Id = syllabusVersionId,
             SubjectId = existingSyllabusVersion.SubjectId,
             VersionNumber = existingSyllabusVersion.VersionNumber,
-            Content = "Updated syllabus content",
+            // MODIFICATION: Use a Dictionary to match the entity's property type.
+            Content = new Dictionary<string, object> { { "summary", "Updated syllabus content" } },
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
             IsActive = false,
             CreatedBy = existingSyllabusVersion.CreatedBy,
@@ -352,10 +364,11 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var responseContent = await response.Content.ReadAsStringAsync();
         var result = JsonSerializer.Deserialize<UpdateSyllabusVersionResponse>(responseContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        
+
         result.Should().NotBeNull();
         result!.Id.Should().Be(syllabusVersionId);
-        result.Content.Should().Be("Updated syllabus content");
+        // MODIFICATION: Assert that the response Content is a valid serialized JSON string.
+        result.Content.Should().Contain("\"summary\":\"Updated syllabus content\"");
         result.IsActive.Should().BeFalse();
     }
 
@@ -368,10 +381,12 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var syllabusVersionId = Guid.NewGuid();
+        // MODIFICATION: The Content in the command is now a JSON string.
+        var commandContent = new { summary = "Updated syllabus content" };
         var command = new UpdateSyllabusVersionCommand
         {
             Id = syllabusVersionId,
-            Content = "Updated syllabus content",
+            Content = JsonSerializer.Serialize(commandContent),
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
             IsActive = false
         };
@@ -403,7 +418,8 @@ public class SyllabusVersionsControllerTests : IClassFixture<WebApplicationFacto
             Id = syllabusVersionId,
             SubjectId = Guid.NewGuid(),
             VersionNumber = 1,
-            Content = "Syllabus content",
+            // MODIFICATION: Use a Dictionary to match the entity's property type.
+            Content = new Dictionary<string, object> { { "summary", "Syllabus content" } },
             EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow),
             IsActive = true,
             CreatedBy = adminUserId,

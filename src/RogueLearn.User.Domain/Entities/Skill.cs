@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Skill.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -15,12 +16,17 @@ public class Skill : BaseEntity
     [Column("domain")]
     public string? Domain { get; set; }
 
-  [Column("tier")]
-  [JsonConverter(typeof(StringEnumConverter))]
-  public SkillTierLevel Tier { get; set; } = SkillTierLevel.Foundation;
+    [Column("tier")]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public SkillTierLevel Tier { get; set; } = SkillTierLevel.Foundation;
 
     [Column("description")]
     public string? Description { get; set; }
+
+    // ADDED: This new column links the skill to the subject it was generated from.
+    // It is nullable to allow for skills that are created manually by an admin.
+    [Column("source_subject_id")]
+    public Guid? SourceSubjectId { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

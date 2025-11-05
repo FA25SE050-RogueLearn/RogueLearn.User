@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/UserSkillRewards/Commands/IngestXpEvent/IngestXpEventCommand.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
@@ -12,7 +13,9 @@ public class IngestXpEventCommand : IRequest<IngestXpEventResponse>
     public Guid? SourceId { get; set; }
 
     // Skill & XP payload
-    public string SkillName { get; set; } = string.Empty;
+    // MODIFICATION: Add SkillId as the primary identifier.
+    public Guid? SkillId { get; set; }
+    public string SkillName { get; set; } = string.Empty; // Retain for logging and display purposes.
     public int Points { get; set; }
     public string? Reason { get; set; }
     public DateTimeOffset? OccurredAt { get; set; }

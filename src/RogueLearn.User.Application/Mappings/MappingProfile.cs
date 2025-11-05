@@ -134,8 +134,8 @@ public class MappingProfile : Profile
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
     }
-    // Add this helper method to your MappingProfile class:
-    private static object? ParseJsonContent(string content)
+    // MODIFICATION: The helper method now accepts a nullable string to satisfy the compiler.
+    private static object? ParseJsonContent(string? content)
     {
         if (string.IsNullOrWhiteSpace(content))
             return null;

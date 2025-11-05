@@ -10,6 +10,8 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestProgress;
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepProgress;
 using RogueLearn.User.Domain.Enums;
+// MODIFICATION: Add the necessary using for JsonStringEnumConverter.
+using System.Text.Json.Serialization;
 
 [ApiController]
 [Route("api/quests")]
@@ -43,7 +45,6 @@ public class QuestsController : ControllerBase
         return CreatedAtAction(nameof(GetQuestById), new { id = questId }, result);
     }
 
-    // MODIFICATION: Added a new endpoint for manually updating quest progress.
     /// <summary>
     /// Manually updates the status of a specific quest for the authenticated user.
     /// </summary>
@@ -63,7 +64,7 @@ public class QuestsController : ControllerBase
         return NoContent();
     }
 
-    // NEW ENDPOINT: Marks a specific quest step's progress for the authenticated user.
+
     /// <summary>
     /// Updates the progress status of a specific quest step for the authenticated user.
     /// </summary>
@@ -89,11 +90,15 @@ public class QuestsController : ControllerBase
 // DTO for the new endpoint's request body
 public class UpdateQuestProgressRequest
 {
+    // MODIFICATION: Tell the serializer to treat this enum as a string (e.g., "Completed").
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public QuestStatus Status { get; set; }
 }
 
 // NEW DTO: Request body for updating a quest step.
 public class UpdateQuestStepProgressRequest
 {
+    // MODIFICATION: Tell the serializer to treat this enum as a string (e.g., "Completed").
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public StepCompletionStatus Status { get; set; }
 }

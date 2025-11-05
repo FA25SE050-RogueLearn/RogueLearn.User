@@ -14,21 +14,21 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
 {
     private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
-    private readonly IQuestStepRepository _questStepRepository; // ADDED: To fetch the step details.
-    private readonly IMediator _mediator; // ADDED: To dispatch the XP event.
+    private readonly IQuestStepRepository _questStepRepository;
+    private readonly IMediator _mediator;
     private readonly ILogger<UpdateQuestStepProgressCommandHandler> _logger;
 
     public UpdateQuestStepProgressCommandHandler(
         IUserQuestAttemptRepository attemptRepository,
         IUserQuestStepProgressRepository stepProgressRepository,
-        IQuestStepRepository questStepRepository, // ADDED
-        IMediator mediator, // ADDED
+        IQuestStepRepository questStepRepository,
+        IMediator mediator,
         ILogger<UpdateQuestStepProgressCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
         _stepProgressRepository = stepProgressRepository;
-        _questStepRepository = questStepRepository; // ADDED
-        _mediator = mediator; // ADDED
+        _questStepRepository = questStepRepository;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -38,7 +38,6 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
             "Updating quest step progress for User:{AuthUserId}, Quest:{QuestId}, Step:{StepId} to Status:{Status}",
             request.AuthUserId, request.QuestId, request.StepId, request.Status);
 
-        // MODIFICATION: Fetch the QuestStep to access its content and XP value.
         var questStep = await _questStepRepository.GetByIdAsync(request.StepId, cancellationToken);
         if (questStep is null || questStep.QuestId != request.QuestId)
         {
@@ -83,7 +82,6 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
         }
         else
         {
-            // Avoid re-awarding XP or changing completion date if already completed.
             if (stepProgress.Status == StepCompletionStatus.Completed)
             {
                 _logger.LogInformation("Step {StepId} is already completed. No action taken.", request.StepId);
@@ -98,37 +96,34 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
             await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
         }
 
-        // MODIFICATION: Award skill XP if the step is being marked as completed.
         if (request.Status == StepCompletionStatus.Completed && !string.IsNullOrWhiteSpace(questStep.Content))
         {
             try
             {
                 using var jsonDoc = JsonDocument.Parse(questStep.Content);
-                if (jsonDoc.RootElement.TryGetProperty("skillTag", out var skillTagElement) &&
-                    skillTagElement.ValueKind == JsonValueKind.String)
+                if (jsonDoc.RootElement.TryGetProperty("skillId", out var skillIdElement) &&
+                    skillIdElement.ValueKind == JsonValueKind.String &&
+                    Guid.TryParse(skillIdElement.GetString(), out var skillId))
                 {
-                    var skillName = skillTagElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(skillName))
+                    // MODIFICATION: The command now ONLY sends the SkillId. It does not need to know the name.
+                    var xpEvent = new IngestXpEventCommand
                     {
-                        var xpEvent = new IngestXpEventCommand
-                        {
-                            AuthUserId = request.AuthUserId,
-                            SourceService = "QuestsService",
-                            SourceType = SkillRewardSourceType.QuestComplete.ToString(),
-                            SourceId = questStep.Id,
-                            SkillName = skillName,
-                            Points = questStep.ExperiencePoints,
-                            Reason = $"Completed quest step: {questStep.Title}"
-                        };
-                        await _mediator.Send(xpEvent, cancellationToken);
-                        _logger.LogInformation("Dispatched IngestXpEvent for Skill '{SkillName}' with {Points} XP for completing Step {StepId}",
-                            skillName, questStep.ExperiencePoints, request.StepId);
-                    }
+                        AuthUserId = request.AuthUserId,
+                        SourceService = "QuestsService",
+                        SourceType = SkillRewardSourceType.QuestComplete.ToString(),
+                        SourceId = questStep.Id,
+                        SkillId = skillId, // This is the only skill identifier we need to send.
+                        Points = questStep.ExperiencePoints,
+                        Reason = $"Completed quest step: {questStep.Title}"
+                    };
+                    await _mediator.Send(xpEvent, cancellationToken);
+                    _logger.LogInformation("Dispatched IngestXpEvent for SkillId '{SkillId}' with {Points} XP for completing Step {StepId}",
+                        skillId, questStep.ExperiencePoints, request.StepId);
                 }
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Could not parse skillTag from content for QuestStep {StepId}", request.StepId);
+                _logger.LogWarning(ex, "Could not parse skillId from content for QuestStep {StepId}", request.StepId);
             }
         }
 

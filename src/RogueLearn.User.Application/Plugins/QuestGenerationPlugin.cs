@@ -1,6 +1,8 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using RogueLearn.User.Domain.Entities;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -15,14 +17,22 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         _logger = logger;
     }
 
-    public async Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, CancellationToken cancellationToken = default)
+    // MODIFICATION: The method now accepts a list of Skill entities.
+    public async Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default)
     {
-        // MODIFIED: The prompt now includes instructions for generating experiencePoints for each step.
+        // MODIFICATION: The prompt is updated to use the provided list of skills with their IDs.
+        var skillsJsonForPrompt = JsonSerializer.Serialize(
+            relevantSkills.Select(s => new { skillId = s.Id, skillName = s.Name })
+        );
+
         var prompt = $@"
 Analyze the following syllabus content and generate a series of interactive, gamified quest steps for a learning application.
 
 **USER CONTEXT:**
 {userContext}
+
+**PRE-APPROVED SKILLS (Use these ONLY):**
+{skillsJsonForPrompt}
 
 **SYLLABUS CONTENT (JSON):**
 {syllabusJson}
@@ -33,30 +43,30 @@ Generate a JSON array of 5 to 8 quest step objects. You MUST adhere to the follo
 1.  Each object in the array MUST have the properties: `stepNumber`, `title`, `description`, `stepType`, `experiencePoints`, and `content`.
 2.  The `stepType` property MUST be one of these exact, case-sensitive strings: 'Reading', 'Interactive', 'Quiz', 'Coding', 'Submission', 'Reflection'.
 3.  The `experiencePoints` property MUST be an integer between 10 and 50, based on the step's complexity.
-4.  The `content` object for each `stepType` MUST follow the specific schema defined below AND MUST include a `skillTag`.
+4.  The `content` object for each `stepType` MUST follow the specific schema defined below AND MUST include a `skillId`.
 
 **CONTENT SCHEMAS (MANDATORY):**
 
 - If `stepType` is **'Reading'**:
-  `""content"": {{ ""skillTag"": ""string"", ""articleTitle"": ""string"", ""summary"": ""string"", ""url"": ""string"" }}`
+  `""content"": {{ ""skillId"": ""guid"", ""articleTitle"": ""string"", ""summary"": ""string"", ""url"": ""string"" }}`
 
 - If `stepType` is **'Interactive'**:
-  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""questions"": [{{ ""task"": ""string"", ""options"": [""string""], ""answer"": ""string"" }}] }}`
+  `""content"": {{ ""skillId"": ""guid"", ""challenge"": ""string"", ""questions"": [{{ ""task"": ""string"", ""options"": [""string""], ""answer"": ""string"" }}] }}`
 
 - If `stepType` is **'Quiz'**:
-  `""content"": {{ ""skillTag"": ""string"", ""questions"": [{{ ""question"": ""string"", ""options"": [""string""], ""correctAnswer"": ""string"", ""explanation"": ""string"" }}] }}`
+  `""content"": {{ ""skillId"": ""guid"", ""questions"": [{{ ""question"": ""string"", ""options"": [""string""], ""correctAnswer"": ""string"", ""explanation"": ""string"" }}] }}`
 
 - If `stepType` is **'Coding'**: (This is a descriptive challenge, not an executable one)
-  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""template"": ""string (starter code)"", ""expectedOutput"": ""string"" }}`
+  `""content"": {{ ""skillId"": ""guid"", ""challenge"": ""string"", ""template"": ""string (starter code)"", ""expectedOutput"": ""string"" }}`
 
 - If `stepType` is **'Submission'**:
-  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""submissionFormat"": ""string"" }}`
+  `""content"": {{ ""skillId"": ""guid"", ""challenge"": ""string"", ""submissionFormat"": ""string"" }}`
 
 - If `stepType` is **'Reflection'**:
-  `""content"": {{ ""skillTag"": ""string"", ""challenge"": ""string"", ""reflectionPrompt"": ""string"", ""expectedOutcome"": ""string"" }}`
+  `""content"": {{ ""skillId"": ""guid"", ""challenge"": ""string"", ""reflectionPrompt"": ""string"", ""expectedOutcome"": ""string"" }}`
 
-**CRITICAL RULE FOR `skillTag`:**
-The `skillTag` value MUST be the name of the single, most relevant skill from the syllabus that this specific step teaches. Examples: 'Servlet Lifecycle Management', 'JSP Expression Language', 'MVC Pattern Implementation'.
+**CRITICAL RULE FOR `skillId`:**
+The `skillId` value MUST be the UUID of the single, most relevant skill from the PRE-APPROVED SKILLS list that this specific step teaches. The `skillName` in that list is for your context only.
 
 **OUTPUT REQUIREMENT:**
 Return ONLY the raw JSON array. Do NOT wrap it in markdown backticks or add any other text.
