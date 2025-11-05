@@ -190,11 +190,11 @@ public class GuildsController : ControllerBase
     [ProducesResponseType(typeof(InviteGuildMembersResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> InviteGuildMembers([FromRoute] Guid guildId, [FromBody] InviteGuildMembersCommand command, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> InviteGuildMembers([FromRoute] Guid guildId, [FromBody] InviteGuildMembersRequest request, CancellationToken cancellationToken = default)
     {
         var authUserId = User.GetAuthUserId();
-        var req = command with { GuildId = guildId, InviterAuthUserId = authUserId };
-        var result = await _mediator.Send(req, cancellationToken);
+        var command = new InviteGuildMembersCommand(guildId, authUserId, request.Targets, request.Message);
+        var result = await _mediator.Send(command, cancellationToken);
         return Ok(result);
     }
 
@@ -206,11 +206,10 @@ public class GuildsController : ControllerBase
     [ProducesResponseType(typeof(InviteGuildMembersResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> InviteGuildMembersAdmin([FromRoute] Guid guildId, [FromBody] InviteGuildMembersCommand command, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> InviteGuildMembersAdmin([FromRoute] Guid guildId, [FromBody] InviteGuildMembersRequest request, CancellationToken cancellationToken = default)
     {
-        // For admin endpoints, we do not require the inviter to be a guild member
-        var req = command with { GuildId = guildId, InviterAuthUserId = User.GetAuthUserId() };
-        var result = await _mediator.Send(req, cancellationToken);
+        var command = new InviteGuildMembersCommand(guildId, User.GetAuthUserId(), request.Targets, request.Message);
+        var result = await _mediator.Send(command, cancellationToken);
         return Ok(result);
     }
 

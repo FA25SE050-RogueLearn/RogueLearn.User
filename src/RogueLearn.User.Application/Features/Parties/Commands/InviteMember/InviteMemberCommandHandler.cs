@@ -8,40 +8,69 @@ using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.InviteMember;
 
-public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, PartyInvitationDto>
+public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, Unit>
 {
     private readonly IPartyInvitationRepository _invitationRepository;
     private readonly IPartyNotificationService _notificationService;
-    private readonly IMapper _mapper;
+    private readonly IUserProfileRepository _userProfileRepository;
 
     public InviteMemberCommandHandler(
-        IPartyInvitationRepository invitationRepository, 
+        IPartyInvitationRepository invitationRepository,
         IPartyNotificationService notificationService,
-        IMapper mapper)
+        IUserProfileRepository userProfileRepository)
     {
         _invitationRepository = invitationRepository;
         _notificationService = notificationService;
-        _mapper = mapper;
+        _userProfileRepository = userProfileRepository;
     }
 
-    public async Task<PartyInvitationDto> Handle(InviteMemberCommand request, CancellationToken cancellationToken)
+    public async Task<Unit> Handle(InviteMemberCommand request, CancellationToken cancellationToken)
     {
-        var invitation = new PartyInvitation
+        foreach (var target in request.Targets)
         {
-            PartyId = request.PartyId,
-            InviterId = request.InviterAuthUserId,
-            InviteeId = request.InviteeAuthUserId,
-            Message = request.Message,
-            Status = InvitationStatus.Pending,
-            ExpiresAt = request.ExpiresAt,
-            InvitedAt = DateTimeOffset.UtcNow
-        };
+            Guid? inviteeId = target.UserId;
 
-        invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
+            if (!inviteeId.HasValue && !string.IsNullOrWhiteSpace(target.Email))
+            {
+                var userProfile = await _userProfileRepository.GetByEmailAsync(target.Email, cancellationToken);
+                if (userProfile != null)
+                {
+                    inviteeId = userProfile.AuthUserId;
+                }
+                else
+                {
+                    // TODO: Handle email invitations for non-existing users
+                    continue;
+                }
+            }
 
-        // Send notification
-        await _notificationService.SendInvitationNotificationAsync(invitation, cancellationToken);
+            if (!inviteeId.HasValue)
+            {
+                continue;
+            }
 
-        return _mapper.Map<PartyInvitationDto>(invitation);
+            var pending = await _invitationRepository.GetPendingInvitationsByPartyAsync(request.PartyId, cancellationToken);
+            if (pending.Any(i => i.InviteeId == inviteeId.Value))
+            {
+                continue;
+            }
+
+            var invitation = new PartyInvitation
+            {
+                PartyId = request.PartyId,
+                InviterId = request.InviterAuthUserId,
+                InviteeId = inviteeId.Value,
+                Message = request.Message,
+                Status = InvitationStatus.Pending,
+                ExpiresAt = request.ExpiresAt,
+                InvitedAt = DateTimeOffset.UtcNow
+            };
+
+            invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
+
+            await _notificationService.SendInvitationNotificationAsync(invitation, cancellationToken);
+        }
+
+        return Unit.Value;
     }
 }
