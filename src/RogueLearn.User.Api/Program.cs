@@ -12,7 +12,10 @@ using Newtonsoft.Json.Serialization; // ADDED: For CamelCasePropertyNamesContrac
 
 // Load environment variables from .env file
 Env.Load();
-
+var googleApiKey = Environment.GetEnvironmentVariable("AI__Google__ApiKey");
+Console.WriteLine($"[DEBUG] AI Provider from ENV: {Environment.GetEnvironmentVariable("AI__Provider")}");
+Console.WriteLine($"[DEBUG] Google Model from ENV: {Environment.GetEnvironmentVariable("AI__Google__Model")}");
+Console.WriteLine($"[DEBUG] Google ApiKey loaded: {(!string.IsNullOrEmpty(googleApiKey) ? "YES (length: " + googleApiKey.Length + ")" : "NO")}");
 // Configure Serilog
 Log.Logger = SerilogConfiguration.CreateLogger();
 
