@@ -4,7 +4,6 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Interfaces;
-using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
@@ -43,14 +42,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ILogger<ProcessAcademicRecordCommandHandler> _logger;
     private readonly ICurriculumImportStorage _storage;
     private readonly ICurriculumVersionRepository _curriculumVersionRepository;
-    private readonly ISyllabusVersionRepository _syllabusVersionRepository;
-    private readonly ISkillRepository _skillRepository;
-    private readonly IUserSkillRepository _userSkillRepository;
-    private readonly ISubjectExtractionPlugin _subjectExtractionPlugin;
 
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     public ProcessAcademicRecordCommandHandler(
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         IFapExtractionPlugin fapPlugin,
         IStudentEnrollmentRepository enrollmentRepository,
         IStudentSemesterSubjectRepository semesterSubjectRepository,
@@ -63,11 +56,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         ILearningPathQuestRepository learningPathQuestRepository,
         ILogger<ProcessAcademicRecordCommandHandler> logger,
         ICurriculumImportStorage storage,
-        ICurriculumVersionRepository curriculumVersionRepository,
-        ISyllabusVersionRepository syllabusVersionRepository,
-        ISkillRepository skillRepository,
-        IUserSkillRepository userSkillRepository,
-        ISubjectExtractionPlugin subjectExtractionPlugin)
+        ICurriculumVersionRepository curriculumVersionRepository)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -82,24 +71,21 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _logger = logger;
         _storage = storage;
         _curriculumVersionRepository = curriculumVersionRepository;
-        _syllabusVersionRepository = syllabusVersionRepository;
-        _skillRepository = skillRepository;
-        _userSkillRepository = userSkillRepository;
-        _subjectExtractionPlugin = subjectExtractionPlugin;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
     {
-        // ... (The beginning of the method remains unchanged as it is working correctly)
         _logger.LogInformation("[START] Processing academic record for user {AuthUserId}", request.AuthUserId);
 
+        // STEP 1: Validate curriculum version
         var curriculumVersion = await _curriculumVersionRepository.GetByIdAsync(request.CurriculumVersionId, cancellationToken);
         if (curriculumVersion == null)
         {
-            _logger.LogWarning("Attempted to process academic record with an invalid CurriculumVersionId: {CurriculumVersionId}", request.CurriculumVersionId);
+            _logger.LogWarning("Invalid CurriculumVersionId: {CurriculumVersionId}", request.CurriculumVersionId);
             throw new NotFoundException(nameof(CurriculumVersion), request.CurriculumVersionId);
         }
 
+        // STEP 2: Pre-process HTML
         _logger.LogInformation("Step 1: Pre-processing HTML to extract clean text.");
         string cleanTextForAi = PreprocessFapHtml(request.FapHtmlContent);
         if (string.IsNullOrWhiteSpace(cleanTextForAi))
@@ -107,35 +93,31 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             _logger.LogWarning("HTML pre-processing failed. No grade report table found.");
             throw new BadRequestException("Could not find a valid grade report table in the provided HTML.");
         }
-        _logger.LogInformation("HTML pre-processing successful.");
 
+        // STEP 3: Check cache or call AI
         var textHash = ComputeSha256Hash(cleanTextForAi);
         string? extractedJson = null;
 
-        _logger.LogInformation("Step 2: Checking cache for existing extraction with hash {TextHash}.", textHash);
+        _logger.LogInformation("Step 2: Checking cache for hash {TextHash}.", textHash);
         try
         {
             extractedJson = await _storage.TryGetByHashJsonAsync("curriculum-imports", textHash, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to retrieve cached academic record by hash {Hash}. Proceeding with AI extraction.", textHash);
+            _logger.LogWarning(ex, "Failed to retrieve cached record. Proceeding with AI extraction.");
         }
 
-        if (!string.IsNullOrEmpty(extractedJson))
+        if (string.IsNullOrEmpty(extractedJson))
         {
-            _logger.LogInformation("Cache HIT for academic record hash {TextHash}. Skipping AI extraction.", textHash);
-        }
-        else
-        {
-            _logger.LogInformation("Cache MISS for academic record hash {TextHash}. Calling FAP extraction plugin.", textHash);
+            _logger.LogInformation("Cache MISS. Calling FAP extraction plugin.");
             extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanTextForAi, cancellationToken);
+
             if (string.IsNullOrWhiteSpace(extractedJson))
             {
-                _logger.LogError("AI extraction failed to return valid JSON for the academic record.");
+                _logger.LogError("AI extraction failed to return valid JSON.");
                 throw new InvalidOperationException("AI extraction failed to return valid JSON for the academic record.");
             }
-            _logger.LogInformation("AI extraction successful.");
 
             await _storage.SaveLatestAsync(
                 "curriculum-imports",
@@ -145,38 +127,45 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 cleanTextForAi,
                 textHash,
                 cancellationToken);
-            _logger.LogInformation("Saved new academic record extraction to cache with hash {TextHash}", textHash);
+
+            _logger.LogInformation("Saved extraction to cache with hash {TextHash}", textHash);
+        }
+        else
+        {
+            _logger.LogInformation("Cache HIT for hash {TextHash}.", textHash);
         }
 
+        // STEP 4: Deserialize FAP data
         var fapData = JsonSerializer.Deserialize<FapRecordData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         if (fapData == null)
         {
             _logger.LogError("Failed to deserialize the extracted academic JSON.");
             throw new BadRequestException("Failed to deserialize the extracted academic data.");
         }
-        _logger.LogInformation("Successfully deserialized academic data with {SubjectCount} subjects.", fapData.Subjects.Count);
 
+        _logger.LogInformation("Successfully deserialized {SubjectCount} subjects.", fapData.Subjects.Count);
+
+        // STEP 5: Create or get enrollment
         _logger.LogInformation("Step 3: Synchronizing database records.");
-        var enrollment = await _enrollmentRepository.FirstOrDefaultAsync(e => e.AuthUserId == request.AuthUserId && e.CurriculumVersionId == request.CurriculumVersionId, cancellationToken);
+        var enrollment = await _enrollmentRepository.FirstOrDefaultAsync(
+            e => e.AuthUserId == request.AuthUserId && e.CurriculumVersionId == request.CurriculumVersionId,
+            cancellationToken);
 
         if (enrollment == null)
         {
-            _logger.LogInformation("No existing enrollment found for user {AuthUserId}. Creating new one.", request.AuthUserId);
+            _logger.LogInformation("Creating new enrollment for user {AuthUserId}.", request.AuthUserId);
             var newEnrollment = new StudentEnrollment
             {
                 AuthUserId = request.AuthUserId,
                 CurriculumVersionId = request.CurriculumVersionId,
                 EnrollmentDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                Status = Domain.Enums.EnrollmentStatus.Active
+                Status = EnrollmentStatus.Active
             };
             enrollment = await _enrollmentRepository.AddAsync(newEnrollment, cancellationToken);
-            _logger.LogInformation("Created new enrollment with ID {EnrollmentId}", enrollment.Id);
-        }
-        else
-        {
-            _logger.LogInformation("Found existing enrollment with ID {EnrollmentId}", enrollment.Id);
+            _logger.LogInformation("Created enrollment with ID {EnrollmentId}", enrollment.Id);
         }
 
+        // STEP 6: Sync subjects
         var allDbSubjects = (await _subjectRepository.GetAllAsync(cancellationToken)).ToDictionary(s => s.SubjectCode);
         var missingSubjectCodes = fapData.Subjects
             .Select(s => s.SubjectCode)
@@ -186,7 +175,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         if (missingSubjectCodes.Any())
         {
-            _logger.LogWarning("Missing {Count} subjects in the database from the user's transcript. These subjects will be skipped: {MissingSubjects}",
+            _logger.LogWarning("Missing {Count} subjects in database: {MissingSubjects}",
                 missingSubjectCodes.Count, string.Join(", ", missingSubjectCodes));
         }
 
@@ -194,11 +183,14 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         {
             if (!allDbSubjects.TryGetValue(subjectRecord.SubjectCode, out var subject))
             {
-                _logger.LogWarning("Subject with code {SubjectCode} from transcript not found in database. Skipping.", subjectRecord.SubjectCode);
+                _logger.LogWarning("Subject {SubjectCode} not found in database. Skipping.", subjectRecord.SubjectCode);
                 continue;
             }
 
-            var semesterSubject = await _semesterSubjectRepository.FirstOrDefaultAsync(ss => ss.EnrollmentId == enrollment.Id && ss.SubjectId == subject.Id, cancellationToken);
+            var semesterSubject = await _semesterSubjectRepository.FirstOrDefaultAsync(
+                ss => ss.EnrollmentId == enrollment.Id && ss.SubjectId == subject.Id,
+                cancellationToken);
+
             var parsedStatus = MapFapStatusToEnum(subjectRecord.Status);
 
             if (semesterSubject == null)
@@ -213,18 +205,22 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     Grade = subjectRecord.Mark?.ToString("F1")
                 };
                 await _semesterSubjectRepository.AddAsync(semesterSubject, cancellationToken);
-                _logger.LogInformation("Created new student semester subject record for {SubjectCode}", subject.SubjectCode);
+                _logger.LogDebug("Created semester subject record for {SubjectCode}", subject.SubjectCode);
             }
             else
             {
                 semesterSubject.Status = parsedStatus;
                 semesterSubject.Grade = subjectRecord.Mark?.ToString("F1");
                 await _semesterSubjectRepository.UpdateAsync(semesterSubject, cancellationToken);
-                _logger.LogInformation("Updated existing student semester subject record for {SubjectCode}", subject.SubjectCode);
+                _logger.LogDebug("Updated semester subject record for {SubjectCode}", subject.SubjectCode);
             }
         }
 
-        var learningPath = await _learningPathRepository.FirstOrDefaultAsync(lp => lp.CreatedBy == request.AuthUserId && lp.CurriculumVersionId == request.CurriculumVersionId, cancellationToken);
+        // STEP 7: Create or get learning path
+        var learningPath = await _learningPathRepository.FirstOrDefaultAsync(
+            lp => lp.CreatedBy == request.AuthUserId && lp.CurriculumVersionId == request.CurriculumVersionId,
+            cancellationToken);
+
         if (learningPath == null)
         {
             learningPath = new LearningPath
@@ -237,36 +233,41 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 CreatedBy = request.AuthUserId
             };
             learningPath = await _learningPathRepository.AddAsync(learningPath, cancellationToken);
-            _logger.LogInformation("Created new Learning Path with ID {LearningPathId}", learningPath.Id);
-        }
-        else
-        {
-            _logger.LogInformation("Found existing Learning Path with ID {LearningPathId}", learningPath.Id);
+            _logger.LogInformation("Created Learning Path with ID {LearningPathId}", learningPath.Id);
         }
 
-        var structures = (await _curriculumStructureRepository.FindAsync(cs => cs.CurriculumVersionId == request.CurriculumVersionId, cancellationToken)).ToList();
-        _logger.LogInformation("Found {StructureCount} subjects in the official curriculum structure.", structures.Count);
+        // STEP 8: Sync quests and chapters
+        var structures = (await _curriculumStructureRepository.FindAsync(
+            cs => cs.CurriculumVersionId == request.CurriculumVersionId,
+            cancellationToken)).ToList();
+
+        _logger.LogInformation("Found {StructureCount} subjects in curriculum structure.", structures.Count);
 
         int questsCreated = 0;
         int questsUpdated = 0;
         var semesters = structures.GroupBy(s => s.Semester).OrderBy(g => g.Key);
 
-        var existingLearningPathQuests = (await _learningPathQuestRepository.FindAsync(lpq => lpq.LearningPathId == learningPath.Id, cancellationToken)).ToList();
-        int nextSequenceOrder = existingLearningPathQuests.Any() ? existingLearningPathQuests.Max(lpq => lpq.SequenceOrder) + 1 : 1;
+        var existingLearningPathQuests = (await _learningPathQuestRepository.FindAsync(
+            lpq => lpq.LearningPathId == learningPath.Id,
+            cancellationToken)).ToList();
+
+        int nextSequenceOrder = existingLearningPathQuests.Any()
+            ? existingLearningPathQuests.Max(lpq => lpq.SequenceOrder) + 1
+            : 1;
 
         var fapPassedSubjects = fapData.Subjects
             .Where(s => "Passed".Equals(s.Status, StringComparison.OrdinalIgnoreCase))
             .Select(s => s.SubjectCode)
             .ToHashSet();
 
+        // Determine first in-progress semester
         int firstInProgressSemester = -1;
         foreach (var semesterGroup in semesters)
         {
             bool allPassedInSemester = semesterGroup.All(structure =>
             {
                 var subjectEntity = allDbSubjects.Values.FirstOrDefault(s => s.Id == structure.SubjectId);
-                if (subjectEntity == null) return false;
-                return fapPassedSubjects.Contains(subjectEntity.SubjectCode);
+                return subjectEntity != null && fapPassedSubjects.Contains(subjectEntity.SubjectCode);
             });
 
             if (!allPassedInSemester)
@@ -275,14 +276,19 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 break;
             }
         }
+
         if (firstInProgressSemester == -1 && semesters.Any())
         {
             firstInProgressSemester = semesters.Last().Key;
         }
 
+        // Create chapters and quests
         foreach (var semesterGroup in semesters)
         {
-            var chapter = await _questChapterRepository.FirstOrDefaultAsync(qc => qc.LearningPathId == learningPath.Id && qc.Sequence == semesterGroup.Key, cancellationToken);
+            var chapter = await _questChapterRepository.FirstOrDefaultAsync(
+                qc => qc.LearningPathId == learningPath.Id && qc.Sequence == semesterGroup.Key,
+                cancellationToken);
+
             if (chapter == null)
             {
                 chapter = new QuestChapter
@@ -290,10 +296,12 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     LearningPathId = learningPath.Id,
                     Title = $"Semester {semesterGroup.Key}",
                     Sequence = semesterGroup.Key,
-                    Status = (semesterGroup.Key == firstInProgressSemester) ? PathProgressStatus.InProgress : PathProgressStatus.NotStarted
+                    Status = (semesterGroup.Key == firstInProgressSemester)
+                        ? PathProgressStatus.InProgress
+                        : PathProgressStatus.NotStarted
                 };
                 await _questChapterRepository.AddAsync(chapter, cancellationToken);
-                _logger.LogInformation("Created new Quest Chapter for Semester {Semester}", semesterGroup.Key);
+                _logger.LogDebug("Created Quest Chapter for Semester {Semester}", semesterGroup.Key);
             }
 
             foreach (var structure in semesterGroup)
@@ -301,7 +309,10 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 var subject = allDbSubjects.Values.FirstOrDefault(s => s.Id == structure.SubjectId);
                 if (subject == null) continue;
 
-                var quest = await _questRepository.FirstOrDefaultAsync(q => q.SubjectId == subject.Id && q.CreatedBy == request.AuthUserId, cancellationToken);
+                var quest = await _questRepository.FirstOrDefaultAsync(
+                    q => q.SubjectId == subject.Id && q.CreatedBy == request.AuthUserId,
+                    cancellationToken);
+
                 if (quest == null)
                 {
                     quest = new Quest
@@ -317,7 +328,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     };
                     quest = await _questRepository.AddAsync(quest, cancellationToken);
                     questsCreated++;
-                    _logger.LogInformation("Created new Quest '{QuestTitle}' for Subject {SubjectCode}", quest.Title, subject.SubjectCode);
 
                     var existingLink = existingLearningPathQuests.FirstOrDefault(lpq => lpq.QuestId == quest.Id);
                     if (existingLink == null)
@@ -334,6 +344,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     }
                 }
 
+                // Update quest progress
                 var userRecord = fapData.Subjects.FirstOrDefault(s => s.SubjectCode == subject.SubjectCode);
                 var questStatus = QuestStatus.NotStarted;
                 if (userRecord != null)
@@ -341,41 +352,43 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     questStatus = MapFapStatusToQuestStatus(userRecord.Status);
                 }
 
-                var progress = await _questProgressRepository.FirstOrDefaultAsync(p => p.AuthUserId == request.AuthUserId && p.QuestId == quest.Id, cancellationToken);
-                if (progress == null)
+                var progress = await _questProgressRepository.FirstOrDefaultAsync(
+                    p => p.AuthUserId == request.AuthUserId && p.QuestId == quest.Id,
+                    cancellationToken);
+
+                if (progress == null && userRecord != null)
                 {
-                    if (userRecord != null)
+                    progress = new UserQuestProgress
                     {
-                        progress = new UserQuestProgress
-                        {
-                            AuthUserId = request.AuthUserId,
-                            QuestId = quest.Id,
-                            Status = questStatus,
-                            CompletedAt = questStatus == QuestStatus.Completed ? DateTimeOffset.UtcNow : null
-                        };
-                        await _questProgressRepository.AddAsync(progress, cancellationToken);
-                        _logger.LogInformation("Created new UserQuestProgress for Quest '{QuestTitle}' with Status {Status}", quest.Title, questStatus);
-                    }
+                        AuthUserId = request.AuthUserId,
+                        QuestId = quest.Id,
+                        Status = questStatus,
+                        CompletedAt = questStatus == QuestStatus.Completed ? DateTimeOffset.UtcNow : null
+                    };
+                    await _questProgressRepository.AddAsync(progress, cancellationToken);
                 }
-                else if (userRecord != null)
+                else if (progress != null && userRecord != null)
                 {
                     progress.Status = questStatus;
                     progress.CompletedAt = questStatus == QuestStatus.Completed ? DateTimeOffset.UtcNow : null;
                     progress.LastUpdatedAt = DateTimeOffset.UtcNow;
                     await _questProgressRepository.UpdateAsync(progress, cancellationToken);
                     questsUpdated++;
-                    _logger.LogInformation("Updated UserQuestProgress for Quest '{QuestTitle}' to Status {Status}", quest.Title, questStatus);
                 }
             }
         }
 
-        await InitializeUserSkillsForCurriculum(request.AuthUserId, request.CurriculumVersionId, cancellationToken);
+        // REMOVED: InitializeUserSkillsForCurriculum call
+        // Skills will be initialized via separate endpoint call
 
-        _logger.LogInformation("[END] Finished processing academic record. Quests Created: {QuestsCreated}, Quests Updated: {QuestsUpdated}", questsCreated, questsUpdated);
+        _logger.LogInformation(
+            "[END] Academic record processed. Quests Created: {QuestsCreated}, Updated: {QuestsUpdated}",
+            questsCreated, questsUpdated);
+
         return new ProcessAcademicRecordResponse
         {
             IsSuccess = true,
-            Message = "Academic record processed and questline synchronized successfully.",
+            Message = "Academic record processed successfully. Call /initialize-skills to set up your skill tree.",
             LearningPathId = learningPath.Id,
             SubjectsProcessed = fapData.Subjects.Count,
             QuestsGenerated = questsCreated,
@@ -383,135 +396,20 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         };
     }
 
-    private async Task InitializeUserSkillsForCurriculum(Guid authUserId, Guid curriculumVersionId, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Initializing skill tree for User {AuthUserId} and CurriculumVersion {CurriculumVersionId}", authUserId, curriculumVersionId);
-
-        var structures = (await _curriculumStructureRepository.FindAsync(
-            cs => cs.CurriculumVersionId == curriculumVersionId,
-            cancellationToken)).ToList();
-        _logger.LogDebug("Found {Count} structures for curriculum version.", structures.Count);
-
-        var subjectIds = structures.Select(s => s.SubjectId).Distinct().ToList();
-        _logger.LogDebug("Found {Count} unique subjects in curriculum.", subjectIds.Count);
-
-        var allSyllabiResults = await _syllabusVersionRepository.GetActiveBySubjectIdsAsync(subjectIds, cancellationToken);
-
-        var allSyllabi = allSyllabiResults
-            .GroupBy(sv => sv.SubjectId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(sv => sv.VersionNumber).FirstOrDefault());
-        _logger.LogDebug("Fetched {Count} active syllabi for the subjects in the curriculum.", allSyllabi.Count);
-
-        // MODIFICATION: Collect all learning objectives first before making the batch AI call.
-        var allLearningObjectives = new List<string>();
-        foreach (var subjectId in subjectIds)
-        {
-            if (allSyllabi.TryGetValue(subjectId, out var activeSyllabus) && activeSyllabus?.Content != null)
-            {
-                var syllabusContentJson = JsonSerializer.Serialize(activeSyllabus.Content);
-                _logger.LogInformation("Processing syllabus content for SubjectId {SubjectId}: {SyllabusContent}", subjectId, syllabusContentJson);
-
-                try
-                {
-                    if (activeSyllabus.Content.TryGetValue("sessions", out var sessionsObj) && sessionsObj is Newtonsoft.Json.Linq.JArray sessionsArray)
-                    {
-                        foreach (var session in sessionsArray)
-                        {
-                            var sessionObject = session as Newtonsoft.Json.Linq.JObject;
-                            if (sessionObject != null && sessionObject.TryGetValue("lo", StringComparison.OrdinalIgnoreCase, out var loToken) && loToken.Type == Newtonsoft.Json.Linq.JTokenType.String)
-                            {
-                                var learningObjective = loToken.ToString();
-                                if (!string.IsNullOrWhiteSpace(learningObjective))
-                                {
-                                    allLearningObjectives.Add(learningObjective);
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Syllabus content for SubjectId {SubjectId} is missing a 'sessions' array or it is not a JSON array.", subjectId);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not process syllabus content for SubjectId {SubjectId} during skill initialization.", subjectId);
-                }
-            }
-            else
-            {
-                _logger.LogWarning("No active syllabus with content found for SubjectId {SubjectId}. Cannot extract skills for this subject.", subjectId);
-            }
-        }
-
-        // MODIFICATION: Make a single, efficient batch call to the AI plugin.
-        List<string> extractedSkills = new List<string>();
-        if (allLearningObjectives.Any())
-        {
-            _logger.LogInformation("Sending {Count} learning objectives to AI for batch skill extraction.", allLearningObjectives.Count);
-            extractedSkills = await _subjectExtractionPlugin.ExtractSkillsFromObjectivesAsync(allLearningObjectives, cancellationToken);
-            _logger.LogInformation("AI returned {Count} skill extractions.", extractedSkills.Count);
-        }
-
-        // Use a HashSet to get unique, non-empty skill tags from the batch response.
-        var uniqueSkillTags = extractedSkills.Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (!uniqueSkillTags.Any())
-        {
-            _logger.LogWarning("No skill tags were successfully extracted from any syllabus content for CurriculumVersion {CurriculumVersionId}. Skill tree will be empty.", curriculumVersionId);
-            return;
-        }
-
-        var existingUserSkills = (await _userSkillRepository.FindAsync(
-            us => us.AuthUserId == authUserId,
-            cancellationToken))
-            .ToDictionary(us => us.SkillName, StringComparer.OrdinalIgnoreCase);
-
-        var allCatalogSkills = (await _skillRepository.GetAllAsync(cancellationToken))
-                                    .ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var skillTag in uniqueSkillTags)
-        {
-            if (existingUserSkills.ContainsKey(skillTag))
-            {
-                continue;
-            }
-
-            if (allCatalogSkills.TryGetValue(skillTag, out var catalogSkill))
-            {
-                var newUserSkill = new UserSkill
-                {
-                    AuthUserId = authUserId,
-                    SkillId = catalogSkill.Id,
-                    SkillName = catalogSkill.Name,
-                    ExperiencePoints = 0,
-                    Level = 1,
-                    LastUpdatedAt = DateTimeOffset.UtcNow
-                };
-                await _userSkillRepository.AddAsync(newUserSkill, cancellationToken);
-                _logger.LogInformation("Initialized UserSkill '{SkillName}' for User {AuthUserId}", newUserSkill.SkillName, authUserId);
-            }
-            else
-            {
-                _logger.LogWarning("Skill tag '{SkillTag}' extracted by AI but does not exist in the skill catalog. Skipping initialization for this skill.", skillTag);
-            }
-        }
-
-        _logger.LogInformation("Skill tree initialization completed for User {AuthUserId}. Total unique skills found and processed from syllabus: {SkillCount}", authUserId, uniqueSkillTags.Count);
-    }
-
     private string PreprocessFapHtml(string rawHtml)
     {
         var htmlDoc = new HtmlDocument();
         htmlDoc.LoadHtml(rawHtml);
 
-        var gradeTableNode = htmlDoc.DocumentNode.SelectSingleNode("//div[@id='Grid']//table[contains(@class, 'table-hover')][1]");
+        var gradeTableNode = htmlDoc.DocumentNode.SelectSingleNode(
+            "//div[@id='Grid']//table[contains(@class, 'table-hover')][1]");
 
         if (gradeTableNode == null)
         {
-            _logger.LogWarning("Could not find the grade report table using XPath within the provided FAP HTML.");
+            _logger.LogWarning("Could not find grade report table in FAP HTML.");
             return string.Empty;
         }
+
         return gradeTableNode.InnerText;
     }
 
