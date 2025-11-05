@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.Onboarding.Commands.CompleteOnboarding;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
+// ADDED: Import for the new query.
+using RogueLearn.User.Application.Features.Onboarding.Queries.GetOnboardingVersionsByProgram;
 using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -34,6 +36,20 @@ public class OnboardingController : ControllerBase
         return Ok(result);
     }
 
+    // ADDED: New user-facing endpoint to get curriculum versions for a program.
+    /// <summary>
+    /// Gets all active curriculum versions for a specific program, for onboarding selection.
+    /// </summary>
+    [HttpGet("routes/{programId:guid}/versions")]
+    [ProducesResponseType(typeof(List<OnboardingVersionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetVersionsForProgram(Guid programId, CancellationToken cancellationToken)
+    {
+        var query = new GetOnboardingVersionsByProgramQuery { ProgramId = programId };
+        var result = await _mediator.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
     /// <summary>
     /// Gets all available career specialization classes for user selection.
     /// </summary>
@@ -56,10 +72,10 @@ public class OnboardingController : ControllerBase
     public async Task<IActionResult> CompleteOnboarding([FromBody] CompleteOnboardingCommand command, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-    
+
         command.AuthUserId = authUserId;
         await _mediator.Send(command, cancellationToken);
-    
+
         return NoContent();
     }
 }

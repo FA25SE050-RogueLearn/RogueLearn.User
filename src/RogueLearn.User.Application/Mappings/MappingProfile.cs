@@ -4,6 +4,8 @@ using RogueLearn.User.Application.Features.ClassSpecialization.Commands.AddSpeci
 using RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
+// ADDED: Import for the new onboarding version DTO.
+using RogueLearn.User.Application.Features.Onboarding.Queries.GetOnboardingVersionsByProgram;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.Roles.Queries.GetAllRoles;
 using RogueLearn.User.Application.Features.Roles.Commands.CreateRole;
@@ -67,6 +69,9 @@ public class MappingProfile : Profile
         // CurriculumVersion mappings
         CreateMap<CurriculumVersion, CurriculumVersionDto>();
         CreateMap<CurriculumVersion, CreateCurriculumVersionResponse>();
+        // ADDED: Mapping for the new onboarding DTO.
+        CreateMap<CurriculumVersion, OnboardingVersionDto>();
+
 
         // Subject mappings
         CreateMap<Subject, SubjectDto>();
@@ -134,7 +139,6 @@ public class MappingProfile : Profile
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
     }
-    // MODIFICATION: The helper method now accepts a nullable string to satisfy the compiler.
     private static object? ParseJsonContent(string? content)
     {
         if (string.IsNullOrWhiteSpace(content))

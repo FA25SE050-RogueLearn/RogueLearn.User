@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
@@ -7,15 +6,12 @@ using Serilog;
 using DotNetEnv;
 using BuildingBlocks.Shared.Authentication;
 using Microsoft.SemanticKernel;
-using Newtonsoft.Json.Converters; // MODIFIED: Changed from System.Text.Json to Newtonsoft.
-using Newtonsoft.Json.Serialization; // ADDED: For CamelCasePropertyNamesContractResolver.
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 
 // Load environment variables from .env file
 Env.Load();
-var googleApiKey = Environment.GetEnvironmentVariable("AI__Google__ApiKey");
-Console.WriteLine($"[DEBUG] AI Provider from ENV: {Environment.GetEnvironmentVariable("AI__Provider")}");
-Console.WriteLine($"[DEBUG] Google Model from ENV: {Environment.GetEnvironmentVariable("AI__Google__Model")}");
-Console.WriteLine($"[DEBUG] Google ApiKey loaded: {(!string.IsNullOrEmpty(googleApiKey) ? "YES (length: " + googleApiKey.Length + ")" : "NO")}");
+
 // Configure Serilog
 Log.Logger = SerilogConfiguration.CreateLogger();
 
@@ -25,17 +21,31 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // --- DEBUGGING: Check if environment variables are loaded ---
+    Console.WriteLine($"[DEBUG] AI Provider from ENV: {Environment.GetEnvironmentVariable("AI__Provider")}");
+    Console.WriteLine($"[DEBUG] Google Model from ENV: {Environment.GetEnvironmentVariable("AI__Google__Model")}");
+    Console.WriteLine($"[DEBUG] Google ApiKey from ENV: {(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AI__Google__ApiKey")) ? "YES" : "NO")}");
+
+    // Check if IConfiguration can read them
+    var config = builder.Configuration;
+    Console.WriteLine($"[DEBUG] AI Provider from IConfiguration: {config["AI:Provider"]}");
+    Console.WriteLine($"[DEBUG] Google Model from IConfiguration: {config["AI:Google:Model"]}");
+    var googleApiKey = config["AI:Google:ApiKey"];
+    Console.WriteLine($"[DEBUG] Google ApiKey from IConfiguration: {(!string.IsNullOrEmpty(googleApiKey) ? "YES (Length: " + googleApiKey?.Length + ")" : "NO")}");
+    // --- END DEBUGGING ---
+
     // Add Serilog to the host
     builder.Host.UseSerilog();
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
 
-    // --- RE-INTRODUCED: SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
+    // --- SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
     builder.Services.AddScoped<Kernel>(sp =>
     {
         var configuration = sp.GetRequiredService<IConfiguration>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger("SemanticKernel");
 
         // Create a Custom HTTP Client to increase timeout for AI calls
         var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(3) };
@@ -44,12 +54,17 @@ try
         kernelBuilder.Services.AddSingleton(loggerFactory);
 
         var provider = configuration["AI:Provider"];
+        logger.LogInformation("Configuring AI Provider: {Provider}", provider);
+
         switch (provider)
         {
             case "Google":
                 var googleModel = configuration["AI:Google:Model"] ?? throw new InvalidOperationException("AI:Google:Model is not configured.");
-                var googleApiKey = configuration["AI:Google:ApiKey"] ?? throw new InvalidOperationException("AI:Google:ApiKey is not configured.");
-                kernelBuilder.AddGoogleAIGeminiChatCompletion(modelId: googleModel, apiKey: googleApiKey, httpClient: httpClient);
+                var key = configuration["AI:Google:ApiKey"] ?? throw new InvalidOperationException("AI:Google:ApiKey is not configured.");
+
+                logger.LogInformation("Google Model: {Model}, API Key Length: {Length}", googleModel, key.Length);
+
+                kernelBuilder.AddGoogleAIGeminiChatCompletion(modelId: googleModel, apiKey: key, httpClient: httpClient);
                 break;
             default:
                 throw new InvalidOperationException($"AI Provider '{provider}' is not supported.");
@@ -63,19 +78,13 @@ try
     builder.Services.AddApplication();
     builder.Services.AddInfrastructureServices();
 
-    // MODIFICATION: The call to AddControllers() is now chained with AddNewtonsoftJson().
-    // This instructs the entire ASP.NET Core pipeline to use Newtonsoft.Json for serialization,
-    // resolving the conflict with the Supabase client library.
     builder.Services.AddControllers()
         .AddNewtonsoftJson(options =>
         {
-            // Configure Newtonsoft to serialize enums as strings (e.g., "Bachelor" instead of 1).
             options.SerializerSettings.Converters.Add(new StringEnumConverter());
-            // Use camelCase for JSON properties to maintain the API contract.
             options.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
         });
 
-    // The old AddApiServices() extension method is now simplified as its work is done above.
     builder.Services.AddApiServices();
 
     var app = builder.Build();
@@ -123,5 +132,4 @@ finally
     Log.CloseAndFlush();
 }
 
-// Make the Program class accessible for integration testing
 public partial class Program { }
