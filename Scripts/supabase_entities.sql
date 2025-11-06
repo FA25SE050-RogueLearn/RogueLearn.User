@@ -682,3 +682,15 @@ CREATE TABLE meeting_summaries (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE guild_join_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    guild_id UUID NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+    requester_id UUID NOT NULL REFERENCES user_profiles(auth_user_id),
+    status guild_join_request_status NOT NULL DEFAULT 'Pending',
+    message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    responded_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '14 days'),
+    UNIQUE (guild_id, requester_id)
+);

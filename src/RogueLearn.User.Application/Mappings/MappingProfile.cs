@@ -135,7 +135,15 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
         // Parties feature mappings
         CreateMap<Party, PartyDto>();
-        CreateMap<PartyMember, PartyMemberDto>();
+        CreateMap<PartyMember, PartyMemberDto>()
+            .ForMember(dest => dest.Username, opt => opt.Ignore())
+            .ForMember(dest => dest.Email, opt => opt.Ignore())
+            .ForMember(dest => dest.FirstName, opt => opt.Ignore())
+            .ForMember(dest => dest.LastName, opt => opt.Ignore())
+            .ForMember(dest => dest.ProfileImageUrl, opt => opt.Ignore())
+            .ForMember(dest => dest.Level, opt => opt.Ignore())
+            .ForMember(dest => dest.ExperiencePoints, opt => opt.Ignore())
+            .ForMember(dest => dest.Bio, opt => opt.Ignore());
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
     }

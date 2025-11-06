@@ -11,11 +11,20 @@ using RogueLearn.User.Application.Features.Parties.Queries.GetPartyMembers;
 using RogueLearn.User.Application.Features.Parties.Queries.GetPendingInvitations;
 using RogueLearn.User.Application.Features.Parties.Queries.GetPartyResources;
 using RogueLearn.User.Application.Features.Parties.Queries.GetAllParties;
+using RogueLearn.User.Application.Features.Parties.Commands.LeaveParty;
+using RogueLearn.User.Application.Features.Parties.Commands.RemoveMember;
+using RogueLearn.User.Application.Features.Parties.Commands.TransferLeadership;
+using RogueLearn.User.Application.Features.Parties.Commands.AcceptInvitation;
+using RogueLearn.User.Application.Features.Parties.Commands.ConfigureParty;
 using RogueLearn.User.Application.Features.Parties.Queries.GetMyParties;
 using BuildingBlocks.Shared.Authentication;
 using RogueLearn.User.Application.Features.Parties.Commands.ManageRoles;
 using RogueLearn.User.Application.Features.Parties.Queries.GetMemberRoles;
 using RogueLearn.User.Domain.Enums;
+using RogueLearn.User.Application.Features.Parties.Commands.DeleteParty;
+using RogueLearn.User.Application.Features.Parties.Commands.JoinPublicParty;
+using RogueLearn.User.Application.Features.Parties.Queries.GetMyPendingInvitations;
+using RogueLearn.User.Application.Features.Parties.Commands.DeclineInvitation;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -44,6 +53,121 @@ public class PartiesController : ControllerBase
         var request = command with { CreatorAuthUserId = authUserId };
         var result = await _mediator.Send(request, cancellationToken);
         return CreatedAtAction(nameof(GetPartyById), new { partyId = result.PartyId }, result);
+    }
+
+    /// <summary>
+    /// Leave a party.
+    /// </summary>
+    [HttpPost("{partyId:guid}/leave")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> LeaveParty(Guid partyId, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        await _mediator.Send(new LeavePartyCommand(partyId, authUserId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Remove a member from a party.
+    /// </summary>
+    [HttpPost("{partyId:guid}/members/{memberId:guid}/remove")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemovePartyMember(Guid partyId, Guid memberId, [FromBody] RemovePartyMemberCommand command, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(command with { PartyId = partyId, MemberId = memberId }, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Transfer leadership of a party to another member.
+    /// </summary>
+    [HttpPost("{partyId:guid}/transfer-leadership")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> TransferPartyLeadership(Guid partyId, [FromBody] TransferPartyLeadershipCommand command, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(command with { PartyId = partyId }, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Accept a party invitation.
+    /// </summary>
+    [HttpPost("{partyId:guid}/invitations/{invitationId:guid}/accept")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AcceptPartyInvitation(Guid partyId, Guid invitationId, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        await _mediator.Send(new AcceptPartyInvitationCommand(partyId, invitationId, authUserId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Decline a party invitation.
+    /// </summary>
+    [HttpPost("{partyId:guid}/invitations/{invitationId:guid}/decline")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeclinePartyInvitation(Guid partyId, Guid invitationId, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        await _mediator.Send(new DeclinePartyInvitationCommand(partyId, invitationId, authUserId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Join a public party (no invitation required). Fails if party is private or at capacity.
+    /// </summary>
+    [HttpPost("{partyId:guid}/join")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> JoinPublicParty([FromRoute] Guid partyId, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        await _mediator.Send(new JoinPublicPartyCommand(partyId, authUserId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Configure party settings.
+    /// </summary>
+    [HttpPut("{partyId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ConfigurePartySettings(Guid partyId, [FromBody] ConfigurePartySettingsCommand command, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(command with { PartyId = partyId }, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Delete a party.
+    /// </summary>
+    [HttpDelete("{partyId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteParty(Guid partyId, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new DeletePartyCommand(partyId), cancellationToken);
+        return NoContent();
     }
 
     /// <summary>
@@ -76,16 +200,16 @@ public class PartiesController : ControllerBase
     /// </summary>
     [HttpPost("{partyId:guid}/invite")]
     [PartyLeaderOnly("partyId")]
-    [ProducesResponseType(typeof(PartyInvitationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<PartyInvitationDto>> InviteMember(Guid partyId, [FromBody] InviteMemberRequest body, CancellationToken cancellationToken)
+    public async Task<IActionResult> InviteMember(Guid partyId, [FromBody] InviteMemberRequest body, CancellationToken cancellationToken)
     {
         var inviterId = User.GetAuthUserId();
         var expiresAt = body.ExpiresAt ?? DateTimeOffset.UtcNow.AddDays(7);
-        var cmd = new InviteMemberCommand(partyId, inviterId, body.InviteeAuthUserId, body.Message, expiresAt);
-        var result = await _mediator.Send(cmd, cancellationToken);
-        return Ok(result);
+        var cmd = new InviteMemberCommand(partyId, inviterId, body.Targets, body.Message, expiresAt);
+        await _mediator.Send(cmd, cancellationToken);
+        return NoContent();
     }
 
     /// <summary>
@@ -93,21 +217,20 @@ public class PartiesController : ControllerBase
     /// </summary>
     [HttpPost("~/api/admin/parties/{partyId:guid}/invite")]
     [AdminOnly]
-    [ProducesResponseType(typeof(PartyInvitationDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PartyInvitationDto>> AdminInviteMember(Guid partyId, [FromBody] InviteMemberRequest body, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AdminInviteMember(Guid partyId, [FromBody] InviteMemberRequest body, CancellationToken cancellationToken)
     {
         var inviterId = User.GetAuthUserId();
         var expiresAt = body.ExpiresAt ?? DateTimeOffset.UtcNow.AddDays(7);
-        var cmd = new InviteMemberCommand(partyId, inviterId, body.InviteeAuthUserId, body.Message, expiresAt);
-        var result = await _mediator.Send(cmd, cancellationToken);
-        return Ok(result);
+        var cmd = new InviteMemberCommand(partyId, inviterId, body.Targets, body.Message, expiresAt);
+        await _mediator.Send(cmd, cancellationToken);
+        return NoContent();
     }
 
     /// <summary>
     /// Get pending invitations for a party. Requires party leader.
     /// </summary>
     [HttpGet("{partyId:guid}/invitations/pending")]
-    [PartyLeaderOnly("partyId")]
     [ProducesResponseType(typeof(IReadOnlyList<PartyInvitationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -126,6 +249,19 @@ public class PartiesController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<PartyInvitationDto>>> AdminGetPendingInvitations(Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPendingInvitationsQuery(partyId), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get my pending party invitations (invitee = current user).
+    /// </summary>
+    [HttpGet("invitations/pending")]
+    [ProducesResponseType(typeof(IReadOnlyList<PartyInvitationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<PartyInvitationDto>>> GetMyPendingInvitations(CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var result = await _mediator.Send(new GetMyPendingInvitationsQuery(authUserId), cancellationToken);
         return Ok(result);
     }
 
@@ -185,10 +321,9 @@ public class PartiesController : ControllerBase
     }
 
     /// <summary>
-    /// Get all parties. Platform admin only.
+    /// Get all parties.
     /// </summary>
-    [HttpGet("/api/admin/parties")]
-    [AdminOnly]
+    [HttpGet("/api/parties")]
     [ProducesResponseType(typeof(IReadOnlyList<PartyDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
