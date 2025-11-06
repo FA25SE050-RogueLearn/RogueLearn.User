@@ -40,7 +40,7 @@ public class GuildMemberRepository : GenericRepository<GuildMember>, IGuildMembe
             .From<GuildMember>()
             .Filter("guild_id", Operator.Equals, guildId.ToString())
             .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
-            .Filter("role", Operator.Equals, GuildRole.GuildMaster.ToString())
+            .Filter("role", Operator.Equals, GuildRole.GuildMaster.ToString().Replace(" ", string.Empty))
             .Filter("status", Operator.Equals, MemberStatus.Active.ToString())
             .Get(cancellationToken);
 
@@ -53,6 +53,16 @@ public class GuildMemberRepository : GenericRepository<GuildMember>, IGuildMembe
             .From<GuildMember>()
             .Filter("guild_id", Operator.Equals, guildId.ToString())
             .Filter("status", Operator.Equals, MemberStatus.Active.ToString())
+            .Get(cancellationToken);
+
+        return response.Models.Count;
+    }
+
+    public async Task<int> CountMembersAsync(Guid guildId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<GuildMember>()
+            .Filter("guild_id", Operator.Equals, guildId.ToString())
             .Get(cancellationToken);
 
         return response.Models.Count;

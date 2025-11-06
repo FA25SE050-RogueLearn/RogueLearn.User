@@ -17,30 +17,21 @@ public class AdminOnlyAttribute : Attribute, IAsyncAuthorizationFilter
             context.Result = new UnauthorizedResult();
             return;
         }
-
-        // First, try to get roles from JWT claims (preferred method)
-        var roleClaims = context.HttpContext.User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
-        if (!roleClaims.Any())
+        // Prefer repository-based check (source of truth), but allow JWT claim short-circuit if it explicitly grants admin.
+        var rolesClaim = context.HttpContext.User.FindFirst("roles")?.Value;
+        if (!string.IsNullOrWhiteSpace(rolesClaim))
         {
-            // Fallback: also check for "role" claim type for compatibility
-            roleClaims = context.HttpContext.User.FindAll("roles").Select(c => c.Value).ToList();
-        }
-
-        // If roles are found in JWT claims, use them directly
-        if (roleClaims.Any())
-        {
-            if (roleClaims.Contains("Game Master"))
+            var hasAdminClaim = rolesClaim
+                .Split(',')
+                .Select(r => r.Trim())
+                .Any(r => string.Equals(r, "Game Master", StringComparison.OrdinalIgnoreCase));
+            if (hasAdminClaim)
             {
-                return; // User has admin role, allow access
-            }
-            else
-            {
-                context.Result = new ForbidResult();
-                return;
+                return; // Authorized via claim
             }
         }
 
-        // Fallback: Database lookup (for backward compatibility)
+        // Repository lookup is authoritative and handles newly-assigned roles that aren't yet in JWT claims
         Guid authUserId;
         try
         {
