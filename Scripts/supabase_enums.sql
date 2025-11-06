@@ -34,6 +34,9 @@ CREATE TYPE activity_type AS ENUM ('QuestCompletion', 'StudySession', 'ProjectWo
 CREATE TYPE post_type AS ENUM ('announcement', 'discussion', 'general', 'achievement');
 CREATE TYPE friendship_status AS ENUM ('Pending', 'Accepted', 'Blocked');
 
+-- Guild join request enums
+CREATE TYPE guild_join_request_status AS ENUM ('Pending', 'Accepted', 'Declined', 'Expired', 'Cancelled');
+
 -- Meeting management enums
 CREATE TYPE transcript_segment_status AS ENUM ('Processed', 'Failed');
 

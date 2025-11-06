@@ -45,6 +45,18 @@ public record GuildInvitationDto
     public DateTimeOffset? RespondedAt { get; init; }
 }
 
+public record GuildJoinRequestDto
+{
+    public Guid Id { get; init; }
+    public Guid GuildId { get; init; }
+    public Guid RequesterId { get; init; }
+    public RogueLearn.User.Domain.Enums.GuildJoinRequestStatus Status { get; init; }
+    public string? Message { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? RespondedAt { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+}
+
 public record GuildDashboardDto
 {
     public Guid GuildId { get; init; }
