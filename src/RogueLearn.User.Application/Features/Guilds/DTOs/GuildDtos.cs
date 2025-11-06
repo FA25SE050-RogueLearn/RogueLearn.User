@@ -1,5 +1,6 @@
 namespace RogueLearn.User.Application.Features.Guilds.DTOs;
 
+using RogueLearn.User.Application.Features.Guilds.Commands.InviteMember;
 using RogueLearn.User.Domain.Enums;
 
 public record GuildDto
@@ -27,7 +28,7 @@ public record GuildMemberDto
 
 public record GuildInvitationDto
 {
-    // Legacy fields
+    // Legacy fields (for backward compatibility)
     public Guid Id { get; init; }
     public Guid GuildId { get; init; }
     public Guid InviteeId { get; init; }
@@ -44,6 +45,18 @@ public record GuildInvitationDto
     public DateTimeOffset? RespondedAt { get; init; }
 }
 
+public record GuildJoinRequestDto
+{
+    public Guid Id { get; init; }
+    public Guid GuildId { get; init; }
+    public Guid RequesterId { get; init; }
+    public RogueLearn.User.Domain.Enums.GuildJoinRequestStatus Status { get; init; }
+    public string? Message { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? RespondedAt { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+}
+
 public record GuildDashboardDto
 {
     public Guid GuildId { get; init; }
@@ -53,3 +66,5 @@ public record GuildDashboardDto
     public int AcceptedInvitationCount { get; init; }
     public int MaxMembers { get; init; }
 }
+
+public record InviteGuildMembersRequest(IReadOnlyList<InviteTarget> Targets, string? Message);

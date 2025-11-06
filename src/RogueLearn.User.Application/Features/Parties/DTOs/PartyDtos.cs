@@ -1,5 +1,6 @@
 namespace RogueLearn.User.Application.Features.Parties.DTOs;
 
+using RogueLearn.User.Application.Features.Parties.Commands.InviteMember;
 using RogueLearn.User.Domain.Enums;
 
 public record PartyDto(Guid Id, string Name, string Description, PartyType PartyType, int MaxMembers, bool IsPublic, Guid CreatedBy, DateTimeOffset CreatedAt);
@@ -16,9 +17,21 @@ public record PartyMemberDto(
     string? FirstName,
     string? LastName,
     string? ProfileImageUrl,
-    int Level
+    int Level,
+    int ExperiencePoints,
+    string? Bio
 );
-public record PartyInvitationDto(Guid Id, Guid PartyId, Guid InviterId, Guid InviteeId, InvitationStatus Status, string? Message, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
+public record PartyInvitationDto(
+    Guid Id,
+    Guid PartyId,
+    Guid InviterId,
+    Guid InviteeId,
+    InvitationStatus Status,
+    string? Message,
+    DateTimeOffset InvitedAt,
+    DateTimeOffset? RespondedAt,
+    DateTimeOffset ExpiresAt
+);
 public record PartyStashItemDto(Guid Id, Guid PartyId, Guid OriginalNoteId, Guid SharedByUserId, string Title, IReadOnlyDictionary<string, object> Content, IReadOnlyList<string>? Tags, DateTimeOffset SharedAt, DateTimeOffset UpdatedAt);
-public record InviteMemberRequest(Guid InviteeAuthUserId, string? Message, DateTimeOffset? ExpiresAt);
+public record InviteMemberRequest(IReadOnlyList<InviteTarget> Targets, string? Message, DateTimeOffset? ExpiresAt);
 public record AddPartyResourceRequest(string Title, IReadOnlyDictionary<string, object> Content, IReadOnlyList<string> Tags);

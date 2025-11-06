@@ -8,21 +8,36 @@ namespace RogueLearn.User.Application.Features.Guilds.Commands.InviteMember;
 public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembersCommand, InviteGuildMembersResponse>
 {
     private readonly IGuildInvitationRepository _invitationRepository;
+    private readonly IUserProfileRepository _userProfileRepository;
 
-    public InviteGuildMembersCommandHandler(IGuildInvitationRepository invitationRepository)
+    public InviteGuildMembersCommandHandler(
+        IGuildInvitationRepository invitationRepository,
+        IUserProfileRepository userProfileRepository)
     {
         _invitationRepository = invitationRepository;
+        _userProfileRepository = userProfileRepository;
     }
 
     public async Task<InviteGuildMembersResponse> Handle(InviteGuildMembersCommand request, CancellationToken cancellationToken)
     {
         var createdIds = new List<Guid>();
+        var pending = await _invitationRepository.GetPendingInvitationsByGuildAsync(request.GuildId, cancellationToken);
+
         foreach (var target in request.Targets)
         {
-            if (target.UserId is Guid inviteeId)
+            Guid? inviteeId = target.UserId;
+
+            if (!inviteeId.HasValue && !string.IsNullOrWhiteSpace(target.Email))
             {
-                // Idempotency: if an active pending invite exists for same guild & user, skip
-                var pending = await _invitationRepository.GetPendingInvitationsByGuildAsync(request.GuildId, cancellationToken);
+                var profile = await _userProfileRepository.GetByEmailAsync(target.Email, cancellationToken);
+                if (profile != null)
+                {
+                    inviteeId = profile.AuthUserId;
+                }
+            }
+
+            if (inviteeId.HasValue)
+            {
                 if (pending.Any(i => i.InviteeId == inviteeId))
                 {
                     continue;
@@ -32,7 +47,7 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
                 {
                     GuildId = request.GuildId,
                     InviterId = request.InviterAuthUserId,
-                    InviteeId = inviteeId,
+                    InviteeId = inviteeId.Value,
                     InvitationType = InvitationType.Invite,
                     Status = InvitationStatus.Pending,
                     Message = request.Message,
@@ -42,12 +57,6 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
 
                 invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
                 createdIds.Add(invitation.Id);
-            }
-            else if (!string.IsNullOrWhiteSpace(target.Email))
-            {
-                // TODO: support email invitations via Notification service or external mailer
-                // For now, skip email invites in core implementation.
-                continue;
             }
         }
 

@@ -43,7 +43,9 @@ public class GetPartyMembersQueryHandler : IRequestHandler<GetPartyMembersQuery,
                 profile?.FirstName,
                 profile?.LastName,
                 profile?.ProfileImageUrl,
-                profile?.Level ?? 0
+                profile?.Level ?? 0,
+                profile?.ExperiencePoints ?? 0,
+                profile?.Bio
             );
 
             results.Add(dto);
