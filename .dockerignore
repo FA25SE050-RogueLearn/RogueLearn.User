@@ -1,6 +1,7 @@
 **/.classpath
 **/.dockerignore
 **/.env
+!src/RogueLearn.User.Api/.env
 **/.git
 **/.gitignore
 **/.project
