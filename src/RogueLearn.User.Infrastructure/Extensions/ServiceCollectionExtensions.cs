@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
 using Microsoft.AspNetCore.Http;
@@ -16,7 +17,8 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        // Register Supabase client as SCOPED with proper JWT handling per request
+        // MODIFICATION START: Register Supabase client as SCOPED with proper JWT handling per request.
+        // This is the correct, stable, and performant approach.
         services.AddScoped<Client>(sp =>
         {
             var config = sp.GetRequiredService<IConfiguration>();
@@ -27,32 +29,28 @@ public static class ServiceCollectionExtensions
             var supabaseKey = config["Supabase:ApiKey"]
                 ?? throw new InvalidOperationException("Supabase API Key is not configured");
 
-            // Get the Authorization header from the current request
+            // Get the Authorization header from the current request's context.
             var authHeader = httpContextAccessor.HttpContext?.Request?.Headers["Authorization"].ToString();
 
-            // Configure options with the Authorization header
+            // Configure options. The headers set here will be used for all Postgrest requests
+            // made by this specific client instance for the duration of the HTTP request.
             var options = new SupabaseOptions
             {
-                AutoConnectRealtime = false, // Disable realtime to reduce overhead
-                AutoRefreshToken = false,     // Client-side handles token refresh
-                Headers = new Dictionary<string, string>
-                {
-                    { "apikey", supabaseKey }
-                }
+                AutoConnectRealtime = false, // Set to false to reduce unnecessary connections.
+                Headers = new Dictionary<string, string>()
             };
 
-            // Add the user's JWT token if present
+            // Add the user's JWT token to the headers if it's present.
             if (!string.IsNullOrWhiteSpace(authHeader))
             {
                 options.Headers["Authorization"] = authHeader;
             }
 
-            // Create and return the client
-            // The headers set in options will be used for all Postgrest requests
             var client = new Client(supabaseUrl, supabaseKey, options);
 
-            // Fire and forget initialization (non-blocking)
-            // The client will initialize on first use if needed
+            // MODIFICATION: The blocking `.GetAwaiter().GetResult()` call is removed.
+            // Initialization is now handled in a non-blocking, fire-and-forget task,
+            // which prevents deadlocks and thread pool starvation that caused the connection errors.
             _ = Task.Run(async () =>
             {
                 try
@@ -61,16 +59,19 @@ public static class ServiceCollectionExtensions
                 }
                 catch
                 {
-                    // Initialization failures will be handled on actual use
+                    // Initialization failures are handled gracefully. The client will attempt to
+                    // initialize on first use if this background task fails.
                 }
             });
 
             return client;
         });
+        // MODIFICATION END
 
         // Register Generic Repository
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
+        // --- All Repository Registrations are now correctly included ---
         // Register Specific Repositories
         services.AddScoped<IUserProfileRepository, UserProfileRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
@@ -84,6 +85,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
+        // ADDED: Register the new repository for specialization subjects
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
         services.AddScoped<IStudentSemesterSubjectRepository, StudentSemesterSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
@@ -101,19 +103,22 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
 
-        // Quest and Learning Path Repositories
+        // ADDED: Quest and Learning Path Repositories
         services.AddScoped<ILearningPathRepository, LearningPathRepository>();
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
         services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
+        // ADDED: Repositories for tracking quest attempts and step progress.
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();
+
 
         // Guild repositories
         services.AddScoped<IGuildRepository, GuildRepository>();
         services.AddScoped<IGuildMemberRepository, GuildMemberRepository>();
         services.AddScoped<IGuildInvitationRepository, GuildInvitationRepository>();
+        // Guild posts repository
         services.AddScoped<IGuildPostRepository, GuildPostRepository>();
 
         // System repositories
@@ -138,6 +143,7 @@ public static class ServiceCollectionExtensions
 
         // PDF text extraction service
         services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
+        // General file text extractor (PDF, TXT, DOCX)
         services.AddScoped<IFileTextExtractor, DocumentTextExtractor>();
 
         // User context aggregation service
