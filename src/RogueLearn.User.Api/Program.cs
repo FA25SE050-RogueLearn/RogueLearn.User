@@ -96,10 +96,18 @@ try
     app.UseSwagger(c =>
     {
         c.RouteTemplate = "swagger/{documentName}/swagger.json";
+        // Support reverse proxy path base
+        c.PreSerializeFilters.Add((swagger, httpReq) =>
+        {
+            swagger.Servers = new List<Microsoft.OpenApi.Models.OpenApiServer>
+            {
+                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/user-service" }
+            };
+        });
     });
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
+        c.SwaggerEndpoint("./v1/swagger.json", "RogueLearn.User API V1");
         c.RoutePrefix = "swagger";
     });
 
