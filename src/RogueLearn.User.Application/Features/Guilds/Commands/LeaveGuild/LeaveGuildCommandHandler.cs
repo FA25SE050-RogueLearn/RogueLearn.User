@@ -7,10 +7,12 @@ namespace RogueLearn.User.Application.Features.Guilds.Commands.LeaveGuild;
 public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
 {
     private readonly IGuildMemberRepository _memberRepository;
+    private readonly IGuildRepository _guildRepository;
 
-    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository)
+    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
     {
         _memberRepository = memberRepository;
+        _guildRepository = guildRepository;
     }
 
     public async Task<Unit> Handle(LeaveGuildCommand request, CancellationToken cancellationToken)
@@ -31,6 +33,14 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
         member.Status = MemberStatus.Inactive;
         member.LeftAt = DateTimeOffset.UtcNow;
         await _memberRepository.UpdateAsync(member, cancellationToken);
+
+        // Decrement guild current member count after leaving
+        var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)
+            ?? throw new Exceptions.NotFoundException("Guild", request.GuildId.ToString());
+        var newActiveCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
+        guild.CurrentMemberCount = newActiveCount;
+        guild.UpdatedAt = DateTimeOffset.UtcNow;
+        await _guildRepository.UpdateAsync(guild, cancellationToken);
         return Unit.Value;
     }
 }
