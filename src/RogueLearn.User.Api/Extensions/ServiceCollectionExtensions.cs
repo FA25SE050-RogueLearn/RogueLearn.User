@@ -42,7 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISubjectExtractionPlugin, SubjectExtractionPlugin>();
         // ADDED: Register the new plugin for quest step generation.
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
-
+        services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
         return services;
     }
 

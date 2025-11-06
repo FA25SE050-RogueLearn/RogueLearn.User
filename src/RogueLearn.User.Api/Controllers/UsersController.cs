@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
+using RogueLearn.User.Application.Features.Student.Commands.EstablishSkillDependencies;
 using RogueLearn.User.Application.Features.Student.Commands.InitializeUserSkills;
 using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 using RogueLearn.User.Application.Features.Student.Queries.GetAcademicStatus;
@@ -218,5 +219,33 @@ public class UsersController : ControllerBase
     {
         var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authId), cancellationToken);
         return context is not null ? Ok(context) : NotFound();
+    }
+    /// <summary>
+    /// Analyzes and establishes skill dependencies based on curriculum structure and AI analysis.
+    /// This creates the prerequisite relationships needed for the skill tree visualization.
+    /// Should be run after InitializeMySkills.
+    /// </summary>
+    /// <param name="curriculumVersionId">The curriculum version to analyze</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Skill dependency establishment result</returns>
+    /// <response code="200">Dependencies established successfully</response>
+    /// <response code="400">Bad request or analysis failed</response>
+    /// <response code="401">Unauthorized</response>
+    [HttpPost("me/academic-record/establish-skill-dependencies")]
+    [ProducesResponseType(typeof(EstablishSkillDependenciesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<EstablishSkillDependenciesResponse>> EstablishMySkillDependencies(
+        [FromQuery] Guid curriculumVersionId,
+        CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var command = new EstablishSkillDependenciesCommand
+        {
+            AuthUserId = authUserId,
+            CurriculumVersionId = curriculumVersionId
+        };
+        var result = await _mediator.Send(command, cancellationToken);
+        return Ok(result);
     }
 }
