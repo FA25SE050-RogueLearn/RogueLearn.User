@@ -50,7 +50,7 @@ public class PartyMemberRepository : GenericRepository<PartyMember>, IPartyMembe
             .From<PartyMember>()
             .Filter("party_id", Operator.Equals, partyId.ToString())
             .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
-            .Filter("role", Operator.Equals, PartyRole.Leader.ToString())
+            .Filter("role", Operator.Equals, PartyRole.Leader.ToString().Replace(" ", string.Empty))
             .Get(cancellationToken);
 
         return response.Models.Any();

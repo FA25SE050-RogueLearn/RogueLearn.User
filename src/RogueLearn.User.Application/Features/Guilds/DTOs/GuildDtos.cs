@@ -24,6 +24,15 @@ public record GuildMemberDto
     public DateTimeOffset JoinedAt { get; init; }
     public DateTimeOffset? LeftAt { get; init; }
     public MemberStatus Status { get; init; }
+    // Enriched user profile fields
+    public string? Username { get; init; }
+    public string? Email { get; init; }
+    public string? FirstName { get; init; }
+    public string? LastName { get; init; }
+    public string? ProfileImageUrl { get; init; }
+    public int Level { get; init; }
+    public int ExperiencePoints { get; init; }
+    public string? Bio { get; init; }
 }
 
 public record GuildInvitationDto

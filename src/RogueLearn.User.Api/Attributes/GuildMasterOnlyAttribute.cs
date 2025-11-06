@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using RogueLearn.User.Domain.Interfaces;
+using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Attributes;
 
@@ -24,13 +25,6 @@ public class GuildMasterOnlyAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
-        // Platform Admin short-circuit: look for "Game Master" role claim
-        var rolesClaim = user.Claims.FirstOrDefault(c => c.Type == "roles");
-        if (rolesClaim != null && rolesClaim.Value.Split(',').Any(r => string.Equals(r.Trim(), "Game Master", StringComparison.OrdinalIgnoreCase)))
-        {
-            return; // Authorized as Platform Admin
-        }
-
         // Extract guildId from route
         if (!context.RouteData.Values.TryGetValue(_routeParameterName, out var rawGuildId) || rawGuildId is null)
         {
@@ -44,20 +38,25 @@ public class GuildMasterOnlyAttribute : Attribute, IAsyncAuthorizationFilter
             return;
         }
 
-        var authUserIdClaim = user.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == "auth_user_id")?.Value;
-        if (!Guid.TryParse(authUserIdClaim, out var authUserId))
+        // Extract auth user id using shared extension (consistent with AdminOnlyAttribute)
+        Guid authUserId;
+        try
         {
-            context.Result = new UnauthorizedObjectResult("Invalid or missing user identifier.");
+            authUserId = context.HttpContext.User.GetAuthUserId();
+        }
+        catch
+        {
+            context.Result = new UnauthorizedResult();
             return;
         }
 
-        // Check guild master via repository
+        // Check guild master via repository only (no platform admin override)
         var memberRepo = context.HttpContext.RequestServices.GetService(typeof(IGuildMemberRepository)) as IGuildMemberRepository;
         if (memberRepo == null)
         {
             context.Result = new StatusCodeResult(StatusCodes.Status500InternalServerError);
             return;
-        }
+        }   
 
         var isMaster = await memberRepo.IsGuildMasterAsync(guildId, authUserId, context.HttpContext.RequestAborted);
         if (!isMaster)

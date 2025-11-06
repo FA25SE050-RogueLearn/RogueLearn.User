@@ -30,7 +30,7 @@ public class GetMyGuildQueryHandler : IRequestHandler<GetMyGuildQuery, GuildDto?
             return null;
         }
 
-        var activeCount = await _guildMemberRepository.CountActiveMembersAsync(guild.Id, cancellationToken);
+        var memberCount = await _guildMemberRepository.CountMembersAsync(guild.Id, cancellationToken);
 
         return new GuildDto
         {
@@ -41,7 +41,7 @@ public class GetMyGuildQueryHandler : IRequestHandler<GetMyGuildQuery, GuildDto?
             MaxMembers = guild.MaxMembers,
             CreatedAt = guild.CreatedAt,
             CreatedBy = guild.CreatedBy,
-            MemberCount = activeCount,
+            MemberCount = memberCount,
         };
     }
 }
