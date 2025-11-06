@@ -92,25 +92,16 @@ try
     // Configure the HTTP request pipeline
     app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-    if (app.Environment.IsDevelopment())
+    // Enable Swagger in all environments (Development and Production)
+    app.UseSwagger(c =>
     {
-        app.UseSwagger();
-        app.UseSwaggerUI(c =>
-        {
-            c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
-            c.RoutePrefix = string.Empty;
-        });
-
-        app.Use(async (context, next) =>
-        {
-            if (context.Request.Path == "/")
-            {
-                context.Response.Redirect("/index.html");
-                return;
-            }
-            await next();
-        });
-    }
+        c.RouteTemplate = "swagger/{documentName}/swagger.json";
+    });
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
+        c.RoutePrefix = "swagger";
+    });
 
     app.UseCors("AllowAll");
     app.UseHttpsRedirection();
