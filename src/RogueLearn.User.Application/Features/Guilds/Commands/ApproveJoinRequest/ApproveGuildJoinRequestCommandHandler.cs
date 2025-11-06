@@ -72,6 +72,12 @@ public class ApproveGuildJoinRequestCommandHandler : IRequestHandler<ApproveGuil
                 JoinedAt = DateTimeOffset.UtcNow
             };
             await _memberRepository.AddAsync(newMember, cancellationToken);
+
+            // Update guild current member count after successful addition
+            var newActiveCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
+            guild.CurrentMemberCount = newActiveCount;
+            guild.UpdatedAt = DateTimeOffset.UtcNow;
+            await _guildRepository.UpdateAsync(guild, cancellationToken);
         }
 
         joinReq.Status = GuildJoinRequestStatus.Accepted;

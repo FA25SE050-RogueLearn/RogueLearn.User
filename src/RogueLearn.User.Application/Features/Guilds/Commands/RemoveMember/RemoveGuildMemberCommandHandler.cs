@@ -7,10 +7,12 @@ namespace RogueLearn.User.Application.Features.Guilds.Commands.RemoveMember;
 public class RemoveGuildMemberCommandHandler : IRequestHandler<RemoveGuildMemberCommand, Unit>
 {
     private readonly IGuildMemberRepository _memberRepository;
+    private readonly IGuildRepository _guildRepository;
 
-    public RemoveGuildMemberCommandHandler(IGuildMemberRepository memberRepository)
+    public RemoveGuildMemberCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
     {
         _memberRepository = memberRepository;
+        _guildRepository = guildRepository;
     }
 
     public async Task<Unit> Handle(RemoveGuildMemberCommand request, CancellationToken cancellationToken)
@@ -31,6 +33,14 @@ public class RemoveGuildMemberCommandHandler : IRequestHandler<RemoveGuildMember
         member.Status = MemberStatus.Inactive;
         member.LeftAt = DateTimeOffset.UtcNow;
         await _memberRepository.UpdateAsync(member, cancellationToken);
+
+        // Decrement guild current member count after removal
+        var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)
+            ?? throw new Exceptions.NotFoundException("Guild", request.GuildId.ToString());
+        var newActiveCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
+        guild.CurrentMemberCount = newActiveCount;
+        guild.UpdatedAt = DateTimeOffset.UtcNow;
+        await _guildRepository.UpdateAsync(guild, cancellationToken);
 
         return Unit.Value;
     }
