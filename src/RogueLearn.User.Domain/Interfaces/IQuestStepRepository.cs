@@ -10,5 +10,14 @@ namespace RogueLearn.User.Domain.Interfaces;
 /// </summary>
 public interface IQuestStepRepository : IGenericRepository<QuestStep>
 {
-    // You can add quest-step-specific database operations here in the future if needed.
+    // MODIFICATION START: Added a new, specialized method to reliably find steps by quest ID.
+    // This is necessary to work around limitations in the generic FindAsync LINQ provider.
+    /// <summary>
+    /// Fetches all quest steps associated with a specific quest ID.
+    /// </summary>
+    /// <param name="questId">The ID of the quest.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A collection of quest steps for the given quest.</returns>
+    Task<IEnumerable<QuestStep>> FindByQuestIdAsync(Guid questId, CancellationToken cancellationToken = default);
+    // MODIFICATION END
 }

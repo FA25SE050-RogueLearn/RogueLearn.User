@@ -57,7 +57,11 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
                 Status = QuestAttemptStatus.InProgress,
                 StartedAt = DateTimeOffset.UtcNow
             };
-            await _attemptRepository.AddAsync(attempt, cancellationToken);
+            // MODIFICATION START: The return value of AddAsync is now captured.
+            // This ensures we get the correct, database-generated ID for the new attempt,
+            // which is essential for the foreign key relationship to work correctly.
+            attempt = await _attemptRepository.AddAsync(attempt, cancellationToken);
+            // MODIFICATION END
         }
 
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(

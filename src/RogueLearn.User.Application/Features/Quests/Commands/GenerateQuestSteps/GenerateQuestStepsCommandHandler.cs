@@ -58,7 +58,12 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        var existingSteps = await _questStepRepository.FindAsync(s => s.QuestId == request.QuestId, cancellationToken);
+        // MODIFICATION START: The unreliable FindAsync call has been replaced with the new,
+        // specialized FindByQuestIdAsync method. This ensures that the check for existing
+        // steps is now accurate and reliable, preventing unnecessary AI calls.
+        var existingSteps = await _questStepRepository.FindByQuestIdAsync(request.QuestId, cancellationToken);
+        // MODIFICATION END
+
         if (existingSteps.Any())
         {
             _logger.LogInformation("Quest steps already exist for Quest {QuestId}. Returning existing steps.", request.QuestId);

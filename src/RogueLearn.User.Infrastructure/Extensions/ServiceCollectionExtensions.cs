@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
 using Microsoft.AspNetCore.Http;
@@ -17,42 +16,61 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        // Register Supabase client as a scoped service so we can attach the caller's Authorization header per-request.
+        // Register Supabase client as SCOPED with proper JWT handling per request
         services.AddScoped<Client>(sp =>
         {
             var config = sp.GetRequiredService<IConfiguration>();
             var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
 
-            // Configure Supabase client
-            var supabaseUrl = config["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL is not configured");
-            var supabaseKey = config["Supabase:ApiKey"] ?? throw new InvalidOperationException("Supabase API Key is not configured");
+            var supabaseUrl = config["Supabase:Url"]
+                ?? throw new InvalidOperationException("Supabase URL is not configured");
+            var supabaseKey = config["Supabase:ApiKey"]
+                ?? throw new InvalidOperationException("Supabase API Key is not configured");
 
+            // Get the Authorization header from the current request
+            var authHeader = httpContextAccessor.HttpContext?.Request?.Headers["Authorization"].ToString();
+
+            // Configure options with the Authorization header
             var options = new SupabaseOptions
             {
-                AutoConnectRealtime = true,
-                Headers = []
+                AutoConnectRealtime = false, // Disable realtime to reduce overhead
+                AutoRefreshToken = false,     // Client-side handles token refresh
+                Headers = new Dictionary<string, string>
+                {
+                    { "apikey", supabaseKey }
+                }
             };
 
-            // Forward the incoming Authorization header (Bearer <jwt>) to Supabase
-            var authHeader = httpContextAccessor.HttpContext?.Request?.Headers["Authorization"].ToString();
+            // Add the user's JWT token if present
             if (!string.IsNullOrWhiteSpace(authHeader))
             {
-                options.Headers["Authorization"] = authHeader!;
+                options.Headers["Authorization"] = authHeader;
             }
 
+            // Create and return the client
+            // The headers set in options will be used for all Postgrest requests
             var client = new Client(supabaseUrl, supabaseKey, options);
 
-            client.InitializeAsync().GetAwaiter().GetResult();
+            // Fire and forget initialization (non-blocking)
+            // The client will initialize on first use if needed
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await client.InitializeAsync();
+                }
+                catch
+                {
+                    // Initialization failures will be handled on actual use
+                }
+            });
+
             return client;
         });
-
-        // MassTransit configuration remains commented out as per MVP scope.
-        //services.AddMassTransit(busConfig => { ... });
 
         // Register Generic Repository
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
-        // --- All Repository Registrations are now correctly included ---
         // Register Specific Repositories
         services.AddScoped<IUserProfileRepository, UserProfileRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
@@ -66,7 +84,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
-        // ADDED: Register the new repository for specialization subjects
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
         services.AddScoped<IStudentSemesterSubjectRepository, StudentSemesterSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
@@ -84,22 +101,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
 
-        // ADDED: Quest and Learning Path Repositories
+        // Quest and Learning Path Repositories
         services.AddScoped<ILearningPathRepository, LearningPathRepository>();
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
         services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
-        // ADDED: Repositories for tracking quest attempts and step progress.
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();
-
 
         // Guild repositories
         services.AddScoped<IGuildRepository, GuildRepository>();
         services.AddScoped<IGuildMemberRepository, GuildMemberRepository>();
         services.AddScoped<IGuildInvitationRepository, GuildInvitationRepository>();
-        // Guild posts repository
         services.AddScoped<IGuildPostRepository, GuildPostRepository>();
 
         // System repositories
@@ -122,12 +136,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAvatarStorage, AvatarStorage>();
         services.AddScoped<IAchievementImageStorage, AchievementImageStorage>();
 
-        // Register Message Bus (commented out per MVP scope)
-        //services.AddScoped<IMessageBus, MassTransitMessageBus>();
-
         // PDF text extraction service
         services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
-        // General file text extractor (PDF, TXT, DOCX)
         services.AddScoped<IFileTextExtractor, DocumentTextExtractor>();
 
         // User context aggregation service

@@ -1,5 +1,6 @@
 using BuildingBlocks.Shared.Common;
 using BuildingBlocks.Shared.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Supabase;
 using System.Linq.Expressions;
 
@@ -23,8 +24,6 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .Where(x => x.Id == id)
             .Single(cancellationToken);
 
-
-
         return response;
     }
 
@@ -34,21 +33,17 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .From<T>()
             .Get(cancellationToken);
 
-
-
         return response.Models;
     }
 
     public virtual async Task<IEnumerable<T>> GetPagedAsync(int page, int pageSize, CancellationToken cancellationToken = default)
     {
         var offset = (page - 1) * pageSize;
-        
+
         var response = await _supabaseClient
             .From<T>()
             .Range(offset, offset + pageSize - 1)
             .Get(cancellationToken);
-
-
 
         return response.Models;
     }
@@ -60,22 +55,18 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .Where(predicate)
             .Get(cancellationToken);
 
-
-
         return response.Models;
     }
 
     public virtual async Task<IEnumerable<T>> FindPagedAsync(Expression<Func<T, bool>> predicate, int page, int pageSize, CancellationToken cancellationToken = default)
     {
         var offset = (page - 1) * pageSize;
-        
+
         var response = await _supabaseClient
             .From<T>()
             .Where(predicate)
             .Range(offset, offset + pageSize - 1)
             .Get(cancellationToken);
-
-
 
         return response.Models;
     }
@@ -86,8 +77,6 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .From<T>()
             .Where(predicate)
             .Single(cancellationToken);
-
-
 
         return response;
     }
@@ -130,15 +119,14 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             return Enumerable.Empty<T>();
 
         var updatedEntities = new List<T>();
-        
-        // Supabase doesn't support bulk updates with different conditions, so we batch them
+
         foreach (var entity in entities)
         {
             var response = await _supabaseClient
                 .From<T>()
                 .Where(x => x.Id == entity.Id)
                 .Update(entity, cancellationToken: cancellationToken);
-            
+
             updatedEntities.AddRange(response.Models);
         }
 
@@ -158,7 +146,6 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
         if (!ids.Any())
             return;
 
-        // Supabase supports bulk delete with IN clause
         await _supabaseClient
             .From<T>()
             .Where(x => ids.Contains(x.Id))
@@ -182,8 +169,6 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .Where(predicate)
             .Get(cancellationToken);
 
-
-
         return response.Models.Count != 0;
     }
 
@@ -203,14 +188,11 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
             .Where(predicate)
             .Get(cancellationToken);
 
-
-
         return response.Models.Count;
     }
 
     protected virtual string GetTableName()
     {
-        // Convert class name to snake_case for table name
         var className = typeof(T).Name;
         return string.Concat(className.Select((x, i) => i > 0 && char.IsUpper(x) ? "_" + x : x.ToString())).ToLower();
     }
