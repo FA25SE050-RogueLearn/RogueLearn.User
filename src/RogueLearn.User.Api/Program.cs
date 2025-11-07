@@ -41,7 +41,7 @@ try
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
 
     // --- SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
-    builder.Services.AddScoped<Kernel>(sp =>
+    builder.Services.AddScoped(sp =>
     {
         var configuration = sp.GetRequiredService<IConfiguration>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
@@ -75,7 +75,7 @@ try
 
     // Add other services to the container
     builder.Services.AddHttpContextAccessor();
-    builder.Services.AddApplication();
+    builder.Services.AddApplication(builder.Configuration);
     builder.Services.AddInfrastructureServices();
 
     builder.Services.AddControllers()

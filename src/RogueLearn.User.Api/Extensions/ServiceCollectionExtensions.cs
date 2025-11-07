@@ -14,10 +14,10 @@ namespace RogueLearn.User.Api.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public static IServiceCollection AddApplication(this IServiceCollection services, IConfiguration configuration)
     {
         // Options (feature flags / constraints)
-        services.AddOptions<RogueLearn.User.Application.Options.AiFileProcessingOptions>();
+        services.AddOptions<Application.Options.AiFileProcessingOptions>();
 
         // MediatR
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(LogNewUserCommand).Assembly));
@@ -33,6 +33,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehaviour<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnhandledExceptionBehaviour<,>));
 
+        // Register Web Search service (Google Custom Search)
+        var googleSearchApiKey = configuration["GoogleSearch:ApiKey"] ?? throw new InvalidOperationException("GoogleSearch:ApiKey is not configured.");
+        var googleSearchEngineId = configuration["GoogleSearch:SearchEngineId"] ?? throw new InvalidOperationException("GoogleSearch:SearchEngineId is not configured.");
+        services.AddSingleton<IWebSearchService>(
+                new GoogleWebSearchService(googleSearchApiKey, googleSearchEngineId));
         // Register FLM SK plugin
         services.AddScoped<IFlmExtractionPlugin, FlmExtractionPlugin>();
         // Register Roadmap SK plugin
