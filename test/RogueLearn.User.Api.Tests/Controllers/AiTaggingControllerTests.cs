@@ -26,7 +26,6 @@ public class AiTaggingControllerTests : IClassFixture<WebApplicationFactory<Prog
     private readonly HttpClient _client;
 
     private readonly Mock<ITaggingSuggestionService> _mockSuggestionService = new();
-    private readonly Mock<IFileTextExtractor> _mockFileTextExtractor = new();
     private readonly Mock<INoteRepository> _mockNoteRepository = new();
     private readonly Mock<ITagRepository> _mockTagRepository = new();
     private readonly Mock<INoteTagRepository> _mockNoteTagRepository = new();
@@ -48,7 +47,6 @@ public class AiTaggingControllerTests : IClassFixture<WebApplicationFactory<Prog
             builder.ConfigureServices(services =>
             {
                 ReplaceService(services, typeof(ITaggingSuggestionService), _mockSuggestionService.Object);
-                ReplaceService(services, typeof(IFileTextExtractor), _mockFileTextExtractor.Object);
                 ReplaceService(services, typeof(INoteRepository), _mockNoteRepository.Object);
                 ReplaceService(services, typeof(ITagRepository), _mockTagRepository.Object);
                 ReplaceService(services, typeof(INoteTagRepository), _mockNoteTagRepository.Object);
@@ -114,10 +112,6 @@ public class AiTaggingControllerTests : IClassFixture<WebApplicationFactory<Prog
         var userId = Guid.NewGuid();
         var token = GenerateJwtToken(userId, "User");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        _mockFileTextExtractor
-            .Setup(e => e.ExtractTextAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("This is a test PDF content");
 
         _mockSuggestionService
             .Setup(s => s.SuggestAsync(userId, "This is a test PDF content", It.IsAny<int>(), It.IsAny<CancellationToken>()))

@@ -52,28 +52,42 @@ public class CommitNoteTagSelectionsCommandHandler : IRequestHandler<CommitNoteT
             var tag = userTags.FirstOrDefault(t => t.Name.ToSlug() == slug);
             if (tag is null)
             {
-                tag = new Tag
+                var toCreate = new Tag
                 {
                     AuthUserId = request.AuthUserId,
                     Name = name
                 };
-                await _tagRepository.AddAsync(tag, cancellationToken);
-                createdTags.Add(new CreatedTagDto { Id = tag.Id, Name = tag.Name });
+                // Persist and use the returned entity to capture the DB-assigned ID.
+                var persisted = await _tagRepository.AddAsync(toCreate, cancellationToken);
+                createdTags.Add(new CreatedTagDto { Id = persisted.Id, Name = persisted.Name });
 
                 // Track newly created tag for subsequent selection & validation
-                userTags.Add(tag);
-                validTagIds.Add(tag.Id);
+                userTags.Add(persisted);
+                validTagIds.Add(persisted.Id);
+
+                // Add to selected list if not already present
+                if (!selectedValid.Contains(persisted.Id))
+                    selectedValid.Add(persisted.Id);
             }
-            // Add to selected list if not already present
-            if (!selectedValid.Contains(tag.Id))
-                selectedValid.Add(tag.Id);
+            else
+            {
+                // Existing tag found by slug; add its ID to selection if missing
+                if (!selectedValid.Contains(tag.Id))
+                    selectedValid.Add(tag.Id);
+            }
         }
 
-        // Re-fetch persisted tags to guard against any transient insert issues or RLS constraints
-        var persistedTagIds = (await _tagRepository.FindAsync(t => t.AuthUserId == request.AuthUserId, cancellationToken))
-            .Select(t => t.Id)
-            .ToHashSet();
-        selectedValid = selectedValid.Where(id => persistedTagIds.Contains(id)).Distinct().ToList();
+        // NOTE:
+        // Previously we re-fetched the user's tags and filtered selectedValid against that set to guard
+        // against transient insert issues or RLS constraints. In practice, this overly-defensive filter
+        // could clear out newly-created tag IDs when a read is momentarily not visible or the auth context
+        // is mismatched, resulting in zero assigned tags even though tags were just created.
+        //
+        // To make assignment robust, we proceed with the deduplicated selection (including newly created
+        // tag IDs) and rely on the note_tags insert RLS to enforce ownership. If an insert fails, Supabase
+        // will throw and the request will surface the error; otherwise, associations will be created.
+        // Therefore, we intentionally skip the persistedTagIds re-filter here.
+        selectedValid = selectedValid.Distinct().ToList();
 
         // Get current tag ids for note
         var currentTagIds = await _noteTagRepository.GetTagIdsForNoteAsync(note.Id, cancellationToken);

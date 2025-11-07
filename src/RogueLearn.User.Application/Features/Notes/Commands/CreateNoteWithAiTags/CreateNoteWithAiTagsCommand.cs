@@ -11,8 +11,9 @@ public class CreateNoteWithAiTagsCommand : IRequest<CreateNoteWithAiTagsResponse
     // Raw text path
     public string? RawText { get; set; }
 
-    // Upload path
-    public byte[]? FileContent { get; set; }
+    // Upload path (use stream instead of raw bytes)
+    public Stream? FileStream { get; set; }
+    public long? FileLength { get; set; }
     public string? FileName { get; set; }
     public string? ContentType { get; set; }
 

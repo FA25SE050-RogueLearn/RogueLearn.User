@@ -5,18 +5,23 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace RogueLearn.User.Infrastructure.Services;
 
 public class TaggingSuggestionService : ITaggingSuggestionService
 {
     private readonly ITagSuggestionPlugin _plugin;
+    private readonly IFileTagSuggestionPlugin _filePlugin;
     private readonly ITagRepository _tagRepository;
+    private readonly ILogger<TaggingSuggestionService> _logger;
 
-    public TaggingSuggestionService(ITagSuggestionPlugin plugin, ITagRepository tagRepository)
+    public TaggingSuggestionService(ITagSuggestionPlugin plugin, IFileTagSuggestionPlugin filePlugin, ITagRepository tagRepository, ILogger<TaggingSuggestionService> logger)
     {
         _plugin = plugin;
+        _filePlugin = filePlugin;
         _tagRepository = tagRepository;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<TagSuggestionDto>> SuggestAsync(Guid authUserId, string rawText, int maxTags = 10, CancellationToken cancellationToken = default)
@@ -25,7 +30,26 @@ public class TaggingSuggestionService : ITaggingSuggestionService
             return Array.Empty<TagSuggestionDto>();
 
         var json = await _plugin.GenerateTagSuggestionsJsonAsync(rawText, maxTags, cancellationToken);
+        return await MapToSuggestionsAsync(authUserId, json, maxTags, cancellationToken);
+    }
 
+    public async Task<IReadOnlyList<TagSuggestionDto>> SuggestFromFileAsync(Guid authUserId, AiFileAttachment attachment, int maxTags = 10, CancellationToken cancellationToken = default)
+    {
+        if (attachment == null || ((attachment.Bytes == null || attachment.Bytes.Length == 0) && attachment.Stream is null))
+            return Array.Empty<TagSuggestionDto>();
+
+        // Send the file directly to AI to generate tag suggestions in JSON.
+        var json = await _filePlugin.GenerateTagSuggestionsJsonAsync(attachment, maxTags, cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            _logger.LogWarning("File-based tag suggestion returned empty JSON. FileName={FileName}, ContentType={ContentType}", attachment.FileName, attachment.ContentType);
+            return Array.Empty<TagSuggestionDto>();
+        }
+        return await MapToSuggestionsAsync(authUserId, json, maxTags, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<TagSuggestionDto>> MapToSuggestionsAsync(Guid authUserId, string json, int maxTags, CancellationToken cancellationToken)
+    {
         var options = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
