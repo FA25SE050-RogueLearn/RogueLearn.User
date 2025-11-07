@@ -19,7 +19,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         [property: JsonPropertyName("description")] string Description,
         [property: JsonPropertyName("stepType")] string StepType,
         [property: JsonPropertyName("experiencePoints")] int ExperiencePoints,
-        // MODIFICATION: The AI will now return a skillId (UUID) instead of a skillTag (string).
+        // The AI will now return a skillId (UUID) instead of a skillTag (string).
         [property: JsonPropertyName("content")] JsonElement Content
     );
 
@@ -31,7 +31,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly IMapper _mapper;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IClassRepository _classRepository;
-    // ADDED: We now need the skill repository to fetch skills for the prompt.
+    // We now need the skill repository to fetch skills for the prompt.
     private readonly ISkillRepository _skillRepository;
 
     public GenerateQuestStepsCommandHandler(
@@ -43,7 +43,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         IMapper mapper,
         IUserProfileRepository userProfileRepository,
         IClassRepository classRepository,
-        ISkillRepository skillRepository) // ADDED
+        ISkillRepository skillRepository)
     {
         _questRepository = questRepository;
         _questStepRepository = questStepRepository;
@@ -53,16 +53,15 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _mapper = mapper;
         _userProfileRepository = userProfileRepository;
         _classRepository = classRepository;
-        _skillRepository = skillRepository; // ADDED
+        _skillRepository = skillRepository;
     }
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        // MODIFICATION START: The unreliable FindAsync call has been replaced with the new,
+        // The unreliable FindAsync call has been replaced with the new,
         // specialized FindByQuestIdAsync method. This ensures that the check for existing
         // steps is now accurate and reliable, preventing unnecessary AI calls.
         var existingSteps = await _questStepRepository.FindByQuestIdAsync(request.QuestId, cancellationToken);
-        // MODIFICATION END
 
         if (existingSteps.Any())
         {
@@ -85,7 +84,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new BadRequestException("No active syllabus content available for this quest's subject.");
         }
 
-        // --- MODIFICATION START: Fetch relevant skills using the new database column ---
+        // --- Fetch relevant skills using the new database column ---
         var relevantSkills = (await _skillRepository.FindAsync(s => s.SourceSubjectId == quest.SubjectId.Value, cancellationToken)).ToList();
         if (!relevantSkills.Any())
         {
@@ -108,7 +107,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         var syllabusJson = JsonSerializer.Serialize(syllabus.Content);
 
-        // MODIFICATION: Pass the list of relevant skills (with their IDs) to the AI plugin.
+        // Pass the list of relevant skills (with their IDs) to the AI plugin.
         var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(syllabusJson, userContext, relevantSkills, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(generatedStepsJson))
@@ -148,7 +147,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             Enum.TryParse<Domain.Enums.StepType>(aiStep.StepType, true, out var stepType);
 
-            // MODIFICATION: Validate that the skillId returned by the AI is one of the valid ones we provided.
+            // Validate that the skillId returned by the AI is one of the valid ones we provided.
             if (!aiStep.Content.TryGetProperty("skillId", out var skillIdElement) || !Guid.TryParse(skillIdElement.GetString(), out var skillId) || !relevantSkillIds.Contains(skillId))
             {
                 _logger.LogWarning("AI generated a step with an invalid or missing skillId for Quest {QuestId}. Skipping step.", request.QuestId);

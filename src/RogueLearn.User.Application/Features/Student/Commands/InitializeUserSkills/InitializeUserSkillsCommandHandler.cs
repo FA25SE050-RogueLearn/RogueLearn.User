@@ -1,178 +1,114 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/InitializeUserSkills/InitializeUserSkillsCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
-using RogueLearn.User.Application.Plugins;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.InitializeUserSkills;
 
 public class InitializeUserSkillsCommandHandler : IRequestHandler<InitializeUserSkillsCommand, InitializeUserSkillsResponse>
 {
+    // MODIFIED: Removed dependencies on AI plugins and syllabus repository.
     private readonly ICurriculumStructureRepository _curriculumStructureRepository;
-    private readonly ISyllabusVersionRepository _syllabusVersionRepository;
+    private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly ISkillRepository _skillRepository;
     private readonly IUserSkillRepository _userSkillRepository;
-    private readonly ISubjectExtractionPlugin _subjectExtractionPlugin;
     private readonly ILogger<InitializeUserSkillsCommandHandler> _logger;
 
     public InitializeUserSkillsCommandHandler(
         ICurriculumStructureRepository curriculumStructureRepository,
-        ISyllabusVersionRepository syllabusVersionRepository,
+        ISubjectSkillMappingRepository subjectSkillMappingRepository,
         ISkillRepository skillRepository,
         IUserSkillRepository userSkillRepository,
-        ISubjectExtractionPlugin subjectExtractionPlugin,
         ILogger<InitializeUserSkillsCommandHandler> logger)
     {
         _curriculumStructureRepository = curriculumStructureRepository;
-        _syllabusVersionRepository = syllabusVersionRepository;
+        _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _skillRepository = skillRepository;
         _userSkillRepository = userSkillRepository;
-        _subjectExtractionPlugin = subjectExtractionPlugin;
         _logger = logger;
     }
 
     public async Task<InitializeUserSkillsResponse> Handle(InitializeUserSkillsCommand request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Initializing skill tree for User {AuthUserId} and CurriculumVersion {CurriculumVersionId}",
+        _logger.LogInformation("Initializing user skills for User {AuthUserId} and CurriculumVersion {CurriculumVersionId}",
             request.AuthUserId, request.CurriculumVersionId);
 
         var response = new InitializeUserSkillsResponse();
 
+        // 1. Find all subjects for the given curriculum version.
         var structures = (await _curriculumStructureRepository.FindAsync(
             cs => cs.CurriculumVersionId == request.CurriculumVersionId,
             cancellationToken)).ToList();
 
-        var subjectIds = structures.Select(s => s.SubjectId).Distinct().ToList();
-
-        var allSyllabiResults = await _syllabusVersionRepository.GetActiveBySubjectIdsAsync(subjectIds, cancellationToken);
-        var allSyllabi = allSyllabiResults
-            .GroupBy(sv => sv.SubjectId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(sv => sv.VersionNumber).FirstOrDefault());
-
-        // MODIFICATION: Instead of one big list, we group objectives by subjectId.
-        var objectivesBySubject = new Dictionary<Guid, List<string>>();
-        foreach (var subjectId in subjectIds)
+        if (!structures.Any())
         {
-            if (allSyllabi.TryGetValue(subjectId, out var activeSyllabus) && activeSyllabus?.Content != null)
-            {
-                var subjectObjectives = new List<string>();
-                try
-                {
-                    if (activeSyllabus.Content.TryGetValue("sessions", out var sessionsObj) &&
-                        sessionsObj is Newtonsoft.Json.Linq.JArray sessionsArray)
-                    {
-                        foreach (var session in sessionsArray)
-                        {
-                            var sessionObject = session as Newtonsoft.Json.Linq.JObject;
-                            if (sessionObject != null &&
-                                sessionObject.TryGetValue("lo", StringComparison.OrdinalIgnoreCase, out var loToken) &&
-                                loToken.Type == Newtonsoft.Json.Linq.JTokenType.String)
-                            {
-                                var learningObjective = loToken.ToString();
-                                if (!string.IsNullOrWhiteSpace(learningObjective))
-                                {
-                                    subjectObjectives.Add(learningObjective);
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not process syllabus content for SubjectId {SubjectId}", subjectId);
-                }
-                if (subjectObjectives.Any())
-                {
-                    objectivesBySubject[subjectId] = subjectObjectives;
-                }
-            }
-        }
-
-        if (!objectivesBySubject.Any())
-        {
-            _logger.LogWarning("No learning objectives found for curriculum {CurriculumVersionId}", request.CurriculumVersionId);
+            _logger.LogWarning("No curriculum structure found for CurriculumVersion {CurriculumVersionId}", request.CurriculumVersionId);
             response.IsSuccess = false;
-            response.Message = "No learning objectives found in curriculum syllabi.";
+            response.Message = "No curriculum structure found for this version.";
             return response;
         }
 
-        var allCatalogSkills = (await _skillRepository.GetAllAsync(cancellationToken))
-            .ToDictionary(s => s.Name, StringComparer.OrdinalIgnoreCase);
+        var subjectIds = structures.Select(s => s.SubjectId).Distinct().ToList();
 
-        var existingUserSkills = (await _userSkillRepository.FindAsync(
-            us => us.AuthUserId == request.AuthUserId,
-            cancellationToken))
-            .ToDictionary(us => us.SkillName, StringComparer.OrdinalIgnoreCase);
+        // 2. Use the new mapping table to find all skills linked to those subjects.
+        var mappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(subjectIds, cancellationToken);
+        var skillIdsToInitialize = mappings.Select(m => m.SkillId).Distinct().ToList();
+
+        if (!skillIdsToInitialize.Any())
+        {
+            _logger.LogWarning("No skills are mapped to the subjects in CurriculumVersion {CurriculumVersionId}", request.CurriculumVersionId);
+            response.IsSuccess = false;
+            response.Message = "No skills are mapped to this curriculum.";
+            return response;
+        }
+
+        // 3. Get the full skill details from the master skills table.
+        var allCatalogSkills = (await _skillRepository.GetAllAsync(cancellationToken))
+            .Where(s => skillIdsToInitialize.Contains(s.Id))
+            .ToDictionary(s => s.Id);
+
+        // 4. Get the user's currently tracked skills to avoid duplicates.
+        var existingUserSkills = (await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken))
+            .ToDictionary(us => us.SkillId);
 
         int skillsInitialized = 0;
         int skillsSkipped = 0;
+        var skillsToCreate = new List<UserSkill>();
 
-        // MODIFICATION: We now iterate through each subject to process its skills.
-        foreach (var entry in objectivesBySubject)
+        // 5. For each skill mapped to the curriculum, create a `user_skills` record if it doesn't exist.
+        foreach (var skillId in skillIdsToInitialize)
         {
-            var subjectId = entry.Key;
-            var objectives = entry.Value;
-
-            if (!objectives.Any()) continue;
-
-            var extractedSkills = await _subjectExtractionPlugin.ExtractSkillsFromObjectivesAsync(objectives, cancellationToken);
-            var uniqueSkillNames = extractedSkills.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-            response.TotalSkillsExtracted += uniqueSkillNames.Count;
-
-            foreach (var skillName in uniqueSkillNames)
+            if (!allCatalogSkills.TryGetValue(skillId, out var catalogSkill))
             {
-                Skill? catalogSkill;
-                if (!allCatalogSkills.TryGetValue(skillName, out catalogSkill))
-                {
-                    _logger.LogInformation("Skill '{SkillName}' not found in catalog. Creating new skill entry from Subject {SubjectId}.", skillName, subjectId);
-
-                    var newSkill = new Skill
-                    {
-                        Name = skillName,
-                        Domain = "Academic",
-                        Tier = Domain.Enums.SkillTierLevel.Foundation,
-                        Description = $"Auto-generated skill from curriculum analysis.",
-                        // MODIFICATION: Populate the new source_subject_id column.
-                        SourceSubjectId = subjectId,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                        UpdatedAt = DateTimeOffset.UtcNow
-                    };
-
-                    try
-                    {
-                        catalogSkill = await _skillRepository.AddAsync(newSkill, cancellationToken);
-                        allCatalogSkills[skillName] = catalogSkill;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to create skill '{SkillName}' in catalog. Skipping.", skillName);
-                        continue;
-                    }
-                }
-
-                if (!existingUserSkills.ContainsKey(skillName))
-                {
-                    var newUserSkill = new UserSkill
-                    {
-                        AuthUserId = request.AuthUserId,
-                        SkillId = catalogSkill.Id,
-                        SkillName = catalogSkill.Name,
-                        ExperiencePoints = 0,
-                        Level = 1,
-                        LastUpdatedAt = DateTimeOffset.UtcNow
-                    };
-                    await _userSkillRepository.AddAsync(newUserSkill, cancellationToken);
-                    skillsInitialized++;
-                    existingUserSkills[skillName] = newUserSkill;
-                }
-                else
-                {
-                    skillsSkipped++;
-                }
+                _logger.LogWarning("Skill mapping points to a non-existent SkillId {SkillId}. Skipping.", skillId);
+                continue;
             }
+
+            if (!existingUserSkills.ContainsKey(skillId))
+            {
+                skillsToCreate.Add(new UserSkill
+                {
+                    AuthUserId = request.AuthUserId,
+                    SkillId = catalogSkill.Id,
+                    SkillName = catalogSkill.Name, // This is now for display/denormalization, not the primary link.
+                    ExperiencePoints = 0,
+                    Level = 1,
+                    LastUpdatedAt = DateTimeOffset.UtcNow
+                });
+                skillsInitialized++;
+            }
+            else
+            {
+                skillsSkipped++;
+            }
+        }
+
+        if (skillsToCreate.Any())
+        {
+            await _userSkillRepository.AddRangeAsync(skillsToCreate, cancellationToken);
+            _logger.LogInformation("Batch created {Count} new user_skills records for user {AuthUserId}", skillsToCreate.Count, request.AuthUserId);
         }
 
         response.IsSuccess = true;
@@ -181,8 +117,8 @@ public class InitializeUserSkillsCommandHandler : IRequestHandler<InitializeUser
         response.SkillsSkipped = skillsSkipped;
 
         _logger.LogInformation(
-            "Skill initialization completed for User {AuthUserId}. Extracted: {Extracted}, Initialized: {Initialized}, Skipped: {Skipped}",
-            request.AuthUserId, response.TotalSkillsExtracted, skillsInitialized, skillsSkipped);
+            "Skill initialization completed for User {AuthUserId}. Initialized: {Initialized}, Skipped: {Skipped}",
+            request.AuthUserId, skillsInitialized, skillsSkipped);
 
         return response;
     }
