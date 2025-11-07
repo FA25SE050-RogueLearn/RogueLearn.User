@@ -315,14 +315,11 @@ public class NotesController : ControllerBase
         var authUserId = User.GetAuthUserId();
     if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
 
-        using var ms = new MemoryStream();
-        await file.CopyToAsync(ms, cancellationToken);
-        var bytes = ms.ToArray();
-
         var command = new CreateNoteWithAiTagsCommand
         {
             AuthUserId = authUserId,
-            FileContent = bytes,
+            FileStream = file.OpenReadStream(),
+            FileLength = file.Length,
             ContentType = file.ContentType ?? string.Empty,
             FileName = file.FileName ?? string.Empty,
             Title = title,

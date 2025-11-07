@@ -101,7 +101,8 @@ try
         {
             swagger.Servers = new List<Microsoft.OpenApi.Models.OpenApiServer>
             {
-                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/user-service" }
+                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/user-service" },
+                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/" }
             };
         });
     });

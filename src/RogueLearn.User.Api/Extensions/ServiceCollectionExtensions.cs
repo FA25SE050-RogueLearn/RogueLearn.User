@@ -16,6 +16,9 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        // Options (feature flags / constraints)
+        services.AddOptions<RogueLearn.User.Application.Options.AiFileProcessingOptions>();
+
         // MediatR
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(LogNewUserCommand).Assembly));
 
@@ -36,8 +39,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRoadmapExtractionPlugin, RoadmapExtractionPlugin>();
         // Register Tagging SK plugin
         services.AddScoped<ITagSuggestionPlugin, TagSuggestionPlugin>();
+        services.AddScoped<IFileTagSuggestionPlugin, FileTagSuggestionPlugin>();
         // Register TaggingSuggestionService
         services.AddScoped<ITaggingSuggestionService, TaggingSuggestionService>();
+        // Register summarization plugins (text and file)
+        services.AddScoped<ISummarizationPlugin, ContentSummarizationPlugin>();
+        services.AddScoped<IFileSummarizationPlugin, ContentSummarizationPlugin>();
         services.AddScoped<IFapExtractionPlugin, FapExtractionPlugin>();
         services.AddScoped<ISubjectExtractionPlugin, SubjectExtractionPlugin>();
         // ADDED: Register the new plugin for quest step generation.

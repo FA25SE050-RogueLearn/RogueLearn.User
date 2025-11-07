@@ -142,10 +142,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAvatarStorage, AvatarStorage>();
         services.AddScoped<IAchievementImageStorage, AchievementImageStorage>();
 
-        // PDF text extraction service
         services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
-        // General file text extractor (PDF, TXT, DOCX)
-        services.AddScoped<IFileTextExtractor, DocumentTextExtractor>();
 
         // User context aggregation service
         services.AddScoped<IUserContextService, UserContextService>();

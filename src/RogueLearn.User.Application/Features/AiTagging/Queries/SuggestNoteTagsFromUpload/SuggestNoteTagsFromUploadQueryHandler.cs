@@ -7,12 +7,10 @@ namespace RogueLearn.User.Application.Features.AiTagging.Queries.SuggestNoteTags
 
 public class SuggestNoteTagsFromUploadQueryHandler : IRequestHandler<SuggestNoteTagsFromUploadQuery, SuggestNoteTagsResponse>
 {
-    private readonly IFileTextExtractor _fileTextExtractor;
     private readonly ITaggingSuggestionService _suggestionService;
 
-    public SuggestNoteTagsFromUploadQueryHandler(IFileTextExtractor fileTextExtractor, ITaggingSuggestionService suggestionService)
+    public SuggestNoteTagsFromUploadQueryHandler(ITaggingSuggestionService suggestionService)
     {
-        _fileTextExtractor = fileTextExtractor;
         _suggestionService = suggestionService;
     }
 
@@ -23,14 +21,14 @@ public class SuggestNoteTagsFromUploadQueryHandler : IRequestHandler<SuggestNote
             throw new ValidationException("No file content provided.");
         }
 
-        using var stream = new MemoryStream(request.FileContent, writable: false);
-        var text = await _fileTextExtractor.ExtractTextAsync(stream, request.ContentType ?? string.Empty, request.FileName ?? string.Empty, cancellationToken);
-        if (string.IsNullOrWhiteSpace(text))
+        var attachment = new AiFileAttachment
         {
-            throw new ValidationException("Unable to extract text from file.");
-        }
+            Bytes = request.FileContent,
+            ContentType = request.ContentType ?? "application/octet-stream",
+            FileName = request.FileName ?? string.Empty
+        };
 
-        var suggestions = await _suggestionService.SuggestAsync(request.AuthUserId, text, request.MaxTags, cancellationToken);
+        var suggestions = await _suggestionService.SuggestFromFileAsync(request.AuthUserId, attachment, request.MaxTags, cancellationToken);
         return new SuggestNoteTagsResponse { Suggestions = suggestions };
     }
 }
