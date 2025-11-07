@@ -129,6 +129,12 @@ public class CreateNoteWithAiTagsCommandHandler : IRequestHandler<CreateNoteWith
         }
         else
         {
+            // Rewind the stream before reusing it for tag suggestions if possible
+            if (request.FileStream is not null && request.FileStream.CanSeek)
+            {
+                request.FileStream.Position = 0;
+            }
+
             var attachment = new AiFileAttachment
             {
                 Stream = request.FileStream!,

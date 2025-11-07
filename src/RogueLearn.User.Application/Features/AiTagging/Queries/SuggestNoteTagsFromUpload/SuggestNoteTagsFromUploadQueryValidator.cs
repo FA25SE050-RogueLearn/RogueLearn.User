@@ -14,11 +14,12 @@ public class SuggestNoteTagsFromUploadQueryValidator : AbstractValidator<Suggest
         _options = options.Value;
 
         RuleFor(x => x.AuthUserId).NotEmpty();
-        RuleFor(x => x.FileContent).NotNull().Must(c => c.Length > 0).WithMessage("File content must not be empty.");
+        RuleFor(x => x.FileStream).NotNull().WithMessage("File stream must not be null.");
+        RuleFor(x => x.FileLength).NotNull().Must(l => l > 0).WithMessage("File length must be greater than 0.");
         RuleFor(x => x.MaxTags).InclusiveBetween(1, 20);
 
         // Centralized validation for file-first processing
-        RuleFor(x => x.FileContent.Length).LessThanOrEqualTo(_options.MaxFileSizeMB * 1024 * 1024)
+        RuleFor(x => x.FileLength).LessThanOrEqualTo(_options.MaxFileSizeMB * 1024 * 1024)
             .WithMessage($"File size must be <= {_options.MaxFileSizeMB}MB.");
 
         RuleFor(x => x)
