@@ -3,6 +3,8 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using RogueLearn.User.Application.Models;
 using System.Text.Json;
+using DocumentFormat.OpenXml.Packaging;
+using Drawing = DocumentFormat.OpenXml.Drawing;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -26,27 +28,6 @@ public class FileTagSuggestionPlugin : IFileTagSuggestionPlugin
         if (attachment == null)
         {
             return JsonSerializer.Serialize(new { tags = Array.Empty<object>() });
-        }
-
-        // Acquire bytes from either Bytes or Stream.
-        byte[]? bytes = attachment.Bytes;
-        if (bytes == null || bytes.Length == 0)
-        {
-            if (attachment.Stream is null)
-            {
-                return JsonSerializer.Serialize(new { tags = Array.Empty<object>() });
-            }
-            try
-            {
-                using var ms = new MemoryStream();
-                await attachment.Stream.CopyToAsync(ms, cancellationToken);
-                bytes = ms.ToArray();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to read attachment stream for tag suggestion. FileName={FileName}", attachment.FileName);
-                return JsonSerializer.Serialize(new { tags = Array.Empty<object>() });
-            }
         }
 
         var clampedMax = Math.Max(1, Math.Min(20, maxTags));
@@ -74,14 +55,64 @@ Rules:
             var chatService = _kernel.GetRequiredService<IChatCompletionService>();
             var chatHistory = new ChatHistory(systemPrompt);
 
+            var contentType = (attachment.ContentType ?? string.Empty).ToLowerInvariant();
+            var fileName = attachment.FileName ?? string.Empty;
+            var isPdf = contentType.Contains("application/pdf") || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+            var isPptx = contentType.Contains("application/vnd.openxmlformats-officedocument.presentationml.presentation") || fileName.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase);
+
             var items = new ChatMessageContentItemCollection
             {
-                new TextContent(instructions),
-                new ImageContent(new ReadOnlyMemory<byte>(bytes), attachment.ContentType)
+                new TextContent(instructions)
             };
+
+            if (isPdf)
+            {
+                // Without a PDF parser, add raw content for the model to analyze
+                if (attachment.Bytes is { Length: > 0 })
+                {
+                    items.Add(new ImageContent(new ReadOnlyMemory<byte>(attachment.Bytes), attachment.ContentType));
+                }
+                else if (attachment.Stream != null)
+                {
+                    using var ms = new MemoryStream();
+                    await attachment.Stream.CopyToAsync(ms, cancellationToken);
+                    var bytes = ms.ToArray();
+                    if (bytes.Length > 0)
+                    {
+                        items.Add(new ImageContent(new ReadOnlyMemory<byte>(bytes), attachment.ContentType));
+                    }
+                }
+            }
+            else if (isPptx)
+            {
+                Stream pptxStream = attachment.Stream ?? (attachment.Bytes != null ? new MemoryStream(attachment.Bytes) : Stream.Null);
+                if (pptxStream == Stream.Null) return JsonSerializer.Serialize(new { tags = Array.Empty<object>() });
+                if (pptxStream.CanSeek) pptxStream.Position = 0;
+                var parsedItems = ProcessPowerPoint(pptxStream);
+                foreach (var it in parsedItems) items.Add(it);
+            }
+            else
+            {
+                // Fallback: send raw content if available
+                if (attachment.Bytes != null && attachment.Bytes.Length > 0)
+                {
+                    items.Add(new ImageContent(new ReadOnlyMemory<byte>(attachment.Bytes), attachment.ContentType));
+                }
+                else if (attachment.Stream != null)
+                {
+                    using var ms = new MemoryStream();
+                    await attachment.Stream.CopyToAsync(ms, cancellationToken);
+                    var bytes = ms.ToArray();
+                    if (bytes.Length > 0)
+                    {
+                        items.Add(new ImageContent(new ReadOnlyMemory<byte>(bytes), attachment.ContentType));
+                    }
+                }
+            }
+
             chatHistory.AddUserMessage(items);
 
-            var reply = await chatService.GetChatMessageContentAsync(chatHistory);
+            var reply = await chatService.GetChatMessageContentAsync(chatHistory, cancellationToken: cancellationToken);
             var rawResponse = reply?.Content?.ToString() ?? string.Empty;
             _logger.LogInformation("File tag suggestion raw response: {RawResponse}", rawResponse);
             return CleanToJson(rawResponse);
@@ -119,5 +150,51 @@ Rules:
             cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
         }
         return cleanedResponse.Trim();
+    }
+
+    // Note: PDF parsing is not implemented due to missing library support in this environment.
+
+    private ChatMessageContentItemCollection ProcessPowerPoint(Stream pptxStream)
+    {
+        var contentItems = new ChatMessageContentItemCollection();
+        try
+        {
+            using var presentationDocument = PresentationDocument.Open(pptxStream, false);
+            var presentationPart = presentationDocument.PresentationPart;
+            if (presentationPart == null) return contentItems;
+            int slideIndex = 1;
+            foreach (var slidePart in presentationPart.SlideParts)
+            {
+                contentItems.Add(new TextContent($"--- Content from Slide {slideIndex} ---"));
+                var slideText = new System.Text.StringBuilder();
+                var textNodes = slidePart.Slide.Descendants<Drawing.Text>();
+                foreach (var textNode in textNodes)
+                {
+                    slideText.Append(textNode.Text).Append(' ');
+                }
+                if (slideText.Length > 0)
+                {
+                    contentItems.Add(new TextContent(slideText.ToString()));
+                }
+                foreach (var imagePart in slidePart.ImageParts)
+                {
+                    using var imageStream = imagePart.GetStream();
+                    using var ms = new MemoryStream();
+                    imageStream.CopyTo(ms);
+                    var imageBytes = ms.ToArray();
+                    if (imageBytes.Length > 0)
+                    {
+                        contentItems.Add(new ImageContent(imageBytes, imagePart.ContentType));
+                    }
+                }
+                slideIndex++;
+                if (slideIndex > 50) break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PPTX parsing failed for tag suggestion; returning available content items only.");
+        }
+        return contentItems;
     }
 }

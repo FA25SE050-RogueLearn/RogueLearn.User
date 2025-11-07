@@ -3,6 +3,9 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Interfaces;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Presentation;
+using Drawing = DocumentFormat.OpenXml.Drawing;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -41,53 +44,147 @@ public class ContentSummarizationPlugin : ISummarizationPlugin, IFileSummarizati
   {
     if (attachment == null) return string.Empty;
 
-    // Obtain bytes from either Bytes or Stream (preferred), without forcing upstream to materialize large arrays.
-    byte[]? bytes = attachment.Bytes;
-    if (bytes == null || bytes.Length == 0)
-    {
-      if (attachment.Stream is null)
-      {
-        return string.Empty;
-      }
-      try
-      {
-        using var ms = new MemoryStream();
-        await attachment.Stream.CopyToAsync(ms, cancellationToken);
-        bytes = ms.ToArray();
-      }
-      catch (Exception ex)
-      {
-        _logger.LogError(ex, "Failed to read attachment stream for summarization. FileName={FileName}", attachment.FileName);
-        return string.Empty;
-      }
-    }
-
-    // Fallback: send the raw file bytes to Gemini via Semantic Kernel's multimodal chat API.
-    // This works for images and, in many cases, for PDFs and other document MIME types supported by the provider.
     try
     {
       var chatService = _kernel.GetRequiredService<IChatCompletionService>();
 
-      var systemPrompt = "You are a helpful assistant. Your task is to read the attached file and summarize it focusing on the main ideas, key points, and any important details. The results should be presented in a clear and concise manner with headings, bullet points, and any necessary subheadings. Be sure to include any relevant examples, quotes, or numbers that support the main ideas.";
-      var chatHistory = new ChatHistory(systemPrompt);
+      // Decide parser based on MIME or file extension
+      var contentType = (attachment.ContentType ?? string.Empty).ToLowerInvariant();
+      var fileName = attachment.FileName ?? string.Empty;
+      var isPdf = contentType.Contains("application/pdf") || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+      var isPptx = contentType.Contains("application/vnd.openxmlformats-officedocument.presentationml.presentation") || fileName.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase);
 
-      var items = new ChatMessageContentItemCollection
-            {
-                new TextContent("Please summarize the attached file."),
-                // Pass the bytes with the original MIME type (e.g., image/png, application/pdf, etc.)
-                new ImageContent(new ReadOnlyMemory<byte>(bytes), attachment.ContentType)
-            };
+      ChatMessageContentItemCollection contentItems;
+      if (isPdf)
+      {
+        // Fallback: without a PDF parser library available, send the raw bytes/content to the model
+        contentItems = new ChatMessageContentItemCollection();
+        if (attachment.Bytes is { Length: > 0 })
+        {
+          contentItems.Add(new ImageContent(new ReadOnlyMemory<byte>(attachment.Bytes), attachment.ContentType));
+        }
+        else if (attachment.Stream != null)
+        {
+          using var ms = new MemoryStream();
+          attachment.Stream.CopyTo(ms);
+          var bytes = ms.ToArray();
+          if (bytes.Length > 0)
+          {
+            contentItems.Add(new ImageContent(new ReadOnlyMemory<byte>(bytes), attachment.ContentType));
+          }
+        }
+      }
+      else if (isPptx)
+      {
+        Stream pptxStream = attachment.Stream ?? (attachment.Bytes != null ? new MemoryStream(attachment.Bytes) : Stream.Null);
+        if (pptxStream == Stream.Null) return string.Empty;
+        if (pptxStream.CanSeek) pptxStream.Position = 0;
+        contentItems = ProcessPowerPoint(pptxStream);
+      }
+      else
+      {
+        // Fallback: for other types, if bytes are present send as attachment content
+        // Or if it's a text content type, attempt a simple text read
+        contentItems = new ChatMessageContentItemCollection();
+        if (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("text/"))
+        {
+          // Read text from stream/bytes
+          using var reader = new StreamReader(attachment.Stream ?? new MemoryStream(attachment.Bytes ?? Array.Empty<byte>()));
+          var text = reader.ReadToEnd();
+          if (!string.IsNullOrWhiteSpace(text))
+          {
+            contentItems.Add(new TextContent(text));
+          }
+        }
+        else if (attachment.Bytes != null && attachment.Bytes.Length > 0)
+        {
+          contentItems.Add(new ImageContent(new ReadOnlyMemory<byte>(attachment.Bytes), contentType));
+        }
+        else if (attachment.Stream != null)
+        {
+          using var ms = new MemoryStream();
+          attachment.Stream.CopyTo(ms);
+          var bytes = ms.ToArray();
+          if (bytes.Length > 0)
+          {
+            contentItems.Add(new ImageContent(new ReadOnlyMemory<byte>(bytes), contentType));
+          }
+        }
+      }
 
-      chatHistory.AddUserMessage(items);
+      if (contentItems.Count == 0)
+      {
+        return string.Empty;
+      }
 
-      var reply = await chatService.GetChatMessageContentAsync(chatHistory);
-      var summary = reply?.Content?.ToString()?.Trim() ?? string.Empty;
+      var chatHistory = new ChatHistory();
+      // Final instruction for the AI summarization
+      var finalPrompt = new ChatMessageContentItemCollection
+      {
+        new TextContent("Based on the following content from a document (which may include text and images), please provide a comprehensive summary. Use bullet points and headings where appropriate.")
+      };
+      foreach (var item in contentItems)
+      {
+        finalPrompt.Add(item);
+      }
+      chatHistory.AddUserMessage(finalPrompt);
+
+      var result = await chatService.GetChatMessageContentAsync(chatHistory, cancellationToken: cancellationToken);
+      var summary = result?.Content?.ToString()?.Trim() ?? string.Empty;
       return summary;
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to summarize file via Gemini chat completion. FileName={FileName}, ContentType={ContentType}", attachment.FileName, attachment.ContentType);
+      _logger.LogError(ex, "Failed to summarize file via server-side parsing + Gemini. FileName={FileName}, ContentType={ContentType}", attachment.FileName, attachment.ContentType);
       return string.Empty;
     }
+  }
+
+  // Note: PDF parsing is not implemented due to missing library support in this environment.
+
+  private ChatMessageContentItemCollection ProcessPowerPoint(Stream pptxStream)
+  {
+    var contentItems = new ChatMessageContentItemCollection();
+    try
+    {
+      using var presentationDocument = PresentationDocument.Open(pptxStream, false);
+      var presentationPart = presentationDocument.PresentationPart;
+      if (presentationPart == null) return contentItems;
+      int slideIndex = 1;
+      foreach (var slidePart in presentationPart.SlideParts)
+      {
+        contentItems.Add(new TextContent($"--- Content from Slide {slideIndex} ---"));
+
+        var slideText = new System.Text.StringBuilder();
+        var textNodes = slidePart.Slide.Descendants<Drawing.Text>();
+        foreach (var textNode in textNodes)
+        {
+          slideText.Append(textNode.Text).Append(' ');
+        }
+        if (slideText.Length > 0)
+        {
+          contentItems.Add(new TextContent(slideText.ToString()));
+        }
+
+        foreach (var imagePart in slidePart.ImageParts)
+        {
+          using var imageStream = imagePart.GetStream();
+          using var ms = new MemoryStream();
+          imageStream.CopyTo(ms);
+          var imageBytes = ms.ToArray();
+          if (imageBytes.Length > 0)
+          {
+            contentItems.Add(new ImageContent(imageBytes, imagePart.ContentType));
+          }
+        }
+        slideIndex++;
+        if (slideIndex > 50) break; // cap to avoid huge prompts
+      }
+    }
+    catch (Exception ex)
+    {
+      _logger.LogWarning(ex, "PPTX parsing failed; will return available content items only.");
+    }
+    return contentItems;
   }
 }
