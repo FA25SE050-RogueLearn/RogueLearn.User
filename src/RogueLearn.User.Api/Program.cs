@@ -107,7 +107,7 @@ try
     });
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("./v1/swagger.json", "RogueLearn.User API V1");
+        c.SwaggerEndpoint("/user-service/swagger/v1/swagger.json", "RogueLearn.User API V1");
         c.RoutePrefix = "swagger";
     });
 
