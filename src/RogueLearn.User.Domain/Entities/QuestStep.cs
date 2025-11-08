@@ -11,6 +11,8 @@ public class QuestStep : BaseEntity
 {
     [Column("quest_id")]
     public Guid QuestId { get; set; }
+    [Column("skill_id")]
+    public Guid SkillId { get; set; }
 
     [Column("step_number")]
     public int StepNumber { get; set; }

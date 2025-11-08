@@ -8,9 +8,9 @@ public class IngestXpEventCommandValidator : AbstractValidator<IngestXpEventComm
     public IngestXpEventCommandValidator()
     {
         RuleFor(x => x.AuthUserId).NotEmpty();
-        // MODIFICATION: Validate the SkillId, which is now the primary identifier.
+        // Validate the SkillId, which is now the primary identifier.
         RuleFor(x => x.SkillId).NotEmpty().WithMessage("'Skill Id' must not be empty.");
-        // MODIFICATION: SkillName is no longer a required input, as it will be looked up by the handler.
+        // SkillName is no longer a required input, as it will be looked up by the handler.
         RuleFor(x => x.Points).GreaterThan(0);
         RuleFor(x => x.SourceService).NotEmpty().MaximumLength(255);
         RuleFor(x => x.SourceId)

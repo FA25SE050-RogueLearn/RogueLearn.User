@@ -19,50 +19,44 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         [property: JsonPropertyName("description")] string Description,
         [property: JsonPropertyName("stepType")] string StepType,
         [property: JsonPropertyName("experiencePoints")] int ExperiencePoints,
-        // MODIFICATION: The AI will now return a skillId (UUID) instead of a skillTag (string).
         [property: JsonPropertyName("content")] JsonElement Content
     );
 
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _questStepRepository;
-    private readonly ISyllabusVersionRepository _syllabusRepository;
+    private readonly ISubjectRepository _subjectRepository; // MODIFIED: Replaced syllabus repo with subject repo
     private readonly ILogger<GenerateQuestStepsCommandHandler> _logger;
     private readonly IQuestGenerationPlugin _questGenerationPlugin;
     private readonly IMapper _mapper;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IClassRepository _classRepository;
-    // ADDED: We now need the skill repository to fetch skills for the prompt.
     private readonly ISkillRepository _skillRepository;
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
         IQuestStepRepository questStepRepository,
-        ISyllabusVersionRepository syllabusRepository,
+        ISubjectRepository subjectRepository, // MODIFIED
         ILogger<GenerateQuestStepsCommandHandler> logger,
         IQuestGenerationPlugin questGenerationPlugin,
         IMapper mapper,
         IUserProfileRepository userProfileRepository,
         IClassRepository classRepository,
-        ISkillRepository skillRepository) // ADDED
+        ISkillRepository skillRepository)
     {
         _questRepository = questRepository;
         _questStepRepository = questStepRepository;
-        _syllabusRepository = syllabusRepository;
+        _subjectRepository = subjectRepository; // MODIFIED
         _logger = logger;
         _questGenerationPlugin = questGenerationPlugin;
         _mapper = mapper;
         _userProfileRepository = userProfileRepository;
         _classRepository = classRepository;
-        _skillRepository = skillRepository; // ADDED
+        _skillRepository = skillRepository;
     }
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        // MODIFICATION START: The unreliable FindAsync call has been replaced with the new,
-        // specialized FindByQuestIdAsync method. This ensures that the check for existing
-        // steps is now accurate and reliable, preventing unnecessary AI calls.
         var existingSteps = await _questStepRepository.FindByQuestIdAsync(request.QuestId, cancellationToken);
-        // MODIFICATION END
 
         if (existingSteps.Any())
         {
@@ -70,45 +64,41 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             return _mapper.Map<List<GeneratedQuestStepDto>>(existingSteps.OrderBy(s => s.StepNumber));
         }
 
-        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
-        if (quest is null || quest.SubjectId is null)
+        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
+            ?? throw new NotFoundException("Quest", request.QuestId);
+
+        if (quest.SubjectId is null)
         {
-            throw new NotFoundException("Quest or its associated subject not found.");
+            throw new BadRequestException("Quest is not associated with a subject.");
         }
 
-        var syllabus = (await _syllabusRepository.FindAsync(s => s.SubjectId == quest.SubjectId.Value && s.IsActive == true, cancellationToken))
-            .OrderByDescending(s => s.VersionNumber)
-            .FirstOrDefault();
+        // REFACTORED LOGIC: Fetch the subject and use its 'content' field directly.
+        var subject = await _subjectRepository.GetByIdAsync(quest.SubjectId.Value, cancellationToken)
+            ?? throw new NotFoundException("Subject", quest.SubjectId.Value);
 
-        if (syllabus is null || syllabus.Content is null || !syllabus.Content.Any())
+        if (subject.Content is null || !subject.Content.Any())
         {
-            throw new BadRequestException("No active syllabus content available for this quest's subject.");
+            throw new BadRequestException("No syllabus content available for this quest's subject.");
         }
 
-        // --- MODIFICATION START: Fetch relevant skills using the new database column ---
         var relevantSkills = (await _skillRepository.FindAsync(s => s.SourceSubjectId == quest.SubjectId.Value, cancellationToken)).ToList();
         if (!relevantSkills.Any())
         {
-            _logger.LogWarning("No skills are sourced from Subject {SubjectId}. Cannot generate quest steps with skill context.", quest.SubjectId.Value);
-            throw new BadRequestException("No skills are linked to this subject. Skill initialization may be incomplete.");
+            _logger.LogWarning("No skills are mapped to Subject {SubjectId}. Cannot generate quest steps with skill context.", quest.SubjectId.Value);
+            throw new BadRequestException("No skills are linked to this subject. Skill mapping may be incomplete.");
         }
-        // --- MODIFICATION END ---
 
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
         var userCareerClass = "General Learner";
         if (userProfile?.ClassId != null)
         {
             var careerClass = await _classRepository.GetByIdAsync(userProfile.ClassId.Value, cancellationToken);
-            if (careerClass != null)
-            {
-                userCareerClass = careerClass.Name;
-            }
+            userCareerClass = careerClass?.Name ?? userCareerClass;
         }
         string userContext = $"The user's career goal is '{userCareerClass}'. Tailor the content to be relevant for this role.";
 
-        var syllabusJson = JsonSerializer.Serialize(syllabus.Content);
+        var syllabusJson = JsonSerializer.Serialize(subject.Content);
 
-        // MODIFICATION: Pass the list of relevant skills (with their IDs) to the AI plugin.
         var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(syllabusJson, userContext, relevantSkills, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(generatedStepsJson))
@@ -148,17 +138,16 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             Enum.TryParse<Domain.Enums.StepType>(aiStep.StepType, true, out var stepType);
 
-            // MODIFICATION: Validate that the skillId returned by the AI is one of the valid ones we provided.
             if (!aiStep.Content.TryGetProperty("skillId", out var skillIdElement) || !Guid.TryParse(skillIdElement.GetString(), out var skillId) || !relevantSkillIds.Contains(skillId))
             {
                 _logger.LogWarning("AI generated a step with an invalid or missing skillId for Quest {QuestId}. Skipping step.", request.QuestId);
-                continue; // Skip this invalid step
+                continue;
             }
 
             var newStep = new QuestStep
             {
-                Id = Guid.NewGuid(),
                 QuestId = request.QuestId,
+                SkillId = skillId, // Set the validated skill ID
                 StepNumber = aiStep.StepNumber,
                 Title = aiStep.Title,
                 Description = aiStep.Description,

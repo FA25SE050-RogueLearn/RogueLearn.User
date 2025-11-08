@@ -4,8 +4,6 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
-using RogueLearn.User.Application.Features.Student.Commands.EstablishSkillDependencies;
-using RogueLearn.User.Application.Features.Student.Commands.InitializeUserSkills;
 using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 using RogueLearn.User.Application.Features.Student.Queries.GetAcademicStatus;
 using RogueLearn.User.Application.Features.UserContext.Queries.GetUserContextByAuthId;
@@ -29,63 +27,34 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Processes the authenticated user's raw academic record HTML to update their academic progress and generate/update their questline.
-    /// This endpoint is fast and synchronous - it does NOT initialize skills (call /initialize-skills separately).
+    /// Processes the authenticated user's raw academic record HTML to update their academic progress.
+    /// This is the primary endpoint for both initial onboarding and subsequent progress syncs.
     /// </summary>
-    /// <param name="fapHtmlContent">The HTML content from FAP grade report page</param>
-    /// <param name="curriculumVersionId">The curriculum version to associate with this record</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Processing result with learning path and quest information</returns>
-    /// <response code="200">Academic record processed successfully</response>
-    /// <response code="400">Invalid request data or AI extraction failed</response>
-    /// <response code="401">Unauthorized</response>
+    /// <param name="fapHtmlContent">The HTML content from FAP grade report page.</param>
+    /// <param name="curriculumProgramId">The curriculum program this record belongs to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Processing result with learning path and quest information.</returns>
+    /// <response code="200">Academic record processed successfully.</response>
+    /// <response code="400">Invalid request data or data extraction failed.</response>
+    /// <response code="401">Unauthorized.</response>
     [HttpPost("me/academic-record")]
-    [Consumes("multipart/form-data")] // MODIFIED: Changed from application/json to multipart/form-data
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ProcessAcademicRecordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ProcessAcademicRecordResponse>> ProcessMyAcademicRecord(
         [FromForm] string fapHtmlContent,
-        [FromForm] Guid curriculumVersionId,
+        [FromForm] Guid curriculumProgramId, // MODIFIED: User now provides Program ID, not Version ID.
         CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
 
+        // The command will be updated to accept ProgramId and resolve the active version internally.
         var command = new ProcessAcademicRecordCommand
         {
             AuthUserId = authUserId,
             FapHtmlContent = fapHtmlContent,
-            CurriculumVersionId = curriculumVersionId
-        };
-
-        var result = await _mediator.Send(command, cancellationToken);
-        return Ok(result);
-    }
-    /// <summary>
-    /// Initializes the user's skill tree based on their curriculum's learning objectives.
-    /// This is a separate operation from processing academic records and may take longer due to AI analysis.
-    /// Skills that don't exist in the catalog will be automatically created.
-    /// </summary>
-    /// <param name="curriculumVersionId">The curriculum version to initialize skills for</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Skill initialization result with statistics</returns>
-    /// <response code="200">Skills initialized successfully</response>
-    /// <response code="400">Bad request or skill extraction failed</response>
-    /// <response code="401">Unauthorized</response>
-    [HttpPost("me/academic-record/initialize-skills")]
-    [ProducesResponseType(typeof(InitializeUserSkillsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<InitializeUserSkillsResponse>> InitializeMySkills(
-        [FromQuery] Guid curriculumVersionId,
-        CancellationToken cancellationToken)
-    {
-        var authUserId = User.GetAuthUserId();
-
-        var command = new InitializeUserSkillsCommand
-        {
-            AuthUserId = authUserId,
-            CurriculumVersionId = curriculumVersionId
+            CurriculumProgramId = curriculumProgramId
         };
 
         var result = await _mediator.Send(command, cancellationToken);
@@ -93,29 +62,25 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves the authenticated user's current academic status including enrollment, subjects, quests, and skills.
+    /// Retrieves the authenticated user's current academic status including enrollment, subjects, and quests.
     /// This is a read-only query endpoint that does not modify any data.
     /// </summary>
-    /// <param name="curriculumVersionId">Optional curriculum version ID. If not provided, returns the most recent enrollment.</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Complete academic status information</returns>
-    /// <response code="200">Academic status retrieved successfully</response>
-    /// <response code="404">No enrollment found for the user</response>
-    /// <response code="401">Unauthorized</response>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Complete academic status information.</returns>
+    /// <response code="200">Academic status retrieved successfully.</response>
+    /// <response code="404">No enrollment found for the user.</response>
+    /// <response code="401">Unauthorized.</response>
     [HttpGet("me/academic-status")]
     [ProducesResponseType(typeof(GetAcademicStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<GetAcademicStatusResponse>> GetMyAcademicStatus(
-        [FromQuery] Guid? curriculumVersionId,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<GetAcademicStatusResponse>> GetMyAcademicStatus(CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
 
         var query = new GetAcademicStatusQuery
         {
-            AuthUserId = authUserId,
-            CurriculumVersionId = curriculumVersionId
+            AuthUserId = authUserId
         };
 
         var result = await _mediator.Send(query, cancellationToken);
@@ -220,32 +185,7 @@ public class UsersController : ControllerBase
         var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authId), cancellationToken);
         return context is not null ? Ok(context) : NotFound();
     }
-    /// <summary>
-    /// Analyzes and establishes skill dependencies based on curriculum structure and AI analysis.
-    /// This creates the prerequisite relationships needed for the skill tree visualization.
-    /// Should be run after InitializeMySkills.
-    /// </summary>
-    /// <param name="curriculumVersionId">The curriculum version to analyze</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Skill dependency establishment result</returns>
-    /// <response code="200">Dependencies established successfully</response>
-    /// <response code="400">Bad request or analysis failed</response>
-    /// <response code="401">Unauthorized</response>
-    [HttpPost("me/academic-record/establish-skill-dependencies")]
-    [ProducesResponseType(typeof(EstablishSkillDependenciesResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<EstablishSkillDependenciesResponse>> EstablishMySkillDependencies(
-        [FromQuery] Guid curriculumVersionId,
-        CancellationToken cancellationToken)
-    {
-        var authUserId = User.GetAuthUserId();
-        var command = new EstablishSkillDependenciesCommand
-        {
-            AuthUserId = authUserId,
-            CurriculumVersionId = curriculumVersionId
-        };
-        var result = await _mediator.Send(command, cancellationToken);
-        return Ok(result);
-    }
+
+    // REMOVED: The InitializeMySkills and EstablishMySkillDependencies endpoints are now obsolete.
+    // Skill and dependency management is now an admin-curated process.
 }
