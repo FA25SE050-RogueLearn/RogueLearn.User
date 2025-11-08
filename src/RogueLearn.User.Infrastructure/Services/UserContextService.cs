@@ -13,7 +13,8 @@ public class UserContextService : IUserContextService
     private readonly IRoleRepository _roleRepository;
     private readonly IClassRepository _classRepository;
     private readonly IStudentEnrollmentRepository _studentEnrollmentRepository;
-    private readonly ICurriculumVersionRepository _curriculumVersionRepository;
+    // MODIFICATION: Commented out the obsolete repository.
+    // private readonly ICurriculumVersionRepository _curriculumVersionRepository;
     private readonly IUserSkillRepository _userSkillRepository;
     private readonly IUserAchievementRepository _userAchievementRepository;
     private readonly ILogger<UserContextService> _logger;
@@ -24,7 +25,7 @@ public class UserContextService : IUserContextService
         IRoleRepository roleRepository,
         IClassRepository classRepository,
         IStudentEnrollmentRepository studentEnrollmentRepository,
-        ICurriculumVersionRepository curriculumVersionRepository,
+        // ICurriculumVersionRepository curriculumVersionRepository,
         IUserSkillRepository userSkillRepository,
         IUserAchievementRepository userAchievementRepository,
         ILogger<UserContextService> logger)
@@ -34,7 +35,7 @@ public class UserContextService : IUserContextService
         _roleRepository = roleRepository;
         _classRepository = classRepository;
         _studentEnrollmentRepository = studentEnrollmentRepository;
-        _curriculumVersionRepository = curriculumVersionRepository;
+        // _curriculumVersionRepository = curriculumVersionRepository;
         _userSkillRepository = userSkillRepository;
         _userAchievementRepository = userAchievementRepository;
         _logger = logger;
@@ -104,31 +105,35 @@ public class UserContextService : IUserContextService
         }
         if (enrollment is not null)
         {
-            var version = await _curriculumVersionRepository.GetByIdAsync(enrollment.CurriculumVersionId, cancellationToken);
-            if (version is not null)
-            {
-                enrollmentDto = new CurriculumEnrollmentDto
-                {
-                    VersionId = version.Id,
-                    VersionCode = version.VersionCode,
-                    EffectiveYear = version.EffectiveYear,
-                    Status = enrollment.Status.ToString(),
-                    EnrollmentDate = enrollment.EnrollmentDate,
-                    ExpectedGraduationDate = enrollment.ExpectedGraduationDate
-                };
-            }
-            else
-            {
-                enrollmentDto = new CurriculumEnrollmentDto
-                {
-                    VersionId = enrollment.CurriculumVersionId,
-                    VersionCode = string.Empty,
-                    EffectiveYear = 0,
-                    Status = enrollment.Status.ToString(),
-                    EnrollmentDate = enrollment.EnrollmentDate,
-                    ExpectedGraduationDate = enrollment.ExpectedGraduationDate
-                };
-            }
+            // MODIFICATION: The logic to get curriculum version details is commented out because
+            // 'enrollment.CurriculumVersionId' and 'ICurriculumVersionRepository' are obsolete.
+            // TODO: This section needs to be re-implemented to derive version info from the user's
+            // program and its associated subjects, similar to the logic in ProcessAcademicRecordCommandHandler.
+            // var version = await _curriculumVersionRepository.GetByIdAsync(enrollment.CurriculumVersionId, cancellationToken);
+            // if (version is not null)
+            // {
+            //     enrollmentDto = new CurriculumEnrollmentDto
+            //     {
+            //         VersionId = version.Id,
+            //         VersionCode = version.VersionCode,
+            //         EffectiveYear = version.EffectiveYear,
+            //         Status = enrollment.Status.ToString(),
+            //         EnrollmentDate = enrollment.EnrollmentDate,
+            //         ExpectedGraduationDate = enrollment.ExpectedGraduationDate
+            //     };
+            // }
+            // else
+            // {
+            //     enrollmentDto = new CurriculumEnrollmentDto
+            //     {
+            //         VersionId = enrollment.CurriculumVersionId,
+            //         VersionCode = string.Empty,
+            //         EffectiveYear = 0,
+            //         Status = enrollment.Status.ToString(),
+            //         EnrollmentDate = enrollment.EnrollmentDate,
+            //         ExpectedGraduationDate = enrollment.ExpectedGraduationDate
+            //     };
+            // }
         }
         dto.Enrollment = enrollmentDto;
 

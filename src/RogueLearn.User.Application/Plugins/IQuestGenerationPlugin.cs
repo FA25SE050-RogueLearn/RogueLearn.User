@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/IQuestGenerationPlugin.cs
-using RogueLearn.User.Domain.Entities;
+﻿using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -15,6 +14,7 @@ public interface IQuestGenerationPlugin
     /// <param name="userContext">A string describing the user's career goals for personalization.</param>
     /// <param name="relevantSkills">A list of pre-approved skills for the AI to use.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A JSON string representing an array of quest steps.</returns>
-    Task<string> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default);
+    /// <returns>A JSON string representing an array of quest steps, or null if generation fails.</returns>
+    // MODIFICATION: Changed return type to Task<string?> to match the implementation's nullability, resolving the warning.
+    Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default);
 }
