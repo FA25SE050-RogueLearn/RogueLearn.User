@@ -3,7 +3,7 @@ using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Supabase;
-using static Supabase.Postgrest.Constants; // ADDED: To use the Operator enum for direct filtering.
+using static Supabase.Postgrest.Constants; // To use the Operator enum for direct filtering.
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
@@ -13,7 +13,7 @@ public class UserSkillRepository : GenericRepository<UserSkill>, IUserSkillRepos
     {
     }
 
-    // ADDED: Implementation of the new specialized method.
+    // Implementation of the new specialized method.
     /// <summary>
     /// Fetches all skills for a specific user using a direct and reliable filter.
     /// </summary>

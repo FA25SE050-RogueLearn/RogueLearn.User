@@ -23,7 +23,7 @@ public class Skill : BaseEntity
     [Column("description")]
     public string? Description { get; set; }
 
-    // ADDED: This new column links the skill to the subject it was generated from.
+    // This new column links the skill to the subject it was generated from.
     // It is nullable to allow for skills that are created manually by an admin.
     [Column("source_subject_id")]
     public Guid? SourceSubjectId { get; set; }

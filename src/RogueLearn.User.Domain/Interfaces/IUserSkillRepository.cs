@@ -6,7 +6,7 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IUserSkillRepository : IGenericRepository<UserSkill>
 {
-    // ADDED: A new specialized method to reliably fetch skills by a user's authentication ID.
+    // A new specialized method to reliably fetch skills by a user's authentication ID.
     // This avoids the problematic LINQ expression translator in the generic repository for this specific query.
     Task<IEnumerable<UserSkill>> GetSkillsByAuthIdAsync(Guid authUserId, CancellationToken cancellationToken = default);
 }

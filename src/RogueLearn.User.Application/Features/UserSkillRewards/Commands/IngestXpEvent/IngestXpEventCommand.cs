@@ -13,7 +13,7 @@ public class IngestXpEventCommand : IRequest<IngestXpEventResponse>
     public Guid? SourceId { get; set; }
 
     // Skill & XP payload
-    // MODIFICATION: Add SkillId as the primary identifier.
+    // Add SkillId as the primary identifier.
     public Guid? SkillId { get; set; }
     public string SkillName { get; set; } = string.Empty; // Retain for logging and display purposes.
     public int Points { get; set; }

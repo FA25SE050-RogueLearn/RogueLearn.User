@@ -17,9 +17,9 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
     public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCommand, ImportCurriculumResponse>
     {
         private readonly ICurriculumProgramRepository _curriculumProgramRepository;
-        private readonly ICurriculumVersionRepository _curriculumVersionRepository;
+        //private readonly ICurriculumVersionRepository _curriculumVersionRepository;
         private readonly ISubjectRepository _subjectRepository;
-        private readonly ICurriculumStructureRepository _curriculumStructureRepository;
+        // readonly ICurriculumStructureRepository _curriculumStructureRepository;
         private readonly ICurriculumImportStorage _storage;
         private readonly CurriculumImportDataValidator _validator;
         private readonly ILogger<ImportCurriculumCommandHandler> _logger;
@@ -27,18 +27,18 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
 
         public ImportCurriculumCommandHandler(
             ICurriculumProgramRepository curriculumProgramRepository,
-            ICurriculumVersionRepository curriculumVersionRepository,
+            //ICurriculumVersionRepository curriculumVersionRepository,
             ISubjectRepository subjectRepository,
-            ICurriculumStructureRepository curriculumStructureRepository,
+           // ICurriculumStructureRepository curriculumStructureRepository,
             ICurriculumImportStorage curriculumImportStorage,
             CurriculumImportDataValidator validator,
             ILogger<ImportCurriculumCommandHandler> logger,
             IFlmExtractionPlugin flmPlugin)
         {
             _curriculumProgramRepository = curriculumProgramRepository;
-            _curriculumVersionRepository = curriculumVersionRepository;
+            //_curriculumVersionRepository = curriculumVersionRepository;
             _subjectRepository = subjectRepository;
-            _curriculumStructureRepository = curriculumStructureRepository;
+            //_curriculumStructureRepository = curriculumStructureRepository;
             _storage = curriculumImportStorage;
             _validator = validator;
             _logger = logger;
@@ -225,11 +225,11 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             response.CurriculumProgramId = curriculumProgram.Id;
 
             // Check if curriculum version already exists
-            var existingVersion = await _curriculumVersionRepository.FirstOrDefaultAsync(
-                v => v.ProgramId == curriculumProgram.Id && v.VersionCode == data.Version.VersionCode, cancellationToken);
+            //var existingVersion = await _curriculumVersionRepository.FirstOrDefaultAsync(
+                //v => v.ProgramId == curriculumProgram.Id && v.VersionCode == data.Version.VersionCode, cancellationToken);
 
-            CurriculumVersion curriculumVersion;
-            if (existingVersion != null)
+            //CurriculumVersion curriculumVersion;
+            //if (existingVersion != null)
             {
                 _logger.LogWarning("Curriculum version {VersionCode} for program {ProgramCode} already exists. Skipping import.", data.Version.VersionCode, data.Program.ProgramCode);
                 return new ImportCurriculumResponse
@@ -240,19 +240,19 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             }
 
             // Create curriculum version
-            curriculumVersion = new CurriculumVersion
-            {
-                ProgramId = curriculumProgram.Id,
-                VersionCode = data.Version.VersionCode,
-                EffectiveYear = data.Version.EffectiveYear,
-                IsActive = data.Version.IsActive,
-                Description = data.Version.Description,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
+            //curriculumVersion = new CurriculumVersion
+            //{
+             //   ProgramId = curriculumProgram.Id,
+             //   VersionCode = data.Version.VersionCode,
+             //   EffectiveYear = data.Version.EffectiveYear,
+             //   IsActive = data.Version.IsActive,
+             //   Description = data.Version.Description,
+              //  CreatedAt = DateTimeOffset.UtcNow
+            //};
 
-            curriculumVersion = await _curriculumVersionRepository.AddAsync(curriculumVersion, cancellationToken);
-            _logger.LogInformation("Created new curriculum version with ID {VersionId}", curriculumVersion.Id);
-            response.CurriculumVersionId = curriculumVersion.Id;
+            //curriculumVersion = await _curriculumVersionRepository.AddAsync(curriculumVersion, cancellationToken);
+            //_logger.LogInformation("Created new curriculum version with ID {VersionId}", curriculumVersion.Id);
+            //response.CurriculumVersionId = curriculumVersion.Id;
 
             // Bulk create/update subjects
             var subjectCodes = data.Subjects
@@ -330,7 +330,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             }
 
             // Bulk create curriculum structures
-            var structuresToInsert = new List<Domain.Entities.CurriculumStructure>();
+           // var structuresToInsert = new List<Domain.Entities.CurriculumStructure>();
             foreach (var structureData in data.Structure)
             {
                 if (!subjectIdByCode.TryGetValue(structureData.SubjectCode, out var subjectId))
@@ -354,23 +354,23 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                     prerequisiteIds = ids.Any() ? ids.ToArray() : null;
                 }
 
-                structuresToInsert.Add(new Domain.Entities.CurriculumStructure
-                {
-                    CurriculumVersionId = curriculumVersion.Id,
-                    SubjectId = subjectId,
-                    Semester = structureData.TermNumber,
-                    IsMandatory = structureData.IsMandatory,
-                    PrerequisiteSubjectIds = prerequisiteIds,
-                    PrerequisitesText = structureData.PrerequisitesText,
-                    CreatedAt = DateTimeOffset.UtcNow
-                });
+                //structuresToInsert.Add(new Domain.Entities.CurriculumStructure
+                //{
+                //    CurriculumVersionId = curriculumVersion.Id,
+                //    SubjectId = subjectId,
+                //    Semester = structureData.TermNumber,
+                //    IsMandatory = structureData.IsMandatory,
+                //    PrerequisiteSubjectIds = prerequisiteIds,
+                //    PrerequisitesText = structureData.PrerequisitesText,
+                //    CreatedAt = DateTimeOffset.UtcNow
+                //});
             }
 
-            if (structuresToInsert.Any())
-            {
-                var insertedStructures = await _curriculumStructureRepository.AddRangeAsync(structuresToInsert, cancellationToken);
-                _logger.LogInformation("Bulk created {Count} curriculum structures", structuresToInsert.Count);
-            }
+            //if (structuresToInsert.Any())
+            //{
+            //    var insertedStructures = await _curriculumStructureRepository.AddRangeAsync(structuresToInsert, cancellationToken);
+            //    _logger.LogInformation("Bulk created {Count} curriculum structures", structuresToInsert.Count);
+            //}
 
             response.Message = "Curriculum imported successfully";
             return response;
