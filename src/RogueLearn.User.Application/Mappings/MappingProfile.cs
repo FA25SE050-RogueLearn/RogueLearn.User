@@ -37,6 +37,7 @@ using RogueLearn.User.Application.Features.Achievements.Commands.UpdateAchieveme
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 using RogueLearn.User.Application.Features.Parties.DTOs;
+using RogueLearn.User.Application.Features.Meetings.DTOs;
 
 namespace RogueLearn.User.Application.Mappings;
 
@@ -146,6 +147,10 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.Bio, opt => opt.Ignore());
         CreateMap<PartyInvitation, PartyInvitationDto>();
         CreateMap<PartyStashItem, PartyStashItemDto>();
+
+        // Meetings mappings
+        CreateMap<Meeting, MeetingDto>().ReverseMap();
+        CreateMap<MeetingParticipant, MeetingParticipantDto>().ReverseMap();
     }
     private static object? ParseJsonContent(string? content)
     {

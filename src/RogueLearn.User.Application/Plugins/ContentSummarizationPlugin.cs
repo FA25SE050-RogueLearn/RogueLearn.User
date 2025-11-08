@@ -2,10 +2,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using RogueLearn.User.Application.Models;
-using RogueLearn.User.Application.Interfaces;
 using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Presentation;
 using Drawing = DocumentFormat.OpenXml.Drawing;
+using System.Text;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -18,6 +17,19 @@ public class ContentSummarizationPlugin : ISummarizationPlugin, IFileSummarizati
   private readonly Kernel _kernel;
   private readonly ILogger<ContentSummarizationPlugin> _logger;
 
+  // System instruction to force the model to return BlockNote-compatible JSON only
+  private const string BlockNoteJsonInstruction =
+    "You are a content summarizer that outputs ONLY a valid JSON array of BlockNote blocks. " +
+    "Follow these rules strictly: \n" +
+    "1) Return ONLY a JSON array (no prose, no markdown fences, no explanations).\n" +
+    "2) Use BlockNote built-in blocks: heading, paragraph, bulletListItem, numberedListItem, checkListItem, quote, codeBlock, image, table.\n" +
+    "3) Prefer a concise structured summary: a top heading (e.g., 'Summary'), short sections as 'heading', and key points as 'bulletListItem'.\n" +
+    "4) Each block is an object with: id (UUID v4), type, props { backgroundColor: 'default', textColor: 'default', textAlignment: 'left' }, content as an array of inline items (e.g., { type: 'text', text: '...', styles: {} }).\n" +
+    "5) Keep to <= 20 blocks total. Avoid empty blocks.\n" +
+    "6) Do NOT include code fences like ```json or additional commentary.\n" +
+    "7) For images found in slides, include image blocks with props { url: '<data-url or source-url>', caption: '...' } only if meaningful; otherwise omit.\n" +
+    "8) Ensure the JSON is syntactically valid and can be parsed without modification.";
+
   public ContentSummarizationPlugin(Kernel kernel, ILogger<ContentSummarizationPlugin> logger)
   {
     _kernel = kernel;
@@ -27,11 +39,22 @@ public class ContentSummarizationPlugin : ISummarizationPlugin, IFileSummarizati
   public async Task<string> SummarizeTextAsync(string rawText, CancellationToken cancellationToken = default)
   {
     if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
-    var prompt = "Summarize the following content in 3-5 bullet points highlighting the key ideas. Be concise and clear.\n\n" + rawText;
     try
     {
-      var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
-      return (result.GetValue<string>() ?? string.Empty).Trim();
+      var chatService = _kernel.GetRequiredService<IChatCompletionService>();
+      var chatHistory = new ChatHistory();
+      chatHistory.AddSystemMessage(BlockNoteJsonInstruction);
+
+      var userItems = new ChatMessageContentItemCollection
+      {
+        new TextContent("Summarize the following content into BlockNote JSON blocks with clear headings and bullet points:"),
+        new TextContent(rawText)
+      };
+      chatHistory.AddUserMessage(userItems);
+
+      var result = await chatService.GetChatMessageContentAsync(chatHistory, cancellationToken: cancellationToken);
+      var json = result?.Content?.ToString() ?? string.Empty;
+      return SanitizeJsonOutput(json);
     }
     catch (Exception ex)
     {
@@ -118,10 +141,13 @@ public class ContentSummarizationPlugin : ISummarizationPlugin, IFileSummarizati
       }
 
       var chatHistory = new ChatHistory();
-      // Final instruction for the AI summarization
+      // System instruction to force JSON BlockNote output
+      chatHistory.AddSystemMessage(BlockNoteJsonInstruction);
+
+      // Final instruction + content payload for the AI summarization
       var finalPrompt = new ChatMessageContentItemCollection
       {
-        new TextContent("Based on the following content from a document (which may include text and images), please provide a comprehensive summary. Use bullet points and headings where appropriate.")
+        new TextContent("Based on the following content from a document (which may include text and images), produce a structured summary as BlockNote JSON blocks. Use a heading for the title and bullets for key points.")
       };
       foreach (var item in contentItems)
       {
@@ -130,8 +156,8 @@ public class ContentSummarizationPlugin : ISummarizationPlugin, IFileSummarizati
       chatHistory.AddUserMessage(finalPrompt);
 
       var result = await chatService.GetChatMessageContentAsync(chatHistory, cancellationToken: cancellationToken);
-      var summary = result?.Content?.ToString()?.Trim() ?? string.Empty;
-      return summary;
+      var json = result?.Content?.ToString() ?? string.Empty;
+      return SanitizeJsonOutput(json);
     }
     catch (Exception ex)
     {
@@ -186,5 +212,38 @@ public class ContentSummarizationPlugin : ISummarizationPlugin, IFileSummarizati
       _logger.LogWarning(ex, "PPTX parsing failed; will return available content items only.");
     }
     return contentItems;
+  }
+
+  // Attempt to strip any accidental markdown fences and extract a clean JSON array
+  private static string SanitizeJsonOutput(string input)
+  {
+    if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+    var s = input.Trim();
+
+    // Remove common code fences
+    if (s.StartsWith("```"))
+    {
+      // Try to find the JSON array boundaries inside fenced content
+      var start = s.IndexOf('[');
+      var end = s.LastIndexOf(']');
+      if (start >= 0 && end > start)
+      {
+        return s.Substring(start, end - start + 1).Trim();
+      }
+    }
+
+    // If not fenced, still try to extract the array part
+    {
+      var start = s.IndexOf('[');
+      var end = s.LastIndexOf(']');
+      if (start >= 0 && end > start)
+      {
+        return s.Substring(start, end - start + 1).Trim();
+      }
+    }
+
+    // Fallback: return as-is (caller may validate/parse)
+    return s;
   }
 }

@@ -136,6 +136,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPartyInvitationRepository, PartyInvitationRepository>();
         services.AddScoped<IPartyStashItemRepository, PartyStashItemRepository>();
 
+        // Meeting repositories
+        services.AddScoped<IMeetingRepository, MeetingRepository>();
+        services.AddScoped<IMeetingParticipantRepository, MeetingParticipantRepository>();
+        services.AddScoped<IMeetingSummaryRepository, MeetingSummaryRepository>();
+
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
         services.AddScoped<IRoadmapImportStorage, RoadmapImportStorage>();

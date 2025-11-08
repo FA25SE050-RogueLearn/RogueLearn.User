@@ -33,17 +33,17 @@ public sealed class GetTagsForNoteQueryHandler : IRequestHandler<GetTagsForNoteQ
     if (note is null)
     {
       _logger.LogWarning("GetTagsForNote failed: note not found. NoteId={NoteId}", request.NoteId);
-      throw new RogueLearn.User.Application.Exceptions.NotFoundException("Note", request.NoteId.ToString());
+      throw new Exceptions.NotFoundException("Note", request.NoteId.ToString());
     }
 
     if (note.AuthUserId != request.AuthUserId)
     {
       _logger.LogWarning("GetTagsForNote denied: note not owned. NoteId={NoteId}, AuthUserId={AuthUserId}", request.NoteId, request.AuthUserId);
-      throw new RogueLearn.User.Application.Exceptions.ForbiddenException("Access denied to note.");
+      throw new Exceptions.ForbiddenException("Access denied to note.");
     }
 
     var tagIds = (await _noteTagRepository.GetTagIdsForNoteAsync(note.Id, cancellationToken)).ToList();
-    var tags = (await _tagRepository.FindAsync(t => tagIds.Contains(t.Id), cancellationToken)).ToList();
+    var tags = (await _tagRepository.GetByIdsAsync(tagIds, cancellationToken)).ToList();
     var dtos = tags.Select(t => new TagDto { Id = t.Id, Name = t.Name }).ToList();
 
     return new GetTagsForNoteResponse { NoteId = note.Id, Tags = dtos };

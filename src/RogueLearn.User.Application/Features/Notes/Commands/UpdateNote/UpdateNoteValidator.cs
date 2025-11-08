@@ -13,10 +13,6 @@ public class UpdateNoteValidator : AbstractValidator<UpdateNoteCommand>
       .NotEmpty();
 
     RuleFor(x => x.Title)
-      .NotEmpty()
       .MaximumLength(200);
-
-    RuleFor(x => x.Content)
-      .NotNull();
   }
 }
