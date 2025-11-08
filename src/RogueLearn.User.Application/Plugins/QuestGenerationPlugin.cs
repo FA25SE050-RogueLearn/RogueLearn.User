@@ -17,10 +17,12 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         _logger = logger;
     }
 
-    // MODIFICATION: The method now accepts a list of Skill entities.
+    // MODIFICATION: The method now accepts a list of Skill entities to ensure AI only uses valid, admin-approved skills.
     public async Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default)
     {
-        // MODIFICATION: The prompt is updated to use the provided list of skills with their IDs.
+        // MODIFICATION: The prompt is dynamically updated with the list of pre-approved skills.
+        // This provides the AI with a strict list of valid skillId-skillName pairs, preventing hallucination
+        // and fulfilling the "Implementation" stage of the new architecture.
         var skillsJsonForPrompt = JsonSerializer.Serialize(
             relevantSkills.Select(s => new { skillId = s.Id, skillName = s.Name })
         );
