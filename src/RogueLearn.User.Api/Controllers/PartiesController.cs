@@ -25,6 +25,9 @@ using RogueLearn.User.Application.Features.Parties.Commands.DeleteParty;
 using RogueLearn.User.Application.Features.Parties.Commands.JoinPublicParty;
 using RogueLearn.User.Application.Features.Parties.Queries.GetMyPendingInvitations;
 using RogueLearn.User.Application.Features.Parties.Commands.DeclineInvitation;
+using RogueLearn.User.Application.Features.Parties.Commands.UpdatePartyResource;
+using RogueLearn.User.Application.Features.Parties.Commands.DeletePartyResource;
+using RogueLearn.User.Application.Features.Parties.Queries.GetPartyResourceById;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -305,6 +308,75 @@ public class PartiesController : ControllerBase
     {
         var result = await _mediator.Send(new GetPartyResourcesQuery(partyId), cancellationToken);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Get a stash item by id within a party.
+    /// </summary>
+    [HttpGet("{partyId:guid}/stash/{stashItemId:guid}")]
+    [ProducesResponseType(typeof(PartyStashItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PartyStashItemDto>> GetResourceById([FromRoute] Guid partyId, [FromRoute] Guid stashItemId, CancellationToken cancellationToken)
+    {
+        var dto = await _mediator.Send(new GetPartyResourceByIdQuery(partyId, stashItemId), cancellationToken);
+        return dto is not null ? Ok(dto) : NotFound();
+    }
+
+    /// <summary>
+    /// Update a stash item in a party (Party Leader only).
+    /// </summary>
+    [HttpPut("{partyId:guid}/stash/{stashItemId:guid}")]
+    [PartyLeaderOnly("partyId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateResource([FromRoute] Guid partyId, [FromRoute] Guid stashItemId, [FromBody] UpdatePartyResourceRequest body, CancellationToken cancellationToken)
+    {
+        var userId = User.GetAuthUserId();
+        await _mediator.Send(new UpdatePartyResourceCommand(partyId, stashItemId, userId, body), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Delete a stash item from a party (Party Leader only).
+    /// </summary>
+    [HttpDelete("{partyId:guid}/stash/{stashItemId:guid}")]
+    [PartyLeaderOnly("partyId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteResource([FromRoute] Guid partyId, [FromRoute] Guid stashItemId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetAuthUserId();
+        await _mediator.Send(new DeletePartyResourceCommand(partyId, stashItemId, userId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Admin-only: Update a party stash item.
+    /// </summary>
+    [HttpPut("~/api/admin/parties/{partyId:guid}/stash/{stashItemId:guid}")]
+    [AdminOnly]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AdminUpdateResource([FromRoute] Guid partyId, [FromRoute] Guid stashItemId, [FromBody] UpdatePartyResourceRequest body, CancellationToken cancellationToken)
+    {
+        var userId = User.GetAuthUserId();
+        await _mediator.Send(new UpdatePartyResourceCommand(partyId, stashItemId, userId, body), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Admin-only: Delete a party stash item.
+    /// </summary>
+    [HttpDelete("~/api/admin/parties/{partyId:guid}/stash/{stashItemId:guid}")]
+    [AdminOnly]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> AdminDeleteResource([FromRoute] Guid partyId, [FromRoute] Guid stashItemId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetAuthUserId();
+        await _mediator.Send(new DeletePartyResourceCommand(partyId, stashItemId, userId), cancellationToken);
+        return NoContent();
     }
 
     /// <summary>
