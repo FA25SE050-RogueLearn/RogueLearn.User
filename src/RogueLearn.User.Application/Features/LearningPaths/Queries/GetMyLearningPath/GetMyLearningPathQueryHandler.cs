@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/LearningPaths/Queries/GetMyLearningPath/GetMyLearningPathQueryHandler.cs
+using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums; // Required for QuestStatus and PathProgressStatus enums
@@ -12,9 +13,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
     private readonly IQuestRepository _questRepository;
     private readonly IUserQuestProgressRepository _userQuestProgressRepository;
     private readonly ILogger<GetMyLearningPathQueryHandler> _logger;
-    // MODIFICATION: Commented out obsolete repository. The logic needs to be updated
-    // to derive semester information from the new `subjects` table.
-    // private readonly ICurriculumStructureRepository _curriculumStructureRepository;
     private readonly ISubjectRepository _subjectRepository;
 
 
@@ -24,7 +22,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         IQuestRepository questRepository,
         IUserQuestProgressRepository userQuestProgressRepository,
         ILogger<GetMyLearningPathQueryHandler> logger,
-        // ICurriculumStructureRepository curriculumStructureRepository,
         ISubjectRepository subjectRepository)
     {
         _learningPathRepository = learningPathRepository;
@@ -32,7 +29,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         _questRepository = questRepository;
         _userQuestProgressRepository = userQuestProgressRepository;
         _logger = logger;
-        // _curriculumStructureRepository = curriculumStructureRepository;
         _subjectRepository = subjectRepository;
     }
 
@@ -54,7 +50,8 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             .OrderBy(c => c.Sequence)
             .ToList();
 
-        // MODIFICATION: Logic now fetches quests directly linked to chapters.
+        // MODIFICATION: Logic now fetches quests directly linked to chapters, which is more efficient
+        // and aligns with the new data model, removing the need for the obsolete learning_path_quests table.
         var chapterIds = chapters.Select(c => c.Id).ToList();
         var quests = (await _questRepository.GetAllAsync(cancellationToken))
             .Where(q => chapterIds.Contains(q.QuestChapterId))
@@ -89,7 +86,8 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                         Id = quest.Id,
                         Title = quest.Title,
                         Status = status,
-                        // MODIFICATION: SequenceOrder is not on the quest entity, assuming a default or future property.
+                        // MODIFICATION: SequenceOrder logic now needs to be defined on the Quest entity itself for ordering within a chapter.
+                        // Assuming '0' for now, but the data model should be updated if ordering is needed.
                         SequenceOrder = 0,
                         LearningPathId = learningPath.Id,
                         ChapterId = chapter.Id
@@ -97,7 +95,8 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                 }
             }
 
-            // chapterDto.Quests = chapterDto.Quests.OrderBy(q => q.SequenceOrder).ToList(); // MODIFICATION: SequenceOrder needs to be implemented on Quest
+            // MODIFICATION: This logic will require a 'Sequence' property on the Quest entity to function correctly.
+            // chapterDto.Quests = chapterDto.Quests.OrderBy(q => q.SequenceOrder).ToList();
 
             if (chapterDto.Quests.Any())
             {

@@ -104,7 +104,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILearningPathRepository, LearningPathRepository>();
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
-        services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
+        // MODIFICATION: The obsolete repository registration has been removed.
+        // services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();

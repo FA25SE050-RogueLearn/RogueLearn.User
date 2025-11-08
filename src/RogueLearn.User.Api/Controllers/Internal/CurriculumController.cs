@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.DTOs.Internal; // ADD THIS
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
-using RogueLearn.User.Application.Features.CurriculumVersions.Queries.GetCurriculumForQuestGeneration; // ADD THIS
 
 namespace RogueLearn.User.Api.Controllers.Internal;
 
@@ -34,17 +33,4 @@ public class CurriculumController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Gets a flattened curriculum DTO for internal quest generation service.
-    /// </summary>
-    [HttpGet("versions/{versionId:guid}/for-quest-generation")] // NEW, EXPLICIT ENDPOINT
-    [ProducesResponseType(typeof(CurriculumForQuestGenerationDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<CurriculumForQuestGenerationDto>> GetCurriculumForQuestGeneration(Guid versionId)
-    {
-        var query = new GetCurriculumForQuestGenerationQuery { CurriculumVersionId = versionId };
-        var result = await _mediator.Send(query);
-        return Ok(result);
-    }
 }
