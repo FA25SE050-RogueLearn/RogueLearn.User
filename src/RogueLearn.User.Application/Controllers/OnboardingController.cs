@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/OnboardingController.cs
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +8,7 @@ using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
 // MODIFICATION: Commented out the using statement for a missing query to resolve compilation error.
 // using RogueLearn.User.Application.Features.Onboarding.Queries.GetOnboardingVersionsByProgram;
 using BuildingBlocks.Shared.Authentication;
+using Microsoft.AspNetCore.Http; // MODIFICATION: Added to resolve the 'StatusCodes' compilation error.
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -81,4 +83,4 @@ public class OnboardingController : ControllerBase
 
         return NoContent();
     }
-}
+}
