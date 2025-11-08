@@ -91,10 +91,7 @@ public static class ServiceCollectionExtensions
 
         // Curriculum repositories
         services.AddScoped<ICurriculumProgramRepository, CurriculumProgramRepository>();
-        services.AddScoped<ICurriculumVersionRepository, CurriculumVersionRepository>();
-        services.AddScoped<ICurriculumVersionActivationRepository, CurriculumVersionActivationRepository>();
-        services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
-        services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
+        services.AddScoped<ICurriculumProgramSubjectRepository, CurriculumProgramSubjectRepository>();
         // Register the repository for the new subject_skill_mappings table.
         services.AddScoped<ISubjectSkillMappingRepository, SubjectSkillMappingRepository>();
 
