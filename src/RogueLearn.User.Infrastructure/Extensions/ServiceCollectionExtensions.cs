@@ -138,6 +138,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMeetingParticipantRepository, MeetingParticipantRepository>();
         services.AddScoped<IMeetingSummaryRepository, MeetingSummaryRepository>();
 
+        // NEW: Register the shared HTML Cleaning Service
+        services.AddScoped<IHtmlCleaningService, HtmlCleaningService>();
+
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();
         services.AddScoped<IRoadmapImportStorage, RoadmapImportStorage>();

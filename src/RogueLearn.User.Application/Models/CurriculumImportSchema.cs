@@ -12,16 +12,16 @@ public class CurriculumImportData
 {
     [Required]
     public CurriculumProgramData Program { get; set; } = new();
-    
+
     [Required]
     public CurriculumVersionData Version { get; set; } = new();
-    
+
     [Required]
     public List<SubjectData> Subjects { get; set; } = new();
-    
+
     [Required]
     public List<CurriculumStructureData> Structure { get; set; } = new();
-    
+
     public List<SyllabusData>? Syllabi { get; set; }
 }
 
@@ -32,20 +32,21 @@ public class CurriculumProgramData
 {
     [Required, MaxLength(255)]
     public string ProgramName { get; set; } = string.Empty;
-    
+
     [Required, MaxLength(50)]
     public string ProgramCode { get; set; } = string.Empty;
-    
+
     public string? Description { get; set; }
-    
+
     [Required]
     [JsonConverter(typeof(StringEnumConverter))]
     public DegreeLevel DegreeLevel { get; set; }
-    
+
     public int? TotalCredits { get; set; }
-    
+
     public double? DurationYears { get; set; }
 }
+
 
 /// <summary>
 /// Version information for the curriculum
@@ -54,12 +55,12 @@ public class CurriculumVersionData
 {
     [Required, MaxLength(50)]
     public string VersionCode { get; set; } = string.Empty;
-    
+
     [Required]
     public int EffectiveYear { get; set; }
-    
+
     public string? Description { get; set; }
-    
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -70,15 +71,19 @@ public class SubjectData
 {
     [Required, MaxLength(50)]
     public string SubjectCode { get; set; } = string.Empty;
-    
+
     [Required, MaxLength(255)]
     public string SubjectName { get; set; } = string.Empty;
-    
+
     [Required, Range(1, 10)]
     public int Credits { get; set; }
-    
+
     public string? Description { get; set; }
+
+    // This property allows the AI to flag special combo/elective subjects.
+    public bool IsPlaceholder { get; set; } = false;
 }
+
 
 /// <summary>
 /// Curriculum structure mapping subjects to terms
@@ -87,14 +92,14 @@ public class CurriculumStructureData
 {
     [Required]
     public string SubjectCode { get; set; } = string.Empty;
-    
+
     [Required, Range(1, 12)]
     public int TermNumber { get; set; }
-    
+
     public bool IsMandatory { get; set; } = true;
-    
+
     public List<string>? PrerequisiteSubjectCodes { get; set; }
-    
+
     public string? PrerequisitesText { get; set; }
 }
 

@@ -8,69 +8,92 @@ using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
+using HtmlAgilityPack;
+using System.Text;
+// NEW: Add this using statement to access the enum converter
+using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum
 {
     public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCommand, ImportCurriculumResponse>
     {
         private readonly ICurriculumProgramRepository _curriculumProgramRepository;
-
         private readonly ISubjectRepository _subjectRepository;
-        private readonly ICurriculumProgramSubjectRepository _programSubjectRepository; // NEW
-
+        private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
         private readonly ICurriculumImportStorage _storage;
         private readonly CurriculumImportDataValidator _validator;
         private readonly ILogger<ImportCurriculumCommandHandler> _logger;
         private readonly IFlmExtractionPlugin _flmPlugin;
+        private readonly IHtmlCleaningService _htmlCleaningService;
 
         public ImportCurriculumCommandHandler(
             ICurriculumProgramRepository curriculumProgramRepository,
-
             ISubjectRepository subjectRepository,
-            ICurriculumProgramSubjectRepository programSubjectRepository, // NEW
-
-            ICurriculumImportStorage curriculumImportStorage,
+            ICurriculumProgramSubjectRepository programSubjectRepository,
+            ICurriculumImportStorage storage,
             CurriculumImportDataValidator validator,
             ILogger<ImportCurriculumCommandHandler> logger,
-            IFlmExtractionPlugin flmPlugin)
+            IFlmExtractionPlugin flmPlugin,
+            IHtmlCleaningService htmlCleaningService)
         {
             _curriculumProgramRepository = curriculumProgramRepository;
-
             _subjectRepository = subjectRepository;
-            _programSubjectRepository = programSubjectRepository; // NEW
-            _storage = curriculumImportStorage;
+            _programSubjectRepository = programSubjectRepository;
+            _storage = storage;
             _validator = validator;
             _logger = logger;
             _flmPlugin = flmPlugin;
+            _htmlCleaningService = htmlCleaningService;
         }
 
         public async Task<ImportCurriculumResponse> Handle(ImportCurriculumCommand request, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Starting curriculum import from text");
 
-            // AI Extraction, Caching, and Validation (logic remains the same)
-            // ... (For brevity, assuming this logic correctly produces a validated 'curriculumData' object)
-            var extractedJson = await _flmPlugin.ExtractCurriculumJsonAsync(request.RawText, cancellationToken);
+            var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.RawText);
+            if (string.IsNullOrWhiteSpace(cleanText))
+            {
+                _logger.LogError("HTML cleaning service failed to extract meaningful text from the provided HTML.");
+                throw new Exceptions.BadRequestException("Failed to extract meaningful text from the provided HTML.");
+            }
+
+            var extractedJson = await _flmPlugin.ExtractCurriculumJsonAsync(cleanText, cancellationToken);
             if (string.IsNullOrEmpty(extractedJson))
             {
+                _logger.LogError("AI plugin failed to extract curriculum JSON from the cleaned text.");
                 throw new Exceptions.BadRequestException("Failed to extract curriculum data from the provided text");
             }
-            var curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            CurriculumImportData? curriculumData;
+            try
+            {
+                // FIX: Configure the serializer to correctly handle enums represented as strings.
+                var serializerOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new JsonStringEnumConverter() }
+                };
+                curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, serializerOptions);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize extracted JSON: {Json}", extractedJson);
+                throw new Exceptions.BadRequestException("AI returned invalid JSON format.");
+            }
+
             if (curriculumData == null)
             {
                 throw new Exceptions.BadRequestException("No curriculum data was extracted");
             }
+
             var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
             if (!validationResult.IsValid)
             {
                 throw new Exceptions.ValidationException(validationResult.Errors);
             }
 
-            // --- REWRITTEN PERSISTENCE LOGIC ---
-
             var response = new ImportCurriculumResponse { IsSuccess = true };
 
-            // 1. Create or get CurriculumProgram
             var program = await _curriculumProgramRepository.FirstOrDefaultAsync(p => p.ProgramCode == curriculumData.Program.ProgramCode, cancellationToken);
             if (program == null)
             {
@@ -90,10 +113,9 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
 
             var subjectEntities = new List<Subject>();
 
-            // 2. Create or Update all Subjects in a batch
-            foreach (var subjectData in curriculumData.Subjects)
+            // Only process subjects that are not placeholders
+            foreach (var subjectData in curriculumData.Subjects.Where(s => s.IsPlaceholder == false))
             {
-
                 var subject = new Subject
                 {
                     SubjectCode = subjectData.SubjectCode,
@@ -102,15 +124,12 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                     Description = subjectData.Description,
                     Version = curriculumData.Version.VersionCode,
                     Semester = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode)?.TermNumber ?? 0,
-                    // Prerequisites will be mapped in a later step after all subjects have IDs
                 };
                 subjectEntities.Add(subject);
             }
 
-            // For now, we'll add them one-by-one to get their IDs. A bulk upsert would be more efficient in a real scenario.
             var createdSubjects = new List<Subject>();
             foreach (var subjectEntity in subjectEntities)
-
             {
                 var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectEntity.SubjectCode && s.Version == subjectEntity.Version, cancellationToken);
                 if (existing != null)
@@ -131,13 +150,11 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             }
             var subjectMapByCode = createdSubjects.ToDictionary(s => s.SubjectCode, s => s);
 
-            // 3. Update prerequisites now that all subjects have IDs
             foreach (var createdSubject in createdSubjects)
             {
                 var structureData = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == createdSubject.SubjectCode);
                 if (structureData?.PrerequisiteSubjectCodes?.Any() == true)
                 {
-
                     var prereqIds = new List<Guid>();
 
                     foreach (var prereqCode in structureData.PrerequisiteSubjectCodes)
@@ -154,7 +171,6 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             response.SubjectIds.AddRange(createdSubjects.Select(s => s.Id));
 
 
-            // 4. Create the mappings in curriculum_program_subjects
             foreach (var subject in createdSubjects)
             {
                 var mappingExists = await _programSubjectRepository.AnyAsync(ps => ps.ProgramId == program.Id && ps.SubjectId == subject.Id, cancellationToken);

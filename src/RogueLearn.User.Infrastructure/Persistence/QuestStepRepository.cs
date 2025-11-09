@@ -32,7 +32,10 @@ public class QuestStepRepository : GenericRepository<QuestStep>, IQuestStepRepos
     {
         var steps = await _supabaseClient
             .From<QuestStep>()
-            .Filter("quest_id", Operator.Equals, questId)
+            // --- MODIFICATION START: Convert the Guid to a string ---
+            // The Supabase client's Filter method requires a primitive type like a string for comparison.
+            .Filter("quest_id", Operator.Equals, questId.ToString())
+            // --- MODIFICATION END ---
             .Count(CountType.Exact);
 
         return steps > 0;
