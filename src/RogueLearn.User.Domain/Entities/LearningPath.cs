@@ -19,9 +19,6 @@ public class LearningPath : BaseEntity
     [JsonConverter(typeof(StringEnumConverter))]
     public PathType PathType { get; set; }
 
-    [Column("curriculum_version_id")]
-    public Guid? CurriculumVersionId { get; set; }
-
     [Column("estimated_total_duration_hours")]
     public int? EstimatedTotalDurationHours { get; set; }
 
