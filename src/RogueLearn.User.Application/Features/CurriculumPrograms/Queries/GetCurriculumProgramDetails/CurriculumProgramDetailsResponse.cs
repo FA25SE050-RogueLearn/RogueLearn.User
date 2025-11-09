@@ -44,7 +44,7 @@ public class CurriculumSubjectDetailsDto
     public string SubjectName { get; set; } = string.Empty;
     public int Credits { get; set; }
     public string? Description { get; set; }
-    public int TermNumber { get; set; }
+    public int? TermNumber { get; set; }
     public bool IsMandatory { get; set; }
     public Guid[]? PrerequisiteSubjectIds { get; set; }
 

@@ -26,8 +26,9 @@ public class Subject : BaseEntity
     [Column("content")]
     public Dictionary<string, object>? Content { get; set; }
 
+    // MODIFICATION: Changed 'Semester' from 'int' to 'int?'.
     [Column("semester")]
-    public int Semester { get; set; }
+    public int? Semester { get; set; }
 
     [Column("prerequisite_subject_ids")]
     public Guid[]? PrerequisiteSubjectIds { get; set; }
