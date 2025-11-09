@@ -150,7 +150,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 Id = Guid.NewGuid(),
                 LearningPathId = learningPath.Id,
                 Title = $"Semester {semesterNumber}",
-                Sequence = semesterNumber,
+                Sequence = semesterNumber.Value,
                 Status = PathProgressStatus.NotStarted,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
