@@ -108,8 +108,8 @@ try
     });
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/user-service/swagger/v1/swagger.json", "RogueLearn.User API V1");
-        c.RoutePrefix = "swagger";
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
+        c.RoutePrefix = string.Empty;
     });
 
     app.UseCors("AllowAll");
