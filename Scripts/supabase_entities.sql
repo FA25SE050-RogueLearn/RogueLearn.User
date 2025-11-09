@@ -530,6 +530,7 @@ CREATE TABLE meetings (
     actual_start_time TIMESTAMPTZ,
     actual_end_time TIMESTAMPTZ,
     organizer_id UUID NOT NULL REFERENCES user_profiles(auth_user_id),
+    meeting_link TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -647,7 +648,8 @@ CREATE TABLE guild_post_likes (
 CREATE TABLE meeting_participants (
     participant_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID NOT NULL REFERENCES meetings(meeting_id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES user_profiles(auth_user_id),
+    user_id UUID REFERENCES user_profiles(auth_user_id),
+    display_name TEXT,
     join_time TIMESTAMPTZ,
     leave_time TIMESTAMPTZ,
     role_in_meeting VARCHAR(50) NOT NULL DEFAULT 'participant'

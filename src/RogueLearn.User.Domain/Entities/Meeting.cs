@@ -30,6 +30,9 @@ public class Meeting : BaseModel
     [Column("organizer_id")]
     public Guid OrganizerId { get; set; }
 
+    [Column("meeting_link")]
+    public string? MeetingLink { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

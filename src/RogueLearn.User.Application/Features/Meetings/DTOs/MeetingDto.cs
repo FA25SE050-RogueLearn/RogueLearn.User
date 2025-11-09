@@ -10,4 +10,5 @@ public class MeetingDto
     public DateTimeOffset? ActualStartTime { get; set; }
     public DateTimeOffset? ActualEndTime { get; set; }
     public Guid OrganizerId { get; set; }
+    public string? MeetingLink { get; set; }
 }

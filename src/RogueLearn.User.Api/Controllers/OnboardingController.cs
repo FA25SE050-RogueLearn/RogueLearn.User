@@ -5,7 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.Onboarding.Commands.CompleteOnboarding;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
+// MODIFICATION: Commented out the using statement for a missing query to resolve compilation error.
+// using RogueLearn.User.Application.Features.Onboarding.Queries.GetOnboardingVersionsByProgram;
 using BuildingBlocks.Shared.Authentication;
+using Microsoft.AspNetCore.Http; // MODIFICATION: Added to resolve the 'StatusCodes' compilation error.
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -34,6 +37,23 @@ public class OnboardingController : ControllerBase
         return Ok(result);
     }
 
+    // MODIFICATION: This endpoint is commented out because its corresponding query and DTO
+    // ('GetOnboardingVersionsByProgramQuery' and 'OnboardingVersionDto') do not exist,
+    // causing a compilation error. This functionality may need to be reimplemented
+    // based on the new, simplified data model where versions are part of the 'subjects' table.
+    //
+    // /// <summary>
+    // /// Gets all active curriculum versions for a specific program, for onboarding selection.
+    // /// </summary>
+    // [HttpGet("routes/{programId:guid}/versions")]
+    // [ProducesResponseType(typeof(List<OnboardingVersionDto>), StatusCodes.Status200OK)]
+    // [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    // public async Task<IActionResult> GetVersionsForProgram(Guid programId, CancellationToken cancellationToken)
+    // {
+    //     var query = new GetOnboardingVersionsByProgramQuery { ProgramId = programId };
+    //     var result = await _mediator.Send(query, cancellationToken);
+    //     return Ok(result);
+    // }
 
     /// <summary>
     /// Gets all available career specialization classes for user selection.
