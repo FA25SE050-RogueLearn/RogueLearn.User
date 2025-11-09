@@ -70,6 +70,23 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new BadRequestException("Quest Steps already created.");
         }
         
+        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
+        if (userProfile == null)
+        {
+            throw new NotFoundException("User Profile not found.");
+        }
+
+        if (!userProfile.ClassId.HasValue)
+        {
+            throw new BadRequestException("Please choose a Class first");
+        }
+
+        var userClass = await _classRepository.GetByIdAsync(userProfile.ClassId.Value, cancellationToken);
+        if (userClass is null)
+        {
+            throw new BadRequestException("Class not found");
+        }
+        
 
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
             ?? throw new NotFoundException("Quest", request.QuestId);
@@ -96,22 +113,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         }
         var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => relevantSkillIds.Contains(s.Id)).ToList();
 
-        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
-        if (userProfile == null)
-        {
-            throw new NotFoundException("User Profile not found.");
-        }
-
-        if (!userProfile.ClassId.HasValue)
-        {
-            throw new BadRequestException("Please choose a Class first");
-        }
-
-        var userClass = await _classRepository.GetByIdAsync(userProfile.ClassId.Value, cancellationToken);
-        if (userClass is null)
-        {
-            throw new BadRequestException("Class not found");
-        }
 
         // Generate user context using the prompt builder (includes GPAs, subject status, class info, etc.)
         var userContext = await _promptBuilder.GenerateAsync(userProfile, userClass, cancellationToken);

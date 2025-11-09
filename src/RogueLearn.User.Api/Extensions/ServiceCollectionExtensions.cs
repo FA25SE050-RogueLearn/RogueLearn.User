@@ -7,6 +7,7 @@ using RogueLearn.User.Application.Features.UserProfiles.Commands.LogNewUser;
 using RogueLearn.User.Application.Mappings;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Services;
 using System.Reflection;
 using RogueLearn.User.Infrastructure.Services;
 
@@ -55,6 +56,10 @@ public static class ServiceCollectionExtensions
         // ADDED: Register the new plugin for quest step generation.
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
         services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
+
+        // Register prompt builders
+        services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
+        services.AddScoped<QuestStepsPromptBuilder>();
 
         return services;
     }
