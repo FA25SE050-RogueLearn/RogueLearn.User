@@ -1,6 +1,7 @@
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.Security.Cryptography;
@@ -24,9 +25,16 @@ public class UpsertParticipantsCommandHandler : IRequestHandler<UpsertParticipan
         var results = new List<MeetingParticipantDto>();
         foreach (var dto in request.Participants)
         {
+            // Ensure we have at least one identifier: either UserId or DisplayName
+            if (dto.UserId is null && string.IsNullOrWhiteSpace(dto.DisplayName))
+            {
+                throw new UnprocessableEntityException("Each meeting participant must have either a userId or a displayName.");
+            }
+
             if (dto.ParticipantId == Guid.Empty)
             {
-                dto.ParticipantId = CreateDeterministicGuid(request.MeetingId.ToString(), dto.UserId.ToString(), dto.RoleInMeeting);
+                var identityComponent = dto.UserId?.ToString() ?? dto.DisplayName?.Trim() ?? string.Empty;
+                dto.ParticipantId = CreateDeterministicGuid(request.MeetingId.ToString(), identityComponent, dto.RoleInMeeting);
             }
             dto.MeetingId = request.MeetingId;
             var entity = _mapper.Map<MeetingParticipant>(dto);
