@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
@@ -96,20 +97,15 @@ try
     app.UseSwagger(c =>
     {
         c.RouteTemplate = "swagger/{documentName}/swagger.json";
-        // Support reverse proxy path base
-        c.PreSerializeFilters.Add((swagger, httpReq) =>
-        {
-            swagger.Servers = new List<Microsoft.OpenApi.Models.OpenApiServer>
-            {
-                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/user-service" },
-                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/" }
-            };
-        });
+
+        // MODIFICATION: The PreSerializeFilters block has been removed entirely
+        // to prevent the '/user-service' prefix from being added to the server URLs
+        // in the generated swagger.json file.
     });
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/user-service/swagger/v1/swagger.json", "RogueLearn.User API V1");
-        c.RoutePrefix = "swagger";
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
+        c.RoutePrefix = string.Empty;
     });
 
     app.UseCors("AllowAll");
