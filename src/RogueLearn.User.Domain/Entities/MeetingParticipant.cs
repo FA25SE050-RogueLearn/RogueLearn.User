@@ -13,7 +13,10 @@ public class MeetingParticipant : BaseModel
     public Guid MeetingId { get; set; }
 
     [Column("user_id")]
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
+
+    [Column("display_name")]
+    public string? DisplayName { get; set; }
 
     [Column("join_time")]
     public DateTimeOffset? JoinTime { get; set; }
