@@ -35,6 +35,13 @@ public class Quest : BaseEntity
 
     [Column("experience_points_reward")]
     public int ExperiencePointsReward { get; set; } = 0;
+    
+    [Column("sequence")]
+    public int Sequence { get; set; } = 0;
+    
+    [Column("status")]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
 
     // MODIFICATION: Removed the obsolete SkillTags array. Skill association is now
     // correctly handled by the skill_id on the quest_steps table.

@@ -11,17 +11,21 @@ public class GetAcademicStatusQueryHandler : IRequestHandler<GetAcademicStatusQu
     private readonly IStudentEnrollmentRepository _enrollmentRepository;
     private readonly IStudentSemesterSubjectRepository _semesterSubjectRepository;
     private readonly ISubjectRepository _subjectRepository;
+    private readonly IClassRepository _classRepository;
     private readonly ILogger<GetAcademicStatusQueryHandler> _logger;
 
     public GetAcademicStatusQueryHandler(
         IStudentEnrollmentRepository enrollmentRepository,
         IStudentSemesterSubjectRepository semesterSubjectRepository,
         ISubjectRepository subjectRepository,
+        IClassRepository classRepository,
         ILogger<GetAcademicStatusQueryHandler> logger)
     {
         _enrollmentRepository = enrollmentRepository;
         _semesterSubjectRepository = semesterSubjectRepository;
         _subjectRepository = subjectRepository;
+        _classRepository = classRepository;
+
         _logger = logger;
     }
 
@@ -50,10 +54,10 @@ public class GetAcademicStatusQueryHandler : IRequestHandler<GetAcademicStatusQu
         };
 
         // Calculate GPA and subject counts
-        var completedSubjects = semesterSubjects.Where(ss => ss.Status == SubjectEnrollmentStatus.Completed).ToList();
+        var completedSubjects = semesterSubjects.Where(ss => ss.Status == SubjectEnrollmentStatus.Passed).ToList();
         response.CompletedSubjects = completedSubjects.Count;
-        response.InProgressSubjects = semesterSubjects.Count(ss => ss.Status == SubjectEnrollmentStatus.Enrolled);
-        response.FailedSubjects = semesterSubjects.Count(ss => ss.Status == SubjectEnrollmentStatus.Failed);
+        response.InProgressSubjects = semesterSubjects.Count(ss => ss.Status == SubjectEnrollmentStatus.Studying);
+        response.FailedSubjects = semesterSubjects.Count(ss => ss.Status == SubjectEnrollmentStatus.NotPassed);
 
         if (completedSubjects.Any())
         {

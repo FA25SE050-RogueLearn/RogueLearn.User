@@ -58,7 +58,7 @@ Generate a JSON array of 5 to 8 quest step objects. You MUST adhere to the follo
 - If `stepType` is **'Quiz'**:
   `""content"": {{ ""skillId"": ""guid"", ""questions"": [{{ ""question"": ""string"", ""options"": [""string""], ""correctAnswer"": ""string"", ""explanation"": ""string"" }}] }}`
 
-- If `stepType` is **'Coding'**: (This is a descriptive challenge, not an executable one)
+- If `stepType` is **'Coding'**: (You will choose the suitable code problems provided from the given context)
   `""content"": {{ ""skillId"": ""guid"", ""challenge"": ""string"", ""template"": ""string (starter code)"", ""expectedOutput"": ""string"" }}`
 
 - If `stepType` is **'Submission'**:

@@ -6,9 +6,12 @@ using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using DotNetEnv;
 using BuildingBlocks.Shared.Authentication;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.SemanticKernel;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
+using RogueLearn.User.Application.Services;
 
 // Load environment variables from .env file
 Env.Load();
@@ -40,7 +43,20 @@ try
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
+    
+    var supabaseConnStr =  builder.Configuration["Supabase:ConnStr"];
+    builder.Services.AddHangfire(configuration => configuration
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(supabaseConnStr, new PostgreSqlStorageOptions()
+        {
+            SchemaName = "hangfire"
+        }));
+    
+    builder.Services.AddScoped<IQuestStepGenerationService, QuestStepGenerationService>(); 
 
+    builder.Services.AddHangfireServer();
     // --- SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
     builder.Services.AddScoped(sp =>
     {
@@ -106,6 +122,11 @@ try
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
         c.RoutePrefix = string.Empty;
+    });
+    
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        // Optional: Add authentication to prevent public access
     });
 
     app.UseCors("AllowAll");

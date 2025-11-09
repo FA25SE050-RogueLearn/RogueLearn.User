@@ -18,13 +18,10 @@ public class StudentSemesterSubject : BaseEntity
 
     [Column("academic_year")]
     public string AcademicYear { get; set; } = string.Empty;
-
-    [Column("learned_at_semester")]
-    public int LearnedAtSemester { get; set; }
-
+    
     [Column("status")]
     [JsonConverter(typeof(StringEnumConverter))]
-    public SubjectEnrollmentStatus Status { get; set; } = SubjectEnrollmentStatus.Enrolled;
+    public SubjectEnrollmentStatus Status { get; set; } = SubjectEnrollmentStatus.NotStarted;
 
     [Column("grade")]
     public string? Grade { get; set; }

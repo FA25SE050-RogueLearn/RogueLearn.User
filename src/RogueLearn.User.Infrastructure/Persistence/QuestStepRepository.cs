@@ -17,10 +17,8 @@ public class QuestStepRepository : GenericRepository<QuestStep>, IQuestStepRepos
     {
     }
 
-    // MODIFICATION START: Implemented the new specialized method.
-    // This uses a direct .Filter call which is more reliable for Supabase queries
-    // than the generic LINQ expression-based FindAsync.
-    public async Task<IEnumerable<QuestStep>> FindByQuestIdAsync(Guid questId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<QuestStep>> FindByQuestIdAsync(Guid questId,
+        CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
             .From<QuestStep>()
@@ -29,5 +27,14 @@ public class QuestStepRepository : GenericRepository<QuestStep>, IQuestStepRepos
 
         return response.Models;
     }
-    // MODIFICATION END
+
+    public async Task<bool> QuestContainsSteps(Guid questId, CancellationToken cancellationToken = default)
+    {
+        var steps = await _supabaseClient
+            .From<QuestStep>()
+            .Filter("quest_id", Operator.Equals, questId)
+            .Count(CountType.Exact);
+
+        return steps > 0;
+    }
 }

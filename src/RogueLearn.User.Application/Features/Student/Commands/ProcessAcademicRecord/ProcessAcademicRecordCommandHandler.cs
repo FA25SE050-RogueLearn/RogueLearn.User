@@ -129,7 +129,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
             var existingRecord = existingSemesterSubjects.FirstOrDefault(ss =>
                 ss.SubjectId == subject.Id &&
-                ss.LearnedAtSemester == subjectRecord.Semester &&
                 ss.AcademicYear == subjectRecord.AcademicYear);
 
             var parsedStatus = MapFapStatusToEnum(subjectRecord.Status);
@@ -141,10 +140,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     AuthUserId = request.AuthUserId,
                     SubjectId = subject.Id,
                     AcademicYear = subjectRecord.AcademicYear,
-                    LearnedAtSemester = subjectRecord.Semester,
                     Status = parsedStatus,
                     Grade = subjectRecord.Mark?.ToString("F1"),
-                    CreditsEarned = parsedStatus == SubjectEnrollmentStatus.Completed ? subject.Credits : 0
+                    CreditsEarned = parsedStatus == SubjectEnrollmentStatus.Passed ? subject.Credits : 0
                 };
                 await _semesterSubjectRepository.AddAsync(newSemesterSubject, cancellationToken);
                 recordsAdded++;
@@ -153,7 +151,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             {
                 existingRecord.Status = parsedStatus;
                 existingRecord.Grade = subjectRecord.Mark?.ToString("F1");
-                existingRecord.CreditsEarned = parsedStatus == SubjectEnrollmentStatus.Completed ? subject.Credits : 0;
+                existingRecord.CreditsEarned = parsedStatus == SubjectEnrollmentStatus.Passed ? subject.Credits : 0;
                 await _semesterSubjectRepository.UpdateAsync(existingRecord, cancellationToken);
                 recordsUpdated++;
             }
@@ -176,10 +174,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     {
         return status.ToLowerInvariant() switch
         {
-            "passed" => SubjectEnrollmentStatus.Completed,
-            "failed" => SubjectEnrollmentStatus.Failed,
-            "studying" => SubjectEnrollmentStatus.Enrolled,
-            _ => SubjectEnrollmentStatus.Enrolled
+            "Passed" => SubjectEnrollmentStatus.Passed,
+            "Studying" => SubjectEnrollmentStatus.Studying,
+            "Not started" => SubjectEnrollmentStatus.NotStarted,
+            "Not passed" => SubjectEnrollmentStatus.NotPassed,
+            _ => SubjectEnrollmentStatus.NotStarted
         };
     }
 }

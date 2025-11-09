@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Plugins;
+using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
@@ -33,6 +34,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly ISkillRepository _skillRepository;
     // MODIFICATION: Added the mapping repository to fetch the pre-approved skills for a subject.
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
+    private readonly IPromptBuilder _promptBuilder;
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
@@ -44,7 +46,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         IUserProfileRepository userProfileRepository,
         IClassRepository classRepository,
         ISkillRepository skillRepository,
-        ISubjectSkillMappingRepository subjectSkillMappingRepository) // MODIFICATION: Injected repository.
+        ISubjectSkillMappingRepository subjectSkillMappingRepository,
+        IPromptBuilder promptBuilder)
     {
         _questRepository = questRepository;
         _questStepRepository = questStepRepository;
@@ -55,18 +58,18 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _userProfileRepository = userProfileRepository;
         _classRepository = classRepository;
         _skillRepository = skillRepository;
-        _subjectSkillMappingRepository = subjectSkillMappingRepository; // MODIFICATION: Assigned repository.
+        _subjectSkillMappingRepository = subjectSkillMappingRepository;
+        _promptBuilder = promptBuilder;
     }
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        var existingSteps = await _questStepRepository.FindByQuestIdAsync(request.QuestId, cancellationToken);
-
-        if (existingSteps.Any())
+        var questHasSteps = await _questStepRepository.QuestContainsSteps(request.QuestId, cancellationToken);
+        if (questHasSteps)
         {
-            _logger.LogInformation("Quest steps already exist for Quest {QuestId}. Returning existing steps.", request.QuestId);
-            return _mapper.Map<List<GeneratedQuestStepDto>>(existingSteps.OrderBy(s => s.StepNumber));
+            throw new BadRequestException("Quest Steps already created.");
         }
+        
 
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
             ?? throw new NotFoundException("Quest", request.QuestId);
@@ -84,8 +87,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new BadRequestException("No syllabus content available for this quest's subject.");
         }
 
-        // MODIFICATION: This is the implementation of the "Foundation" stage.
-        // We fetch the admin-curated skill mappings for the current subject.
         var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
         var relevantSkillIds = skillMappings.Select(m => m.SkillId).ToHashSet();
         if (!relevantSkillIds.Any())
@@ -96,13 +97,24 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => relevantSkillIds.Contains(s.Id)).ToList();
 
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
-        var userCareerClass = "General Learner";
-        if (userProfile?.ClassId != null)
+        if (userProfile == null)
         {
-            var careerClass = await _classRepository.GetByIdAsync(userProfile.ClassId.Value, cancellationToken);
-            userCareerClass = careerClass?.Name ?? userCareerClass;
+            throw new NotFoundException("User Profile not found.");
         }
-        string userContext = $"The user's career goal is '{userCareerClass}'. Tailor the content to be relevant for this role.";
+
+        if (!userProfile.ClassId.HasValue)
+        {
+            throw new BadRequestException("Please choose a Class first");
+        }
+
+        var userClass = await _classRepository.GetByIdAsync(userProfile.ClassId.Value, cancellationToken);
+        if (userClass is null)
+        {
+            throw new BadRequestException("Class not found");
+        }
+
+        // Generate user context using the prompt builder (includes GPAs, subject status, class info, etc.)
+        var userContext = await _promptBuilder.GenerateAsync(userProfile, userClass, cancellationToken);
 
         var syllabusJson = JsonSerializer.Serialize(subject.Content);
 
