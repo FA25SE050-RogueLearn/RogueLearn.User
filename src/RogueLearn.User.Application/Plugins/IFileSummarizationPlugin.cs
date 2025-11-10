@@ -7,5 +7,7 @@ namespace RogueLearn.User.Application.Plugins;
 /// </summary>
 public interface IFileSummarizationPlugin
 {
-    Task<string> SummarizeAsync(AiFileAttachment attachment, CancellationToken cancellationToken = default);
+    // Returns a structured BlockNote document (typically a top-level array of blocks)
+    // that can be serialized as JSONB. Null indicates summarization failed.
+    Task<object?> SummarizeAsync(AiFileAttachment attachment, CancellationToken cancellationToken = default);
 }

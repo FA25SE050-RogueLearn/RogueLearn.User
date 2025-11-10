@@ -108,7 +108,9 @@ try
     });
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/user-service/swagger/v1/swagger.json", "RogueLearn.User API V1");
+        // Use a relative endpoint so it works whether or not a reverse proxy path base is present
+        // With RouteTemplate = "swagger/{documentName}/swagger.json" this resolves to /swagger/v1/swagger.json
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
         c.RoutePrefix = "swagger";
     });
 

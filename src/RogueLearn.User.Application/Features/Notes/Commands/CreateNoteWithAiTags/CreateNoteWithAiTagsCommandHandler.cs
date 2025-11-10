@@ -7,6 +7,7 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Plugins;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Notes.Commands.CreateNoteWithAiTags;
 
@@ -50,8 +51,7 @@ public class CreateNoteWithAiTagsCommandHandler : IRequestHandler<CreateNoteWith
     /// <exception cref="ValidationException">Thrown when input content is missing or cannot be extracted.</exception>
     public async Task<CreateNoteWithAiTagsResponse> Handle(CreateNoteWithAiTagsCommand request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Handling CreateNoteWithAiTagsCommand for AuthUserId={AuthUserId}, TitleProvided={HasTitle}, ApplySuggestions={ApplySuggestions}, MaxTags={MaxTags}",
-            request.AuthUserId, !string.IsNullOrWhiteSpace(request.Title), request.ApplySuggestions, request.MaxTags);
+        _logger.LogInformation("Handling CreateNoteWithAiTagsCommand for AuthUserId={AuthUserId}", request.AuthUserId);
 
         // Validate presence of content
         var hasRaw = !string.IsNullOrWhiteSpace(request.RawText);
@@ -62,13 +62,13 @@ public class CreateNoteWithAiTagsCommandHandler : IRequestHandler<CreateNoteWith
             throw new ValidationException("Either raw text or a file upload must be provided.");
         }
 
-        // Resolve note content via AI summary. If AI fails to summarize, DO NOT create the note.
-        string noteContent;
+        // Resolve note content via AI summary as structured BlockNote document.
+        object? contentObject;
         if (hasRaw)
         {
             var raw = request.RawText!.Trim();
-            noteContent = await _summarizationPlugin.SummarizeTextAsync(raw, cancellationToken);
-            if (string.IsNullOrWhiteSpace(noteContent))
+            contentObject = await _summarizationPlugin.SummarizeTextAsync(raw, cancellationToken);
+            if (contentObject is null)
             {
                 _logger.LogWarning("AI summarization returned empty content for raw text. Aborting note creation.");
                 throw new ValidationException("AI summarization failed. The note was not created.");
@@ -83,8 +83,9 @@ public class CreateNoteWithAiTagsCommandHandler : IRequestHandler<CreateNoteWith
                 ContentType = request.ContentType ?? "application/octet-stream",
                 FileName = request.FileName ?? string.Empty
             };
-            noteContent = await _fileSummarizationPlugin.SummarizeAsync(attachment, cancellationToken);
-            if (string.IsNullOrWhiteSpace(noteContent))
+            contentObject = await _fileSummarizationPlugin.SummarizeAsync(attachment, cancellationToken);
+            _logger.LogInformation("AI summarization completed for uploaded file. FileName={FileName}, ContentType={ContentType}, ContentObject={ContentObject}", request.FileName, request.ContentType, contentObject);
+            if (contentObject is null)
             {
                 _logger.LogWarning("AI summarization returned empty content for uploaded file. Aborting note creation. FileName={FileName}, ContentType={ContentType}", request.FileName, request.ContentType);
                 throw new ValidationException("AI summarization failed. The note was not created.");
@@ -95,31 +96,26 @@ public class CreateNoteWithAiTagsCommandHandler : IRequestHandler<CreateNoteWith
         var title = (request.Title ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(title))
         {
-            if (!string.IsNullOrWhiteSpace(request.FileName))
-            {
-                title = Path.GetFileNameWithoutExtension(request.FileName);
-            }
-            else
-            {
-                // Use first non-empty line of the final content as a fallback title
-                title = noteContent.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? "New Note";
-                if (title.Length > 120)
-                    title = title[..120];
-            }
+            title = !string.IsNullOrWhiteSpace(request.FileName)
+                ? Path.GetFileNameWithoutExtension(request.FileName)
+                : "New Note";
         }
+
+        // Build Content: prefer parsed BlockNote JSON; fallback to plain-text BlockNote when parsing fails
+        var parsedContent = contentObject;
 
         // Create the note
         var note = new Note
         {
             AuthUserId = request.AuthUserId,
             Title = title,
-            Content = noteContent,
+            Content = parsedContent,
             IsPublic = request.IsPublic,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
         var created = await _noteRepository.AddAsync(note, cancellationToken);
-        _logger.LogInformation("Created note: NoteId={NoteId}, Title={Title}, IsPublic={IsPublic}", created.Id, created.Title, created.IsPublic);
+        _logger.LogInformation("Created note: Id={NoteId}, Title={Title}", created.Id, created.Title);
 
         // Generate AI tag suggestions (file-first for uploads)
         IReadOnlyList<TagSuggestionDto> suggestions;

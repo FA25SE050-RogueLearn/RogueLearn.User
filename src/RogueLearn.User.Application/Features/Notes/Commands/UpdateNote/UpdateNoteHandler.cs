@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Interfaces;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 
@@ -56,7 +57,13 @@ public class UpdateNoteHandler : IRequestHandler<UpdateNoteCommand, UpdateNoteRe
     }
 
     note.Title = request.Title;
-    note.Content = request.Content;
+    // Normalize incoming content to BlockNote's top-level array (List<object>)
+    var normalizedContent = ConvertToBlockNoteArray(request.Content);
+    _logger.LogInformation(
+      "[UpdateNote] Outgoing Content type: {Type}; Preview: {Preview}",
+      normalizedContent?.GetType().Name ?? "null",
+      normalizedContent is null ? "<null>" : JsonSerializer.Serialize(normalizedContent));
+    note.Content = normalizedContent;
     note.IsPublic = request.IsPublic;
     note.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -111,5 +118,75 @@ public class UpdateNoteHandler : IRequestHandler<UpdateNoteCommand, UpdateNoteRe
     _logger.LogInformation("Completed note update. NoteId={NoteId}", updated.Id);
 
     return _mapper.Map<UpdateNoteResponse>(updated);
+  }
+
+  private static List<object>? ConvertToBlockNoteArray(object? content)
+  {
+    if (content is null)
+      return null;
+
+    if (content is List<object> lo)
+      return lo;
+
+    if (content is JsonElement je)
+    {
+      var converted = ConvertJsonElement(je);
+      return converted as List<object> ?? (converted is null ? null : new List<object> { converted });
+    }
+
+    if (content is string s)
+    {
+      if (string.IsNullOrWhiteSpace(s))
+        return null;
+      try
+      {
+        var element = JsonSerializer.Deserialize<JsonElement>(s, (JsonSerializerOptions?)null);
+        var converted = ConvertJsonElement(element);
+        return converted as List<object> ?? (converted is null ? null : new List<object> { converted });
+      }
+      catch
+      {
+        // Treat as plain text; wrap into BlockNote paragraph structure minimal array
+        return new List<object>
+        {
+          new Dictionary<string, object?>
+          {
+            { "type", "paragraph" },
+            { "content", new List<object>
+              {
+                new Dictionary<string, object?>
+                {
+                  { "type", "text" },
+                  { "text", s }
+                }
+              }
+            }
+          }
+        };
+      }
+    }
+
+    // For dictionaries or other objects, wrap into an array to satisfy BlockNote's top-level structure
+    return new List<object> { content };
+  }
+
+  private static object? ConvertJsonElement(JsonElement element)
+  {
+    return element.ValueKind switch
+    {
+      JsonValueKind.Object => element.EnumerateObject()
+        .ToDictionary(p => p.Name, p => ConvertJsonElement(p.Value)),
+      JsonValueKind.Array => element.EnumerateArray()
+        .Select(ConvertJsonElement)
+        .ToList(),
+      JsonValueKind.String => element.GetString(),
+      JsonValueKind.Number => element.TryGetInt32(out var intValue)
+        ? (object)intValue
+        : element.GetDouble(),
+      JsonValueKind.True => true,
+      JsonValueKind.False => false,
+      JsonValueKind.Null => null,
+      _ => element.ToString()
+    };
   }
 }

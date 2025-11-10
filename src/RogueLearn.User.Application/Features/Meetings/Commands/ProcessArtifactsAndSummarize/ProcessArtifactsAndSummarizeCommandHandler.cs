@@ -35,9 +35,10 @@ public class ProcessArtifactsAndSummarizeCommandHandler : IRequestHandler<Proces
                 ContentType = "text/plain",
                 FileName = "artifacts.txt"
             };
-            var summaryJson = await _fileSummarizationPlugin.SummarizeAsync(attachment, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(summaryJson))
+            var summaryObj = await _fileSummarizationPlugin.SummarizeAsync(attachment, cancellationToken);
+            if (summaryObj is not null)
             {
+                var summaryJson = System.Text.Json.JsonSerializer.Serialize(summaryObj);
                 var existing = await _summaryRepo.GetByMeetingAsync(request.MeetingId, cancellationToken);
                 if (existing != null)
                 {

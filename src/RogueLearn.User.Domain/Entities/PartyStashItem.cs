@@ -19,7 +19,7 @@ public class PartyStashItem : BaseEntity
     public string Title { get; set; } = string.Empty;
 
     [Column("content")]
-    public Dictionary<string, object> Content { get; set; } = new();
+    public object Content { get; set; } = new();
 
     [Column("tags")]
     public string[]? Tags { get; set; }

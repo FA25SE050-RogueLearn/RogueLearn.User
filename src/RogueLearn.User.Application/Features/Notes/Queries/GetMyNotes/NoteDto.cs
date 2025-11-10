@@ -5,7 +5,7 @@ public class NoteDto
   public Guid Id { get; set; }
   public Guid AuthUserId { get; set; }
   public string Title { get; set; } = string.Empty;
-  public string? Content { get; set; }
+  public object? Content { get; set; }
   public bool IsPublic { get; set; }
   public DateTimeOffset CreatedAt { get; set; }
   public DateTimeOffset UpdatedAt { get; set; }
