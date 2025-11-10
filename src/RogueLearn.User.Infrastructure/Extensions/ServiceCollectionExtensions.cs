@@ -84,6 +84,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
+
+        // instance of `ClassSpecializationSubjectRepository` when `IClassSpecializationSubjectRepository` is requested.
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
         services.AddScoped<IStudentSemesterSubjectRepository, StudentSemesterSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();

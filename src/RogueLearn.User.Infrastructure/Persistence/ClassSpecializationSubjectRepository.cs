@@ -13,26 +13,35 @@ public class ClassSpecializationSubjectRepository : GenericRepository<ClassSpeci
     {
     }
 
+    /// <summary>
+    /// This method performs the crucial lookup for specialized subjects.
+    /// </summary>
     public async Task<IEnumerable<Subject>> GetSubjectByClassIdAsync(Guid classId, CancellationToken cancellationToken)
     {
-        // Get all subject IDs for this class
+        // STEP 1: Query the `class_specialization_subjects` join table to find all `subject_id`s
+        // that are linked to the provided `classId`.
         var classSubjects = await _supabaseClient
           .From<ClassSpecializationSubject>()
-          // FIX: The Guid must be converted to a string for the Supabase client's Filter method.
           .Filter("class_id", Constants.Operator.Equals, classId.ToString())
           .Get(cancellationToken);
 
         if (!classSubjects.Models.Any())
+        {
+            // If there are no specialized subjects for this class, return an empty list.
             return new List<Subject>();
+        }
 
+        // STEP 2: Extract the list of unique subject IDs from the results of the first query.
         var subjectIds = classSubjects.Models.Select(cs => cs.SubjectId).ToList();
 
-        // Fetch the actual subjects
+        // STEP 3: Query the main `subjects` table to fetch the full details for only those
+        // subject IDs that were found in the previous step.
         var subjects = await _supabaseClient
           .From<Subject>()
           .Filter("id", Constants.Operator.In, subjectIds)
           .Get(cancellationToken);
 
+        // STEP 4: Return the complete list of specialized Subject entities.
         return subjects.Models;
     }
 }

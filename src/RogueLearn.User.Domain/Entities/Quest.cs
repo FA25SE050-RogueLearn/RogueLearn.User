@@ -10,11 +10,8 @@ namespace RogueLearn.User.Domain.Entities;
 [Table("quests")]
 public class Quest : BaseEntity
 {
-    // MODIFICATION: Added QuestChapterId as a direct foreign key.
-    // This establishes the new, simpler LearningPath -> QuestChapter -> Quest hierarchy
-    // and makes the learning_path_quests join table obsolete.
     [Column("quest_chapter_id")]
-    public Guid QuestChapterId { get; set; }
+    public Guid? QuestChapterId { get; set; }
 
     [Column("title")]
     public string Title { get; set; } = string.Empty;
@@ -35,18 +32,13 @@ public class Quest : BaseEntity
 
     [Column("experience_points_reward")]
     public int ExperiencePointsReward { get; set; } = 0;
-    
+
     [Column("sequence")]
-    public int Sequence { get; set; } = 0;
-    
-    [Column("status")]
+    public int? Sequence { get; set; } // CHANGED: Made nullable
+
+    [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
     public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
-
-    // MODIFICATION: Removed the obsolete SkillTags array. Skill association is now
-    // correctly handled by the skill_id on the quest_steps table.
-    // [Column("skill_tags")]
-    // public string[]? SkillTags { get; set; }
 
     [Column("subject_id")]
     public Guid? SubjectId { get; set; }
