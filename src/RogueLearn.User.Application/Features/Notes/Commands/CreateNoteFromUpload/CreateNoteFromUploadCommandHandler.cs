@@ -1,10 +1,14 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Notes/Commands/CreateNoteFromUpload/CreateNoteFromUploadCommandHandler.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Features/Notes/Commands/CreateNoteFromUpload/CreateNoteFromUploadCommandHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNote;
+using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Notes.Commands.CreateNoteFromUpload;
 
@@ -12,38 +16,64 @@ public class CreateNoteFromUploadCommandHandler : IRequestHandler<CreateNoteFrom
 {
     private readonly INoteRepository _noteRepository;
     private readonly IMapper _mapper;
+    private readonly IFileSummarizationPlugin _fileSummarizationPlugin;
+    private readonly ILogger<CreateNoteFromUploadCommandHandler> _logger;
 
-    public CreateNoteFromUploadCommandHandler(INoteRepository noteRepository, IMapper mapper)
+    public CreateNoteFromUploadCommandHandler(INoteRepository noteRepository, IMapper mapper, IFileSummarizationPlugin fileSummarizationPlugin, ILogger<CreateNoteFromUploadCommandHandler> logger)
     {
         _noteRepository = noteRepository;
         _mapper = mapper;
+        _fileSummarizationPlugin = fileSummarizationPlugin;
+        _logger = logger;
     }
 
     public async Task<CreateNoteResponse> Handle(CreateNoteFromUploadCommand request, CancellationToken cancellationToken)
     {
-        // In a real application, you would use a library like iTextSharp (for PDF)
-        // or Open-XML-SDK (for DOCX) to extract text here.
-        // For this example, we'll simulate text extraction.
-        string extractedContent;
-        using (var reader = new StreamReader(request.FileStream))
+        // Prefer AI summarization to produce a structured BlockNote document object.
+        object? contentObject = null;
+        try
         {
-            extractedContent = await reader.ReadToEndAsync(cancellationToken);
+            var attachment = new AiFileAttachment
+            {
+                Stream = request.FileStream,
+                ContentType = request.ContentType,
+                FileName = request.FileName
+            };
+            contentObject = await _fileSummarizationPlugin.SummarizeAsync(attachment, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AI summarization failed during upload-and-create. Falling back to plain text conversion. FileName={FileName}", request.FileName);
         }
 
-        if (string.IsNullOrWhiteSpace(extractedContent))
+        if (contentObject is null)
         {
-            throw new BadRequestException("Could not extract any content from the provided file.");
+            // Fallback: read plaintext and convert to BlockNote
+            string extractedContent;
+            if (request.FileStream.CanSeek)
+            {
+                try { request.FileStream.Position = 0; } catch { /* ignore */ }
+            }
+            using var reader = new StreamReader(request.FileStream);
+            extractedContent = await reader.ReadToEndAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(extractedContent))
+                throw new BadRequestException("Could not extract any content from the provided file.");
+
+            contentObject = BlockNoteDocumentFactory.FromPlainText(extractedContent);
         }
 
         var note = new Note
         {
             AuthUserId = request.AuthUserId,
             Title = Path.GetFileNameWithoutExtension(request.FileName),
-            Content = extractedContent, // Storing extracted text directly
+            // Store structured BlockNote document as JSONB
+            Content = contentObject,
             IsPublic = false // User-uploaded content is private by default
         };
 
+        // Reduced logging for insert diagnostics
         var createdNote = await _noteRepository.AddAsync(note, cancellationToken);
+        _logger.LogInformation("Created note from upload. Id={NoteId}, Title={Title}", createdNote.Id, createdNote.Title);
 
         return _mapper.Map<CreateNoteResponse>(createdNote);
     }

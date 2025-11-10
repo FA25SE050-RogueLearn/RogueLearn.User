@@ -99,9 +99,12 @@ public class MappingProfile : Profile
         // CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
 
         // Note mappings
-        CreateMap<Note, NoteDto>();
-        CreateMap<Note, CreateNoteResponse>();
-        CreateMap<Note, UpdateNoteResponse>();
+        CreateMap<Note, NoteDto>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
+        CreateMap<Note, CreateNoteResponse>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
+        CreateMap<Note, UpdateNoteResponse>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
 
         // Skill Catalog mapping
         //CreateMap<Skill, SkillDto>();
@@ -147,19 +150,43 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.ExperiencePoints, opt => opt.Ignore())
             .ForMember(dest => dest.Bio, opt => opt.Ignore());
         CreateMap<PartyInvitation, PartyInvitationDto>();
-        CreateMap<PartyStashItem, PartyStashItemDto>();
+        CreateMap<PartyStashItem, PartyStashItemDto>()
+            .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
 
         // Meetings mappings
         CreateMap<Meeting, MeetingDto>().ReverseMap();
         CreateMap<MeetingParticipant, MeetingParticipantDto>().ReverseMap();
     }
-    private static object? ParseJsonContent(string? content)
+    private static object? ParseJsonContent(object? content)
     {
-        if (string.IsNullOrWhiteSpace(content))
+        if (content is null)
             return null;
 
-        var element = JsonSerializer.Deserialize<JsonElement>(content, (JsonSerializerOptions?)null);
-        return ConvertJsonElement(element);
+        // If content is a string, attempt to parse JSON; otherwise return as-is or normalize JsonElement
+        if (content is string s)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+                return null;
+
+            try
+            {
+                var jsonElement = JsonSerializer.Deserialize<JsonElement>(s, (JsonSerializerOptions?)null);
+                return ConvertJsonElement(jsonElement);
+            }
+            catch
+            {
+                // If the content is not valid JSON, return it as a plain string
+                return s;
+            }
+        }
+
+        if (content is JsonElement element)
+        {
+            return ConvertJsonElement(element);
+        }
+
+        // For already structured content (e.g., dictionaries/lists), return as-is
+        return content;
     }
 
     private static object? ConvertJsonElement(JsonElement element)

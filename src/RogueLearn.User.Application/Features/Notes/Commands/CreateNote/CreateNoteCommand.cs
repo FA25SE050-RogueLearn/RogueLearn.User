@@ -6,7 +6,7 @@ public class CreateNoteCommand : IRequest<CreateNoteResponse>
 {
   public Guid AuthUserId { get; set; }
   public string Title { get; set; } = string.Empty;
-  public string? Content { get; set; }
+  public object? Content { get; set; }
   public bool IsPublic { get; set; } = false;
 
   // Optional relationship assignments on create

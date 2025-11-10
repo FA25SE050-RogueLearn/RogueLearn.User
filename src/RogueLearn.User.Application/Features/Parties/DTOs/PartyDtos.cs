@@ -32,7 +32,7 @@ public record PartyInvitationDto(
     DateTimeOffset? RespondedAt,
     DateTimeOffset ExpiresAt
 );
-public record PartyStashItemDto(Guid Id, Guid PartyId, Guid OriginalNoteId, Guid SharedByUserId, string Title, IReadOnlyDictionary<string, object> Content, IReadOnlyList<string>? Tags, DateTimeOffset SharedAt, DateTimeOffset UpdatedAt);
+public record PartyStashItemDto(Guid Id, Guid PartyId, Guid OriginalNoteId, Guid SharedByUserId, string Title, object? Content, IReadOnlyList<string>? Tags, DateTimeOffset SharedAt, DateTimeOffset UpdatedAt);
 public record InviteMemberRequest(IReadOnlyList<InviteTarget> Targets, string? Message, DateTimeOffset? ExpiresAt);
-public record AddPartyResourceRequest(string Title, IReadOnlyDictionary<string, object> Content, IReadOnlyList<string> Tags);
-public record UpdatePartyResourceRequest(string Title, IReadOnlyDictionary<string, object> Content, IReadOnlyList<string> Tags);
+public record AddPartyResourceRequest(Guid OriginalNoteId, string Title, object Content, IReadOnlyList<string> Tags);
+public record UpdatePartyResourceRequest(string Title, object Content, IReadOnlyList<string> Tags);

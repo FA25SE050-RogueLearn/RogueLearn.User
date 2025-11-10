@@ -6,6 +6,7 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Features.Parties.DTOs;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.AddPartyResource;
 
@@ -33,8 +34,9 @@ public class AddPartyResourceCommandHandlerTests
         var cmd = new AddPartyResourceCommand(
             PartyId: Guid.NewGuid(),
             SharedByUserId: Guid.NewGuid(),
+            OriginalNoteId: Guid.NewGuid(),
             Title: "Doc",
-            Content: new Dictionary<string, object> { { "type", "document" }, { "url", "https://example.com" } },
+            Content: "{\"type\":\"document\",\"url\":\"https://example.com\"}",
             Tags: new List<string> { "study" }
         );
 
@@ -42,10 +44,11 @@ public class AddPartyResourceCommandHandlerTests
         {
             Id = Guid.NewGuid(),
             PartyId = cmd.PartyId,
-            OriginalNoteId = Guid.NewGuid(),
+            OriginalNoteId = cmd.OriginalNoteId,
             SharedByUserId = cmd.SharedByUserId,
             Title = cmd.Title,
-            Content = new Dictionary<string, object>(cmd.Content),
+            // Content is stored as a JSON string in the entity
+            Content = JsonSerializer.Serialize(cmd.Content, (JsonSerializerOptions?)null),
             Tags = cmd.Tags.ToArray(),
             SharedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

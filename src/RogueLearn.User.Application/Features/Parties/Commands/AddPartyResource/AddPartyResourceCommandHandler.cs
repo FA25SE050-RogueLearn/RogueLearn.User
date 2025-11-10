@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Features.Parties.DTOs;
@@ -28,9 +29,11 @@ public class AddPartyResourceCommandHandler : IRequestHandler<AddPartyResourceCo
         var stashItem = new PartyStashItem
         {
             PartyId = request.PartyId,
+            OriginalNoteId = request.OriginalNoteId,
             SharedByUserId = request.SharedByUserId,
             Title = request.Title,
-            Content = new Dictionary<string, object>(request.Content),
+            // Accept JSON data from frontend as-is; repository/DB will handle JSONB serialization
+            Content = request.Content,
             Tags = request.Tags.ToArray(),
             SharedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

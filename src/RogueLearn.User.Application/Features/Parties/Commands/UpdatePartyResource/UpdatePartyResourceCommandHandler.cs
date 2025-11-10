@@ -1,6 +1,5 @@
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
-using RogueLearn.User.Application.Features.Parties.DTOs;
 using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.UpdatePartyResource;
@@ -25,7 +24,8 @@ public class UpdatePartyResourceCommandHandler : IRequestHandler<UpdatePartyReso
         }
 
         item.Title = request.Request.Title;
-        item.Content = new Dictionary<string, object>(request.Request.Content);
+        // Accept JSON data from frontend as-is; repository/DB will handle JSONB serialization
+        item.Content = request.Request.Content;
         item.Tags = request.Request.Tags?.ToArray();
         item.UpdatedAt = DateTimeOffset.UtcNow;
 

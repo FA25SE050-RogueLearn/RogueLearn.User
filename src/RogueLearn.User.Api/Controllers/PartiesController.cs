@@ -279,7 +279,7 @@ public class PartiesController : ControllerBase
     public async Task<ActionResult<PartyStashItemDto>> AddResource(Guid partyId, [FromBody] AddPartyResourceRequest body, CancellationToken cancellationToken)
     {
         var userId = User.GetAuthUserId();
-        var cmd = new AddPartyResourceCommand(partyId, userId, body.Title, body.Content, body.Tags);
+        var cmd = new AddPartyResourceCommand(partyId, userId, body.OriginalNoteId, body.Title, body.Content, body.Tags);
         var result = await _mediator.Send(cmd, cancellationToken);
         return Ok(result);
     }
@@ -293,7 +293,7 @@ public class PartiesController : ControllerBase
     public async Task<ActionResult<PartyStashItemDto>> AdminAddResource(Guid partyId, [FromBody] AddPartyResourceRequest body, CancellationToken cancellationToken)
     {
         var userId = User.GetAuthUserId();
-        var cmd = new AddPartyResourceCommand(partyId, userId, body.Title, body.Content, body.Tags);
+        var cmd = new AddPartyResourceCommand(partyId, userId, body.OriginalNoteId, body.Title, body.Content, body.Tags);
         var result = await _mediator.Send(cmd, cancellationToken);
         return Ok(result);
     }

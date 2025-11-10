@@ -7,7 +7,7 @@ public class UpdateNoteCommand : IRequest<UpdateNoteResponse>
   public Guid Id { get; set; }
   public Guid AuthUserId { get; set; }
   public string Title { get; set; } = string.Empty;
-  public string? Content { get; set; }
+  public object? Content { get; set; }
   public bool IsPublic { get; set; } = false;
 
   // Optional full relationship set to apply on update

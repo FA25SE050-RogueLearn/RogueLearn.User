@@ -13,9 +13,9 @@ public class Note : BaseEntity
     [Column("title")]
     public string Title { get; set; } = string.Empty;
 
-    // Stored as JSONB in database; represented as string in the entity for simplicity
+    // Stored as JSONB in database; BlockNote uses a top-level array of blocks, so model as a list for reliable serialization
     [Column("content")]
-    public string? Content { get; set; }
+    public object? Content { get; set; }
 
     [Column("is_public")]
     public bool IsPublic { get; set; } = false;

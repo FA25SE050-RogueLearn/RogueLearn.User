@@ -6,7 +6,8 @@ namespace RogueLearn.User.Application.Features.Parties.Commands.AddPartyResource
 public record AddPartyResourceCommand(
     Guid PartyId,
     Guid SharedByUserId,
+    Guid OriginalNoteId,
     string Title,
-    IReadOnlyDictionary<string, object> Content,
+    object Content,
     IReadOnlyList<string> Tags
 ) : IRequest<PartyStashItemDto>;
