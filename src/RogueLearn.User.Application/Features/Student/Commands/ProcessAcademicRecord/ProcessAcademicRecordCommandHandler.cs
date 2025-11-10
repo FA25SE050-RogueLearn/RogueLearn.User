@@ -7,9 +7,11 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
+// These DTOs are defined here as they are specific to the FAP extraction process.
 public class FapRecordData
 {
     public double? Gpa { get; set; }
@@ -31,8 +33,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly IStudentEnrollmentRepository _enrollmentRepository;
     private readonly IStudentSemesterSubjectRepository _semesterSubjectRepository;
     private readonly ISubjectRepository _subjectRepository;
-    private readonly ICurriculumProgramRepository _programRepository; // ADDED
-    private readonly ICurriculumProgramSubjectRepository _programSubjectRepository; // ADDED
+    private readonly ICurriculumProgramRepository _programRepository;
+    private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
+    private readonly IClassSpecializationSubjectRepository _classSubjectRepository;
+    private readonly IUserProfileRepository _userProfileRepository;
+    private readonly IHtmlCleaningService _htmlCleaningService;
     private readonly ILogger<ProcessAcademicRecordCommandHandler> _logger;
 
     public ProcessAcademicRecordCommandHandler(
@@ -40,8 +45,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         IStudentEnrollmentRepository enrollmentRepository,
         IStudentSemesterSubjectRepository semesterSubjectRepository,
         ISubjectRepository subjectRepository,
-        ICurriculumProgramRepository programRepository, // ADDED
-        ICurriculumProgramSubjectRepository programSubjectRepository, // ADDED
+        ICurriculumProgramRepository programRepository,
+        ICurriculumProgramSubjectRepository programSubjectRepository,
+        IClassSpecializationSubjectRepository classSubjectRepository,
+        IUserProfileRepository userProfileRepository,
+        IHtmlCleaningService htmlCleaningService,
         ILogger<ProcessAcademicRecordCommandHandler> logger)
     {
         _fapPlugin = fapPlugin;
@@ -50,6 +58,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _subjectRepository = subjectRepository;
         _programRepository = programRepository;
         _programSubjectRepository = programSubjectRepository;
+        _classSubjectRepository = classSubjectRepository;
+        _userProfileRepository = userProfileRepository;
+        _htmlCleaningService = htmlCleaningService;
         _logger = logger;
     }
 
@@ -57,25 +68,37 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     {
         _logger.LogInformation("[START] Processing academic record for user {AuthUserId}", request.AuthUserId);
 
-        // STEP 1: Validate the Program ID exists.
+        // STEP 1: Fetch User Profile to get their chosen Class and enforce onboarding completion.
+        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
+            ?? throw new NotFoundException(nameof(UserProfile), request.AuthUserId);
+
+        if (!userProfile.ClassId.HasValue)
+        {
+            throw new BadRequestException("User has not selected a specialization class. Onboarding may be incomplete.");
+        }
+
         if (!await _programRepository.ExistsAsync(request.CurriculumProgramId, cancellationToken))
         {
-            _logger.LogWarning("Invalid CurriculumProgramId: {ProgramId}", request.CurriculumProgramId);
+            _logger.LogWarning("Invalid CurriculumProgramId provided: {ProgramId}", request.CurriculumProgramId);
             throw new NotFoundException(nameof(CurriculumProgram), request.CurriculumProgramId);
         }
 
-        // STEP 2: Extract data from HTML using the AI plugin.
-        var extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(request.FapHtmlContent, cancellationToken);
+        // STEP 2: Build the definitive "Allowed Subject" list to enforce the "One-Way Path" rule.
+        var allowedSubjectIds = await BuildAllowedSubjectList(request.CurriculumProgramId, userProfile.ClassId.Value, cancellationToken);
+
+        // STEP 3: Clean HTML and extract data using the AI plugin.
+        var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
+        var extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanText, cancellationToken);
         var fapData = JsonSerializer.Deserialize<FapRecordData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
         if (fapData == null)
         {
-            _logger.LogError("Failed to deserialize the extracted academic JSON.");
+            _logger.LogError("Failed to deserialize the extracted academic JSON from FAP content.");
             throw new BadRequestException("Failed to deserialize the extracted academic data.");
         }
         _logger.LogInformation("Successfully deserialized {SubjectCount} subjects from transcript.", fapData.Subjects.Count);
 
-        // STEP 3: Create or get the simplified enrollment record.
+        // STEP 4: Create or get the simplified student enrollment record.
         var enrollment = await _enrollmentRepository.FirstOrDefaultAsync(e => e.AuthUserId == request.AuthUserId, cancellationToken);
         if (enrollment == null)
         {
@@ -89,13 +112,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             await _enrollmentRepository.AddAsync(enrollment, cancellationToken);
         }
 
-        // STEP 4: Determine the "latest active version" string by looking at the subjects within the program.
-        var programSubjectIds = (await _programSubjectRepository.FindAsync(ps => ps.ProgramId == request.CurriculumProgramId, cancellationToken))
-            .Select(ps => ps.SubjectId).ToList();
-
-        var allProgramSubjects = (await _subjectRepository.GetAllAsync(cancellationToken))
-            .Where(s => programSubjectIds.Contains(s.Id)).ToList();
-
+        // STEP 5: Determine the latest active subject version for the user's program.
+        var allProgramSubjects = await _subjectRepository.GetSubjectsByRoute(request.CurriculumProgramId, cancellationToken);
         var latestVersionCode = allProgramSubjects
             .OrderByDescending(s => s.Version)
             .FirstOrDefault()?.Version;
@@ -107,23 +125,32 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         }
         _logger.LogInformation("Determined latest active version code for program is '{VersionCode}'", latestVersionCode);
 
-        // STEP 5: Sync subjects into the student's "gradebook".
         var subjectsForVersion = allProgramSubjects
             .Where(s => s.Version == latestVersionCode)
             .ToDictionary(s => s.SubjectCode);
 
+        // STEP 6: Synchronize subjects into the student's "gradebook" (`student_semester_subjects`).
         var existingSemesterSubjects = (await _semesterSubjectRepository.FindAsync(
             ss => ss.AuthUserId == request.AuthUserId, cancellationToken)
             ).ToList();
 
         int recordsAdded = 0;
         int recordsUpdated = 0;
+        int recordsIgnored = 0;
 
         foreach (var subjectRecord in fapData.Subjects)
         {
             if (!subjectsForVersion.TryGetValue(subjectRecord.SubjectCode, out var subject))
             {
-                _logger.LogWarning("Subject {SubjectCode} with version {Version} not found for this program. Skipping.", subjectRecord.SubjectCode, latestVersionCode);
+                _logger.LogWarning("Subject {SubjectCode} with version {Version} not found in this program's catalog. Skipping.", subjectRecord.SubjectCode, latestVersionCode);
+                continue;
+            }
+
+            // ENFORCEMENT of the "One-Way Path" rule.
+            if (!allowedSubjectIds.Contains(subject.Id))
+            {
+                _logger.LogWarning("Ignoring subject {SubjectCode} from transcript because it does not belong to the user's chosen program or specialization class.", subject.SubjectCode);
+                recordsIgnored++;
                 continue;
             }
 
@@ -158,8 +185,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         }
 
         _logger.LogInformation(
-            "[END] Academic record processed. Records Added: {Added}, Records Updated: {Updated}",
-            recordsAdded, recordsUpdated);
+            "[END] Academic record processed. Records Added: {Added}, Records Updated: {Updated}, Records Ignored: {Ignored}",
+            recordsAdded, recordsUpdated, recordsIgnored);
 
         return new ProcessAcademicRecordResponse
         {
@@ -170,15 +197,33 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         };
     }
 
+    private async Task<HashSet<Guid>> BuildAllowedSubjectList(Guid programId, Guid classId, CancellationToken cancellationToken)
+    {
+        // Get all generic subjects for the curriculum program
+        var programSubjects = await _programSubjectRepository.FindAsync(ps => ps.ProgramId == programId, cancellationToken);
+        var allowedSet = new HashSet<Guid>(programSubjects.Select(ps => ps.SubjectId));
+
+        // Get all specialized subjects for the chosen class
+        var classSubjects = await _classSubjectRepository.GetSubjectByClassIdAsync(classId, cancellationToken);
+        foreach (var subject in classSubjects)
+        {
+            allowedSet.Add(subject.Id);
+        }
+
+        _logger.LogInformation("Built allowed subject list for Program {ProgramId} and Class {ClassId}. Total allowed subjects: {Count}", programId, classId, allowedSet.Count);
+        return allowedSet;
+    }
+
     private SubjectEnrollmentStatus MapFapStatusToEnum(string status)
     {
-        return status.ToLowerInvariant() switch
+        // This mapping is crucial for correctly interpreting the transcript data.
+        return status.Trim().ToLowerInvariant() switch
         {
-            "Passed" => SubjectEnrollmentStatus.Passed,
-            "Studying" => SubjectEnrollmentStatus.Studying,
-            "Not started" => SubjectEnrollmentStatus.NotStarted,
-            "Not passed" => SubjectEnrollmentStatus.NotPassed,
-            _ => SubjectEnrollmentStatus.NotStarted
+            "passed" => SubjectEnrollmentStatus.Passed,
+            "studying" => SubjectEnrollmentStatus.Studying,
+            "not started" => SubjectEnrollmentStatus.NotStarted,
+            "not passed" => SubjectEnrollmentStatus.NotPassed,
+            _ => SubjectEnrollmentStatus.NotStarted // A safe default
         };
     }
 }

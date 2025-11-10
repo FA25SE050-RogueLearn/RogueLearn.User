@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Queries/ValidateSyllabus/ValidateSyllabusQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
@@ -17,13 +18,15 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
     private readonly ICurriculumImportStorage _storage;
     private readonly FluentValidation.IValidator<SyllabusData> _validator;
     private readonly ILogger<ValidateSyllabusQueryHandler> _logger;
-    private readonly IFlmExtractionPlugin _flmPlugin;
+    // MODIFIED: Dependency changed from the obsolete IFlmExtractionPlugin to the new, specific plugin.
+    private readonly ISyllabusExtractionPlugin _flmPlugin;
 
     public ValidateSyllabusQueryHandler(
         ICurriculumImportStorage storage,
         FluentValidation.IValidator<SyllabusData> validator,
         ILogger<ValidateSyllabusQueryHandler> logger,
-        IFlmExtractionPlugin flmPlugin)
+        // MODIFIED: Constructor now requires the correct interface.
+        ISyllabusExtractionPlugin flmPlugin)
     {
         _storage = storage;
         _validator = validator;
@@ -40,7 +43,7 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
             // Step 1: Check cache first
             var inputHash = ComputeSha256Hash(request.RawText);
             var cachedData = await TryGetCachedDataAsync(inputHash, cancellationToken);
-            
+
             string extractedJson;
             if (!string.IsNullOrEmpty(cachedData))
             {
@@ -50,7 +53,7 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
             else
             {
                 // Step 2: Extract structured data using AI
-                extractedJson = ExtractSyllabusData(request.RawText);
+                extractedJson = await ExtractSyllabusData(request.RawText, cancellationToken);
                 if (string.IsNullOrEmpty(extractedJson))
                 {
                     return new ValidateSyllabusResponse
@@ -94,7 +97,7 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
 
             // Step 4: Validate extracted data first
             var validationResult = await _validator.ValidateAsync(syllabusData, cancellationToken);
-            
+
             var response = new ValidateSyllabusResponse
             {
                 IsValid = validationResult.IsValid,
@@ -131,22 +134,15 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
         }
     }
 
-    private string ExtractSyllabusData(string rawText)
+    private async Task<string> ExtractSyllabusData(string rawText, CancellationToken cancellationToken)
     {
         // Guard: if no input, signal extraction failure by returning empty string
         if (string.IsNullOrWhiteSpace(rawText))
         {
             return string.Empty;
         }
-        // Use direct HTML parsing instead of AI
-        var syllabusData = ParseSyllabusFromHtml(rawText);
-
-        // Convert to JSON and back to ensure consistency with existing flow
-        var json = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-        return json;
+        // MODIFIED: This now calls the specific syllabus plugin.
+        return await _flmPlugin.ExtractSyllabusJsonAsync(rawText, cancellationToken);
     }
 
     private async Task<string?> TryGetCachedDataAsync(string inputHash, CancellationToken cancellationToken)
@@ -170,7 +166,7 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
             {
                 // Use subject code and version for organized storage
                 await _storage.SaveSyllabusDataAsync(syllabusData.SubjectCode, syllabusData.VersionNumber, syllabusData, extractedData, inputHash, cancellationToken);
-                _logger.LogInformation("Saved syllabus data for subject: {SubjectCode} version: {Version}", 
+                _logger.LogInformation("Saved syllabus data for subject: {SubjectCode} version: {Version}",
                     syllabusData.SubjectCode, syllabusData.VersionNumber);
             }
             else
@@ -457,7 +453,7 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
     {
         var materials = new List<SyllabusMaterial>();
         var tables = htmlDoc.DocumentNode.SelectNodes("//table");
-        
+
         if (tables != null)
         {
             foreach (var table in tables)
@@ -480,11 +476,11 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
     private List<SyllabusWeek> ParseWeeklyScheduleFromHtml(HtmlDocument htmlDoc)
     {
         var schedule = new List<SyllabusWeek>();
-        
+
         // Look for schedule table (id="gvSchedule" or similar patterns)
-        var scheduleTable = htmlDoc.DocumentNode.SelectSingleNode("//table[@id='gvSchedule']") 
-                           ?? htmlDoc.DocumentNode.SelectNodes("//table")?.FirstOrDefault(t => 
-                               t.InnerText.ToLowerInvariant().Contains("session") && 
+        var scheduleTable = htmlDoc.DocumentNode.SelectSingleNode("//table[@id='gvSchedule']")
+                           ?? htmlDoc.DocumentNode.SelectNodes("//table")?.FirstOrDefault(t =>
+                               t.InnerText.ToLowerInvariant().Contains("session") &&
                                t.InnerText.ToLowerInvariant().Contains("topic"));
 
         if (scheduleTable != null)
@@ -510,11 +506,11 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
     private List<AssessmentItem> ParseAssessmentsFromHtml(HtmlDocument htmlDoc)
     {
         var assessments = new List<AssessmentItem>();
-        
+
         // Look for assessment table (id="gvAssessment" or similar patterns)
-        var assessmentTable = htmlDoc.DocumentNode.SelectSingleNode("//table[@id='gvAssessment']") 
-                             ?? htmlDoc.DocumentNode.SelectNodes("//table")?.FirstOrDefault(t => 
-                                 t.InnerText.ToLowerInvariant().Contains("assessment") || 
+        var assessmentTable = htmlDoc.DocumentNode.SelectSingleNode("//table[@id='gvAssessment']")
+                             ?? htmlDoc.DocumentNode.SelectNodes("//table")?.FirstOrDefault(t =>
+                                 t.InnerText.ToLowerInvariant().Contains("assessment") ||
                                  t.InnerText.ToLowerInvariant().Contains("weight"));
 
         if (assessmentTable != null)
@@ -611,11 +607,11 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
             var cells = rows[i].SelectNodes(".//td");
             if (cells == null) continue;
 
-            var description = descriptionIndex >= 0 && descriptionIndex < cells.Count ? 
+            var description = descriptionIndex >= 0 && descriptionIndex < cells.Count ?
                 NormalizeWhitespace(cells[descriptionIndex].InnerText) : "Material";
-            var author = authorIndex >= 0 && authorIndex < cells.Count ? 
+            var author = authorIndex >= 0 && authorIndex < cells.Count ?
                 NormalizeWhitespace(cells[authorIndex].InnerText) : "Unknown Author";
-            var publisher = publisherIndex >= 0 && publisherIndex < cells.Count ? 
+            var publisher = publisherIndex >= 0 && publisherIndex < cells.Count ?
                 NormalizeWhitespace(cells[publisherIndex].InnerText) : "Unknown Publisher";
 
             if (!string.IsNullOrEmpty(description))
@@ -655,13 +651,13 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
             var cells = rows[i].SelectNodes(".//td");
             if (cells == null) continue;
 
-            var sessionText = sessionIndex >= 0 && sessionIndex < cells.Count ? 
+            var sessionText = sessionIndex >= 0 && sessionIndex < cells.Count ?
                 NormalizeWhitespace(cells[sessionIndex].InnerText) : (i).ToString();
-            var topic = topicIndex >= 0 && topicIndex < cells.Count ? 
+            var topic = topicIndex >= 0 && topicIndex < cells.Count ?
                 NormalizeWhitespace(cells[topicIndex].InnerText) : "Topic";
-            var learningObjectives = loIndex >= 0 && loIndex < cells.Count ? 
+            var learningObjectives = loIndex >= 0 && loIndex < cells.Count ?
                 NormalizeWhitespace(cells[loIndex].InnerText) : "Learning objectives";
-            var activities = activitiesIndex >= 0 && activitiesIndex < cells.Count ? 
+            var activities = activitiesIndex >= 0 && activitiesIndex < cells.Count ?
                 NormalizeWhitespace(cells[activitiesIndex].InnerText) : "Activities";
 
             int.TryParse(sessionText, out var week);
@@ -705,11 +701,11 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
             var cells = rows[i].SelectNodes(".//td");
             if (cells == null) continue;
 
-            var type = typeIndex >= 0 && typeIndex < cells.Count ? 
+            var type = typeIndex >= 0 && typeIndex < cells.Count ?
                 NormalizeWhitespace(cells[typeIndex].InnerText) : "Assessment";
-            var weightText = weightIndex >= 0 && weightIndex < cells.Count ? 
+            var weightText = weightIndex >= 0 && weightIndex < cells.Count ?
                 NormalizeWhitespace(cells[weightIndex].InnerText) : "0";
-            var description = descriptionIndex >= 0 && descriptionIndex < cells.Count ? 
+            var description = descriptionIndex >= 0 && descriptionIndex < cells.Count ?
                 NormalizeWhitespace(cells[descriptionIndex].InnerText) : "Assessment description";
 
             // Parse weight (remove % if present)
@@ -786,7 +782,7 @@ public class ValidateSyllabusQueryHandler : IRequestHandler<ValidateSyllabusQuer
                 var parts = line.Split(':', 2);
                 if (parts.Length == 2) return parts[1].Trim();
             }
-            
+
             // Look for subject code patterns (letters followed by numbers)
             var match = System.Text.RegularExpressions.Regex.Match(line, @"\b([A-Z]{2,4}\d{2,4})\b");
             if (match.Success) return match.Groups[1].Value;

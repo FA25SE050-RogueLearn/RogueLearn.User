@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Queries/ValidateCurriculum/ValidateCurriculumQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
@@ -15,13 +16,15 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
     private readonly ICurriculumImportStorage _storage;
     private readonly CurriculumImportDataValidator _validator;
     private readonly ILogger<ValidateCurriculumQueryHandler> _logger;
-    private readonly IFlmExtractionPlugin _flmPlugin;
+    // MODIFIED: Dependency changed from the obsolete IFlmExtractionPlugin to the new, specific plugin.
+    private readonly ICurriculumExtractionPlugin _flmPlugin;
 
     public ValidateCurriculumQueryHandler(
         ICurriculumImportStorage storage,
         CurriculumImportDataValidator validator,
         ILogger<ValidateCurriculumQueryHandler> logger,
-        IFlmExtractionPlugin flmPlugin)
+        // MODIFIED: Constructor now requires the correct interface.
+        ICurriculumExtractionPlugin flmPlugin)
     {
         _storage = storage;
         _validator = validator;
@@ -58,6 +61,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
             // Step 1: Extract structured data using AI only if cache miss
             if (string.IsNullOrWhiteSpace(extractedJson))
             {
+                // MODIFIED: Method call is updated to use the new specific plugin.
                 extractedJson = await ExtractCurriculumDataAsync(rawText);
             }
             if (string.IsNullOrEmpty(extractedJson))
@@ -202,7 +206,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
 
             // Step 3: Validate extracted data FIRST
             var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
-            
+
             var response = new ValidateCurriculumResponse
             {
                 IsValid = validationResult.IsValid,
@@ -227,7 +231,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                             rawTextContent: rawText,
                             rawTextHash: rawTextHash,
                             cancellationToken: cancellationToken);
-                        
+
                         _logger.LogInformation("Curriculum data saved to storage after successful validation");
                     }
                     else
@@ -239,7 +243,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
                 {
                     _logger.LogError(ex, "Failed to save curriculum data to storage after validation");
                 }
-                
+
                 response.Message = "Curriculum data is valid and ready for import";
             }
             else
@@ -263,6 +267,7 @@ public class ValidateCurriculumQueryHandler : IRequestHandler<ValidateCurriculum
 
     private async Task<string> ExtractCurriculumDataAsync(string rawText)
     {
+        // MODIFIED: This now calls the specific curriculum plugin.
         return await _flmPlugin.ExtractCurriculumJsonAsync(rawText);
     }
 

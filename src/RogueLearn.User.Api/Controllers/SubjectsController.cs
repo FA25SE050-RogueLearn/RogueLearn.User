@@ -8,7 +8,6 @@ using RogueLearn.User.Application.Features.Subjects.Commands.DeleteSubject;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetSubjectById;
 using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
-// MODIFICATION: Added using directives for the new subject-skill mapping features.
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Queries.GetSubjectSkillMappings;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.AddSubjectSkillMapping;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.RemoveSubjectSkillMapping;
@@ -29,8 +28,9 @@ public class SubjectsController : ControllerBase
 
     /// <summary>
     /// Imports a single subject from raw text, creating or updating it in the master catalog.
+    /// This is the primary endpoint for populating syllabus content.
     /// </summary>
-    [HttpPost("import-from-text")] // NEW ENDPOINT
+    [HttpPost("import-from-text")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -44,7 +44,7 @@ public class SubjectsController : ControllerBase
 
         var command = new ImportSubjectFromTextCommand { RawText = rawText };
         var result = await _mediator.Send(command, cancellationToken);
-        // Return 200 OK because it's an "upsert" operation which could be a create or update.
+        // Returns 200 OK because it's an "upsert" (create or update).
         return Ok(result);
     }
 
@@ -105,9 +105,6 @@ public class SubjectsController : ControllerBase
         await _mediator.Send(command);
         return NoContent();
     }
-
-    // MODIFICATION: Added new endpoints for managing subject-skill mappings.
-    // These endpoints allow administrators to implement the "Foundation" stage of the skill system.
 
     /// <summary>
     /// Gets all skill mappings for a specific subject.

@@ -39,8 +39,9 @@ public static class ServiceCollectionExtensions
         var googleSearchEngineId = configuration["GoogleSearch:SearchEngineId"] ?? throw new InvalidOperationException("GoogleSearch:SearchEngineId is not configured.");
         services.AddSingleton<IWebSearchService>(
                 new GoogleWebSearchService(googleSearchApiKey, googleSearchEngineId));
-        // Register FLM SK plugin
-        services.AddScoped<IFlmExtractionPlugin, FlmExtractionPlugin>();
+        // Register extraction plugins with new, separated responsibilities.
+        services.AddScoped<ICurriculumExtractionPlugin, CurriculumExtractionPlugin>();
+        services.AddScoped<ISyllabusExtractionPlugin, SyllabusExtractionPlugin>();
         // Register Roadmap SK plugin
         services.AddScoped<IRoadmapExtractionPlugin, RoadmapExtractionPlugin>();
         // Register Tagging SK plugin

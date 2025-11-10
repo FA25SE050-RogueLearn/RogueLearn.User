@@ -23,7 +23,8 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
         private readonly ICurriculumImportStorage _storage;
         private readonly CurriculumImportDataValidator _validator;
         private readonly ILogger<ImportCurriculumCommandHandler> _logger;
-        private readonly IFlmExtractionPlugin _flmPlugin;
+        // MODIFIED: Dependency changed to the specific curriculum plugin.
+        private readonly ICurriculumExtractionPlugin _curriculumPlugin;
         private readonly IHtmlCleaningService _htmlCleaningService;
 
         public ImportCurriculumCommandHandler(
@@ -33,7 +34,8 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             ICurriculumImportStorage storage,
             CurriculumImportDataValidator validator,
             ILogger<ImportCurriculumCommandHandler> logger,
-            IFlmExtractionPlugin flmPlugin,
+            // MODIFIED: Dependency changed to the specific curriculum plugin.
+            ICurriculumExtractionPlugin curriculumPlugin,
             IHtmlCleaningService htmlCleaningService)
         {
             _curriculumProgramRepository = curriculumProgramRepository;
@@ -42,7 +44,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             _storage = storage;
             _validator = validator;
             _logger = logger;
-            _flmPlugin = flmPlugin;
+            _curriculumPlugin = curriculumPlugin;
             _htmlCleaningService = htmlCleaningService;
         }
 
@@ -57,7 +59,8 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 throw new Exceptions.BadRequestException("Failed to extract meaningful text from the provided HTML.");
             }
 
-            var extractedJson = await _flmPlugin.ExtractCurriculumJsonAsync(cleanText, cancellationToken);
+            // MODIFIED: Method call updated to use the new specific plugin.
+            var extractedJson = await _curriculumPlugin.ExtractCurriculumJsonAsync(cleanText, cancellationToken);
             if (string.IsNullOrEmpty(extractedJson))
             {
                 _logger.LogError("AI plugin failed to extract curriculum JSON from the cleaned text.");
@@ -124,6 +127,8 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                     Description = subjectData.Description,
                     Version = curriculumData.Version.VersionCode,
                     Semester = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode)?.TermNumber ?? 0,
+                    // MODIFIED: Content is explicitly set to null. It will be populated by the syllabus import workflow.
+                    Content = null
                 };
                 subjectEntities.Add(subject);
             }

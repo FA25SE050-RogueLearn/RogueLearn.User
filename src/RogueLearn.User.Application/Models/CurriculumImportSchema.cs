@@ -152,9 +152,9 @@ public class SyllabusData
 public class SyllabusContent
 {
     public string? CourseDescription { get; set; }
+    public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
     public List<SyllabusWeek>? WeeklySchedule { get; set; }
     public List<AssessmentItem>? Assessments { get; set; }
-    public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
     public List<string>? RequiredTexts { get; set; }
     public List<string>? RecommendedTexts { get; set; }
     public string? GradingPolicy { get; set; }
@@ -164,19 +164,26 @@ public class SyllabusContent
 public class SyllabusWeek
 {
     public int WeekNumber { get; set; }
-    public string? Topic { get; set; }
-    public List<string>? Activities { get; set; }
-    public List<string>? Readings { get; set; }
-    public List<ConstructiveQuestion>? ConstructiveQuestions { get; set; }
+    public string Topic { get; set; } = string.Empty;
+    public List<string> Activities { get; set; } = new(); // e.g., ["Lecture", "Group Discussion", "Lab Work"]
+    public List<string> Readings { get; set; } = new();
+    public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
+
+    // NEW: This is the critical link for skill mapping.
+    // The AI that extracts the syllabus will also suggest which skills from the master list
+    // are relevant to this specific week's topic.
+    public List<string> MappedSkills { get; set; } = new();
 }
 
 public class AssessmentItem
 {
-    public string? Name { get; set; }
-    public string? Type { get; set; }
+    public string Type { get; set; } = string.Empty; // e.g., "Assignment", "Final Exam"
+    public string Name { get; set; } = string.Empty;
     public int? WeightPercentage { get; set; }
     public string? Description { get; set; }
 }
+
+
 
 public class SyllabusMaterial
 {

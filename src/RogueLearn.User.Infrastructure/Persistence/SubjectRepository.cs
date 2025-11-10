@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Persistence/SubjectRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -10,17 +11,18 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
 {
     public SubjectRepository(Client supabaseClient) : base(supabaseClient)
     {
-        
+
     }
 
     public async Task<IEnumerable<Subject>> GetSubjectsByRoute(Guid routeId, CancellationToken cancellationToken = default)
     {
-        var routeSubjects= await _supabaseClient
+        var routeSubjects = await _supabaseClient
             .From<CurriculumProgramSubject>()
-            .Filter("program_id", Constants.Operator.Equals, routeId)
+            // FIX: The Guid must be converted to a string for the Supabase client's Filter method.
+            .Filter("program_id", Constants.Operator.Equals, routeId.ToString())
             .Get(cancellationToken);
-        
-        
+
+
         if (!routeSubjects.Models.Any())
             return new List<Subject>();
 

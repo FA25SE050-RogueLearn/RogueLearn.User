@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordResponse.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordResponse.cs
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
 public class ProcessAcademicRecordResponse

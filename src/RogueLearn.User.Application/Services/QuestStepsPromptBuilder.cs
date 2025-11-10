@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
 using System.Text;
 using System.Text.Json;
 using RogueLearn.User.Domain.Entities;
@@ -20,14 +21,13 @@ public class QuestStepsPromptBuilder
     {
         var prompt = new StringBuilder();
 
-        // Header
+        // ... (Header, User Context, Skills, and Syllabus sections remain unchanged) ...
         prompt.AppendLine("# Quest Step Generation Task");
         prompt.AppendLine();
         prompt.AppendLine("You are an expert educational content designer creating gamified learning experiences.");
         prompt.AppendLine("Your task is to analyze syllabus content and generate engaging, progressive quest steps.");
         prompt.AppendLine();
 
-        // User Context Section
         prompt.AppendLine("---");
         prompt.AppendLine();
         prompt.AppendLine("## Student Context");
@@ -35,7 +35,6 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine(userContext);
         prompt.AppendLine();
 
-        // Skills Section
         prompt.AppendLine("---");
         prompt.AppendLine();
         prompt.AppendLine("## Pre-Approved Skills");
@@ -57,7 +56,6 @@ public class QuestStepsPromptBuilder
             }
             prompt.AppendLine();
 
-            // Also provide JSON format for easier parsing by LLM
             prompt.AppendLine("**Skills in JSON format:**");
             prompt.AppendLine("```json");
             var skillsJson = JsonSerializer.Serialize(
@@ -74,7 +72,6 @@ public class QuestStepsPromptBuilder
             prompt.AppendLine();
         }
 
-        // Syllabus Section
         prompt.AppendLine("---");
         prompt.AppendLine();
         prompt.AppendLine("## Syllabus Content");
@@ -86,7 +83,6 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("```");
         prompt.AppendLine();
 
-        // Instructions Section
         prompt.AppendLine("---");
         prompt.AppendLine();
         prompt.AppendLine("## Generation Instructions");
@@ -172,70 +168,28 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("```");
         prompt.AppendLine();
 
+        // MODIFICATION: The 'Coding' step's content schema is now the metadata payload.
         prompt.AppendLine("#### 4. Coding");
-        prompt.AppendLine("Used for: Programming exercises, algorithm implementation");
+        prompt.AppendLine("Used for: Generating a request for a practical programming problem.");
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"stepNumber\": 4,");
-        prompt.AppendLine("  \"title\": \"Implement the Solution\",");
-        prompt.AppendLine("  \"description\": \"Write code to solve the problem\",");
+        prompt.AppendLine("  \"title\": \"Coding Challenge: Dependency Injection\",");
+        prompt.AppendLine("  \"description\": \"Prepare to implement the solution\",");
         prompt.AppendLine("  \"stepType\": \"Coding\",");
         prompt.AppendLine("  \"experiencePoints\": 40,");
         prompt.AppendLine("  \"content\": {");
         prompt.AppendLine("    \"skillId\": \"<guid-from-approved-list>\",");
-        prompt.AppendLine("    \"challenge\": \"Problem description and requirements\",");
-        prompt.AppendLine("    \"template\": \"// Starter code\\nfunction solve() {\\n  // Your code here\\n}\",");
-        prompt.AppendLine("    \"expectedOutput\": \"Description or example of expected output\"");
+        prompt.AppendLine("    \"language\": \"CSharp\",");
+        prompt.AppendLine("    \"difficulty\": \"Intermediate\",");
+        prompt.AppendLine("    \"topic\": \"Dependency Injection in ASP.NET Core\"");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
         prompt.AppendLine();
 
-        /*
-        prompt.AppendLine("#### 5. Submission");
-        prompt.AppendLine("Used for: Projects, essays, creative work requiring review");
-        prompt.AppendLine("```json");
-        prompt.AppendLine("{");
-        prompt.AppendLine("  \"stepNumber\": 5,");
-        prompt.AppendLine("  \"title\": \"Submit Your Work\",");
-        prompt.AppendLine("  \"description\": \"Create and submit your project\",");
-        prompt.AppendLine("  \"stepType\": \"Submission\",");
-        prompt.AppendLine("  \"experiencePoints\": 50,");
-        prompt.AppendLine("  \"content\": {");
-        prompt.AppendLine("    \"skillId\": \"<guid-from-approved-list>\",");
-        prompt.AppendLine("    \"challenge\": \"Project requirements and guidelines\",");
-        prompt.AppendLine("    \"submissionFormat\": \"Description of required format (e.g., PDF, ZIP, GitHub link)\"");
-        prompt.AppendLine("  }");
-        prompt.AppendLine("}");
-        prompt.AppendLine("```");
-        prompt.AppendLine();
-        */
-
-        /*
-        prompt.AppendLine("#### 6. Reflection");
-        prompt.AppendLine("Used for: Metacognition, learning review, concept synthesis");
-        prompt.AppendLine("```json");
-        prompt.AppendLine("{");
-        prompt.AppendLine("  \"stepNumber\": 6,");
-        prompt.AppendLine("  \"title\": \"Reflect on Learning\",");
-        prompt.AppendLine("  \"description\": \"Think critically about what you've learned\",");
-        prompt.AppendLine("  \"stepType\": \"Reflection\",");
-        prompt.AppendLine("  \"experiencePoints\": 20,");
-        prompt.AppendLine("  \"content\": {");
-        prompt.AppendLine("    \"skillId\": \"<guid-from-approved-list>\",");
-        prompt.AppendLine("    \"challenge\": \"Reflection task description\",");
-        prompt.AppendLine("    \"reflectionPrompt\": \"Questions to guide reflection\",");
-        prompt.AppendLine("    \"expectedOutcome\": \"What insights should the student gain\"");
-        prompt.AppendLine("  }");
-        prompt.AppendLine("}");
-        prompt.AppendLine("```");
-        prompt.AppendLine();
-        */
-
-        // Critical Rules
         prompt.AppendLine("### Critical Rules");
         prompt.AppendLine();
-        // Remove Submission and Reflection for now
         prompt.AppendLine("- **MUST** use only skillIds from the Pre-Approved Skills list");
         prompt.AppendLine("- **MUST** use exact stepType values: `Reading`, `Interactive`, `Quiz`, `Coding`");
         prompt.AppendLine("- **MUST** include all required fields for each content schema");
@@ -246,22 +200,16 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- **NEVER** omit the skillId field from content objects");
         prompt.AppendLine();
 
-        // Best Practices
         prompt.AppendLine("### Best Practices");
         prompt.AppendLine();
         prompt.AppendLine("- Start with foundational Reading or Interactive steps");
         prompt.AppendLine("- Include Quiz steps after introducing new concepts");
         prompt.AppendLine("- Use Coding steps for practical application (when relevant)");
-        /*
-        prompt.AppendLine("- Reserve Submission steps for comprehensive projects");
-        prompt.AppendLine("- End with Reflection to consolidate learning");
-        */
         prompt.AppendLine("- Vary difficulty progressively (easy → medium → hard)");
         prompt.AppendLine("- Keep titles concise and engaging (3-6 words)");
         prompt.AppendLine("- Make descriptions clear and motivating (10-20 words)");
         prompt.AppendLine();
 
-        // Output Format
         prompt.AppendLine("---");
         prompt.AppendLine();
         prompt.AppendLine("## Output Format");
@@ -274,7 +222,6 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("    \"stepNumber\": 1,");
         prompt.AppendLine("    \"title\": \"...\",");
         prompt.AppendLine("    \"description\": \"...\",");
-        // remove submission and reflection type for now
         prompt.AppendLine("    \"stepType\": \"Reading|Interactive|Quiz|Coding\",");
         prompt.AppendLine("    \"experiencePoints\": 10-50,");
         prompt.AppendLine("    \"content\": { /* schema based on stepType */ }");

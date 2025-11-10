@@ -11,7 +11,5 @@ public class ProcessAcademicRecordCommand : IRequest<ProcessAcademicRecordRespon
 
     public string FapHtmlContent { get; set; } = string.Empty;
 
-    // MODIFIED: The command now accepts the program ID.
-    // The handler will be responsible for resolving the latest active version.
     public Guid CurriculumProgramId { get; set; }
 }
