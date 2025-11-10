@@ -44,70 +44,59 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
 
         var response = _mapper.Map<CurriculumProgramDetailsResponse>(program);
 
-        // Get all subject mappings for this program
         var programSubjectLinks = (await _programSubjectRepository.FindAsync(ps => ps.ProgramId == program.Id, cancellationToken)).ToList();
         var subjectIds = programSubjectLinks.Select(ps => ps.SubjectId).ToList();
 
         if (!subjectIds.Any())
         {
             _logger.LogInformation("No subjects found for program {ProgramId}", program.Id);
-            response.Analysis = AnalyzeCurriculumProgram(response); // Run analysis on empty set
+            response.Analysis = AnalyzeCurriculumProgram(response);
             return response;
         }
 
-        // Get all subject details for the linked subjects
-        var allSubjects = (await _subjectRepository.GetAllAsync(cancellationToken))
+        var allSubjectsInProgram = (await _subjectRepository.GetAllAsync(cancellationToken))
             .Where(s => subjectIds.Contains(s.Id))
             .ToList();
 
-        // Group subjects by version to create the "version" DTOs
-        var subjectsByVersion = allSubjects.GroupBy(s => s.Version).OrderByDescending(g => g.Key);
-
-        foreach (var versionGroup in subjectsByVersion)
+        var singleVersionDto = new CurriculumVersionDetailsDto
         {
-            var versionDto = new CurriculumVersionDetailsDto
+            Id = Guid.NewGuid(), // Synthetic ID for DTO compatibility
+            VersionCode = "Current",
+            IsActive = true,
+            CreatedAt = allSubjectsInProgram.Any() ? allSubjectsInProgram.Min(s => s.CreatedAt) : program.CreatedAt
+        };
+
+        foreach (var subject in allSubjectsInProgram.OrderBy(s => s.Semester).ThenBy(s => s.SubjectCode))
+        {
+            var subjectDto = new CurriculumSubjectDetailsDto
             {
-                // In the new model, the "version" is just a string identifier (e.g., "2022")
-                // We derive a synthetic ID and other fields for DTO compatibility.
-                Id = Guid.NewGuid(), // Synthetic ID
-                VersionCode = versionGroup.Key,
-                EffectiveYear = int.TryParse(versionGroup.Key, out var year) ? year : 0,
-                IsActive = true, // Assume all found versions are active for this view
-                CreatedAt = versionGroup.Min(s => s.CreatedAt)
+                SubjectId = subject.Id,
+                SubjectCode = subject.SubjectCode,
+                SubjectName = subject.SubjectName,
+                Credits = subject.Credits,
+                Description = subject.Description,
+                TermNumber = subject.Semester,
+                PrerequisiteSubjectIds = subject.PrerequisiteSubjectIds,
+                IsMandatory = true, // Defaulting as before
+                Analysis = AnalyzeSubject(subject)
             };
-
-            foreach (var subject in versionGroup.OrderBy(s => s.Semester).ThenBy(s => s.SubjectCode))
-            {
-                var subjectDto = new CurriculumSubjectDetailsDto
-                {
-                    SubjectId = subject.Id,
-                    SubjectCode = subject.SubjectCode,
-                    SubjectName = subject.SubjectName,
-                    Credits = subject.Credits,
-                    Description = subject.Description,
-                    TermNumber = subject.Semester,
-                    PrerequisiteSubjectIds = subject.PrerequisiteSubjectIds,
-                    // IsMandatory can be a future extension on the join table, default to true for now
-                    IsMandatory = true,
-                    Analysis = AnalyzeSubject(subject)
-                };
-                versionDto.Subjects.Add(subjectDto);
-            }
-
-            versionDto.Analysis = AnalyzeCurriculumVersion(versionDto);
-            response.CurriculumVersions.Add(versionDto);
+            singleVersionDto.Subjects.Add(subjectDto);
         }
 
+        singleVersionDto.Analysis = AnalyzeCurriculumVersion(singleVersionDto);
+        response.CurriculumVersions.Add(singleVersionDto);
+
         response.Analysis = AnalyzeCurriculumProgram(response);
-        _logger.LogInformation("Returning details for Program {ProgramId}: {VersionsCount} versions, {UniqueSubjectsCount} unique subjects.",
-            program.Id, response.CurriculumVersions.Count, allSubjects.Count);
+        _logger.LogInformation("Returning details for Program {ProgramId}: {SubjectsCount} subjects.",
+            program.Id, allSubjectsInProgram.Count);
 
         return response;
     }
 
-    // Analysis logic now works with the simplified entities
     private SubjectAnalysisDto AnalyzeSubject(Subject subject)
     {
+        // MODIFIED: The check for content is updated to correctly handle a Dictionary, not a string.
+        // It now checks if the dictionary is not null and has any elements.
         var hasContent = subject.Content != null && subject.Content.Any();
         return new SubjectAnalysisDto
         {
@@ -139,19 +128,18 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
     private CurriculumAnalysisDto AnalyzeCurriculumProgram(CurriculumProgramDetailsResponse program)
     {
         var allSubjects = program.CurriculumVersions.SelectMany(v => v.Subjects).ToList();
-        var uniqueSubjects = allSubjects.GroupBy(s => s.SubjectId).Select(g => g.First()).ToList();
 
         var analysis = new CurriculumAnalysisDto
         {
             TotalVersions = program.CurriculumVersions.Count,
-            TotalSubjects = uniqueSubjects.Count,
-            SubjectsWithContent = uniqueSubjects.Count(s => s.Analysis.HasContentInLatestVersion)
+            TotalSubjects = allSubjects.Count,
+            SubjectsWithContent = allSubjects.Count(s => s.Analysis.HasContentInLatestVersion)
         };
         analysis.SubjectsWithoutContent = analysis.TotalSubjects - analysis.SubjectsWithContent;
         analysis.ContentCompletionPercentage = analysis.TotalSubjects > 0
             ? Math.Round((double)analysis.SubjectsWithContent / analysis.TotalSubjects * 100, 2)
             : 0;
-        analysis.MissingContentSubjects = uniqueSubjects
+        analysis.MissingContentSubjects = allSubjects
             .Where(s => s.Analysis.Status != "Complete")
             .Select(s => $"{s.SubjectCode} ({s.Analysis.Status})")
             .Distinct()

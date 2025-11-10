@@ -11,6 +11,7 @@ using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromTe
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Queries.GetSubjectSkillMappings;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.AddSubjectSkillMapping;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.RemoveSubjectSkillMapping;
+using BuildingBlocks.Shared.Authentication; // Ensure this is present
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -30,19 +31,25 @@ public class SubjectsController : ControllerBase
     /// Imports a single subject from raw text, creating or updating it in the master catalog.
     /// This is the primary endpoint for populating syllabus content.
     /// </summary>
+    // MODIFIED: Endpoint signature is simplified. ProgramId is no longer needed from the client.
     [HttpPost("import-from-text")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<CreateSubjectResponse>> ImportFromText([FromForm] string rawText, CancellationToken cancellationToken)
+    public async Task<ActionResult<CreateSubjectResponse>> ImportFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(rawText))
+        if (string.IsNullOrWhiteSpace(request.RawText))
         {
             return BadRequest("The 'rawText' form field is required and cannot be empty.");
         }
 
-        var command = new ImportSubjectFromTextCommand { RawText = rawText };
+        // MODIFIED: We now get the user's ID directly from their authenticated token.
+        var command = new ImportSubjectFromTextCommand
+        {
+            RawText = request.RawText,
+            AuthUserId = User.GetAuthUserId()
+        };
         var result = await _mediator.Send(command, cancellationToken);
         // Returns 200 OK because it's an "upsert" (create or update).
         return Ok(result);

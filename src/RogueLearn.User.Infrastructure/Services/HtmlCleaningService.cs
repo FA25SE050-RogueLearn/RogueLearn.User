@@ -30,11 +30,13 @@ public class HtmlCleaningService : IHtmlCleaningService
             var htmlDoc = new HtmlDocument();
             htmlDoc.LoadHtml(rawHtml);
 
-            // 1. Remove script and style nodes to reduce noise.
+            // 1. Remove script and style nodes to eliminate noise.
             htmlDoc.DocumentNode.SelectNodes("//script|//style")?.ToList().ForEach(n => n.Remove());
 
-            // 2. Find the most relevant content node.
+            // 2. Find the most relevant content node to focus extraction.
+            // This prioritizes common content containers but falls back to the body or whole document.
             var mainContentNode = htmlDoc.GetElementbyId("content")
+                                  ?? htmlDoc.DocumentNode.SelectSingleNode("//main")
                                   ?? htmlDoc.DocumentNode.SelectSingleNode("//body")
                                   ?? htmlDoc.DocumentNode;
 
@@ -42,15 +44,31 @@ public class HtmlCleaningService : IHtmlCleaningService
 
             var sb = new StringBuilder();
 
-            // 3. Extract text from key structural elements.
-            ExtractAndAppendSection(sb, mainContentNode, "Curriculum Details", "//table[@id='table-detail']");
-            ExtractAndAppendSection(sb, mainContentNode, "Subjects List", "//table[@id='gvSubs']");
+            // 3. Extract text from key structural elements to preserve some structure for the AI.
+            // This is more effective than just taking the entire inner text.
+            foreach (var node in mainContentNode.Descendants())
+            {
+                // Only process text nodes that are direct children of block-level elements
+                if (node.NodeType == HtmlNodeType.Text && IsBlockLevelParent(node.ParentNode))
+                {
+                    var text = Sanitize(node.InnerText);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        sb.AppendLine(text);
+                    }
+                }
+                // Handle tables by converting them to a simple text format
+                else if (node.Name == "table")
+                {
+                    ExtractTableContent(sb, node);
+                }
+            }
 
-            // Add a more generic table extractor as a fallback
+            // As a final fallback if the above yields nothing, use the full inner text.
             if (sb.Length == 0)
             {
-                _logger.LogDebug("Specific tables not found, attempting generic extraction.");
-                ExtractAndAppendSection(sb, mainContentNode, "General Information", "//*[self::h1 or self::h2 or self::h3 or self::p or self::table]");
+                _logger.LogDebug("Structured text extraction yielded no content, falling back to full InnerText.");
+                return Sanitize(mainContentNode.InnerText);
             }
 
             return sb.ToString();
@@ -62,40 +80,35 @@ public class HtmlCleaningService : IHtmlCleaningService
         }
     }
 
-    private void ExtractAndAppendSection(StringBuilder sb, HtmlNode parentNode, string sectionTitle, string xpath)
+    private void ExtractTableContent(StringBuilder sb, HtmlNode tableNode)
     {
-        var nodes = parentNode.SelectNodes(xpath);
-        if (nodes == null || !nodes.Any()) return;
+        var rows = tableNode.SelectNodes(".//tr");
+        if (rows == null) return;
 
-        sb.AppendLine($"## {sectionTitle}");
-        sb.AppendLine();
-
-        foreach (var node in nodes)
+        sb.AppendLine("--- TABLE START ---");
+        foreach (var row in rows)
         {
-            if (node.Name == "table")
+            var cells = row.SelectNodes(".//th|.//td");
+            if (cells != null)
             {
-                foreach (var row in node.SelectNodes(".//tr"))
-                {
-                    var cells = row.SelectNodes(".//th|.//td");
-                    if (cells != null)
-                    {
-                        var rowText = string.Join(" | ", cells.Select(c => Sanitize(c.InnerText)));
-                        sb.AppendLine(rowText);
-                    }
-                }
+                var rowText = string.Join(" | ", cells.Select(c => Sanitize(c.InnerText)));
+                sb.AppendLine(rowText);
             }
-            else
-            {
-                sb.AppendLine(Sanitize(node.InnerText));
-            }
-            sb.AppendLine();
         }
+        sb.AppendLine("--- TABLE END ---");
+    }
+
+    private bool IsBlockLevelParent(HtmlNode node)
+    {
+        if (node == null) return false;
+        string[] blockTags = { "p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "li", "td", "th", "blockquote" };
+        return blockTags.Contains(node.Name);
     }
 
     private string Sanitize(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        // Decode HTML entities and normalize whitespace to a single space.
+        // Decode HTML entities (e.g., &amp; -> &) and normalize all whitespace to a single space.
         return System.Text.RegularExpressions.Regex.Replace(HtmlEntity.DeEntitize(text).Trim(), @"\s+", " ");
     }
 }

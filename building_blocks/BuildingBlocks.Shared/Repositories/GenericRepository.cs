@@ -118,28 +118,50 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
 
     public virtual async Task<T> UpdateAsync(T entity, CancellationToken cancellationToken = default)
     {
+        if (entity.Id == Guid.Empty)
+            throw new InvalidOperationException("Cannot update an entity with an empty Id. Use AddAsync for new entities.");
+
         var response = await _supabaseClient
             .From<T>()
             .Where(x => x.Id == entity.Id)
             .Update(entity, cancellationToken: cancellationToken);
+
+        if (response.Models == null || !response.Models.Any())
+            throw new InvalidOperationException($"Update operation returned no results for entity with Id {entity.Id}. The entity may not exist in the database.");
 
         return response.Models.First();
     }
 
     public virtual async Task<IEnumerable<T>> UpdateRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
     {
-        if (!entities.Any())
+        var entitiesList = entities.ToList();
+
+        if (!entitiesList.Any())
             return Enumerable.Empty<T>();
 
         var updatedEntities = new List<T>();
 
         // Supabase doesn't support bulk updates with different conditions, so we batch them
-        foreach (var entity in entities)
+        foreach (var entity in entitiesList)
         {
+            if (entity.Id == Guid.Empty)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot update entity of type {typeof(T).Name} with an empty Id. " +
+                    "Use AddAsync or AddRangeAsync for new entities.");
+            }
+
             var response = await _supabaseClient
                 .From<T>()
                 .Where(x => x.Id == entity.Id)
                 .Update(entity, cancellationToken: cancellationToken);
+
+            if (response.Models == null || !response.Models.Any())
+            {
+                throw new InvalidOperationException(
+                    $"Update operation returned no results for {typeof(T).Name} with Id {entity.Id}. " +
+                    "The entity may not exist in the database.");
+            }
 
             updatedEntities.AddRange(response.Models);
         }

@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Models/CurriculumImportSchema.cs
 using System.ComponentModel.DataAnnotations;
 using RogueLearn.User.Domain.Enums;
 using Newtonsoft.Json;
@@ -110,15 +111,15 @@ public class SyllabusData
 {
     [Required]
     public string SubjectCode { get; set; } = string.Empty;
-    
+
     [Required]
     public int VersionNumber { get; set; } = 1;
-    
+
     [Required]
     public SyllabusContent Content { get; set; } = new();
-    
+
     public DateOnly? EffectiveDate { get; set; }
-    
+
     public bool IsActive { get; set; } = true;
 
     // Basic Information
@@ -132,13 +133,13 @@ public class SyllabusData
     public string Description { get; set; } = string.Empty;
     public List<string> StudentTasks { get; set; } = new();
     public List<string> Tools { get; set; } = new();
-    
+
     // Approval Information
     public string DecisionNo { get; set; } = string.Empty;
     public bool IsApproved { get; set; }
     public string Note { get; set; } = string.Empty;
     public DateOnly? ApprovedDate { get; set; }
-    
+
     // Materials
     public List<SyllabusMaterial> Materials { get; set; } = new();
 
@@ -153,7 +154,8 @@ public class SyllabusContent
 {
     public string? CourseDescription { get; set; }
     public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
-    public List<SyllabusWeek>? WeeklySchedule { get; set; }
+    // MODIFIED: Renamed from WeeklySchedule to SessionSchedule.
+    public List<SyllabusSessionDto>? SessionSchedule { get; set; }
     public List<AssessmentItem>? Assessments { get; set; }
     public List<string>? RequiredTexts { get; set; }
     public List<string>? RecommendedTexts { get; set; }
@@ -161,17 +163,14 @@ public class SyllabusContent
     public string? AttendancePolicy { get; set; }
 }
 
-public class SyllabusWeek
+// MODIFIED: Renamed from SyllabusWeek to SyllabusSessionDto and weekNumber to sessionNumber.
+public class SyllabusSessionDto
 {
-    public int WeekNumber { get; set; }
+    public int SessionNumber { get; set; }
     public string Topic { get; set; } = string.Empty;
     public List<string> Activities { get; set; } = new(); // e.g., ["Lecture", "Group Discussion", "Lab Work"]
     public List<string> Readings { get; set; } = new();
     public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
-
-    // NEW: This is the critical link for skill mapping.
-    // The AI that extracts the syllabus will also suggest which skills from the master list
-    // are relevant to this specific week's topic.
     public List<string> MappedSkills { get; set; } = new();
 }
 
@@ -226,5 +225,3 @@ public class CourseLearningOutcome
     public string Id { get; set; } = string.Empty;
     public string Details { get; set; } = string.Empty;
 }
-
-// Removed duplicate top-level assessments; use content assessments (AssessmentItem)

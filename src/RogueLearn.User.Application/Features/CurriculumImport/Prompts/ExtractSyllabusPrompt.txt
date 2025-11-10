@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Prompts/ExtractSyllabusPrompt.txt
 Extract syllabus information from the following text and return it as a single JSON object.
 
 ## TARGET JSON SCHEMA ##
@@ -5,7 +6,7 @@ Your output MUST conform to this exact structure:
 {
   "subjectCode": "string",
   "subjectName": "string",
-  "version": "string (e.g., '2022-10-26')",
+  "approvedDate": "string (YYYY-MM-DD format, from the 'effective date' or 'approved date' in the text)",
   "content": {
     "courseDescription": "string (A concise summary of the course)",
     "courseLearningOutcomes": [
@@ -14,16 +15,16 @@ Your output MUST conform to this exact structure:
         "details": "string (The full text of the learning outcome)"
       }
     ],
-    "weeklySchedule": [
+    "sessionSchedule": [
       {
-        "weekNumber": integer,
-        "topic": "string (The main topic for the week)",
+        "sessionNumber": integer,
+        "topic": "string (The main topic for the session)",
         "activities": ["string"],
         "readings": ["string"],
         "constructiveQuestions": [
           {
             "question": "string",
-            "sessionNumber": integer (optional, map to weekNumber)
+            "sessionNumber": integer (optional, map to the session number)
           }
         ],
         "mappedSkills": ["string"]
@@ -44,16 +45,17 @@ Your output MUST conform to this exact structure:
 }
 
 ## EXTRACTION RULES ##
-1.  **Subject Identification:** Extract the `subjectCode`, `subjectName`, and `version` from the document's header or main details.
-2.  **Course Learning Outcomes (CLOs):** Populate the `courseLearningOutcomes` array with the ID and full text for each CLO found.
-3.  **Weekly Schedule:**
-    *   For each week or session in the syllabus, create an object in the `weeklySchedule` array.
+1.  **Subject Identification:** Extract the `subjectCode` and `subjectName`.
+2.  **Approved Date:** Find the 'effective date' or 'approved date' in the text and format it as `YYYY-MM-DD`. This is a critical field.
+3.  **Course Learning Outcomes (CLOs):** Populate the `courseLearningOutcomes` array with the ID and full text for each CLO found.
+4.  **Session Schedule:**
+    *   For each session in the syllabus, create an object in the `sessionSchedule` array.
     *   Extract the `topic`, `activities`, and any assigned `readings`.
-    *   If the syllabus contains "constructive questions" or similar review questions, place them inside the `constructiveQuestions` array for the corresponding week.
-4.  **CRITICAL - Mapped Skills:** For each week in the `weeklySchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
-5.  **Assessments:** Populate the `assessments` array with the type, weight, and description of all graded components.
-6.  **Completeness:** Fill in all other fields (`courseDescription`, `requiredTexts`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
-7.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
+    *   If the syllabus contains "constructive questions" or similar review questions, place them inside the `constructiveQuestions` array for the corresponding session.
+5.  **CRITICAL - Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
+6.  **Assessments:** Populate the `assessments` array with the type, weight, and description of all graded components.
+7.  **Completeness:** Fill in all other fields (`courseDescription`, `requiredTexts`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
+8.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
 
 ## TEXT TO PROCESS ##
 {{RAW_TEXT}}

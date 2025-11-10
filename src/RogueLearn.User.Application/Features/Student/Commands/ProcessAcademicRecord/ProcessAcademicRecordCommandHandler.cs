@@ -112,22 +112,19 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             await _enrollmentRepository.AddAsync(enrollment, cancellationToken);
         }
 
-        // STEP 5: Determine the latest active subject version for the user's program.
+        // MODIFICATION START: The entire version-filtering logic is removed.
+        // STEP 5: Get the definitive list of subjects for the program.
         var allProgramSubjects = await _subjectRepository.GetSubjectsByRoute(request.CurriculumProgramId, cancellationToken);
-        var latestVersionCode = allProgramSubjects
-            .OrderByDescending(s => s.Version)
-            .FirstOrDefault()?.Version;
 
-        if (string.IsNullOrEmpty(latestVersionCode))
+        if (!allProgramSubjects.Any())
         {
-            _logger.LogWarning("Could not determine latest active version for ProgramId: {ProgramId}", request.CurriculumProgramId);
-            throw new NotFoundException($"Could not determine latest active subject version for program {request.CurriculumProgramId}");
+            _logger.LogWarning("Could not find any subjects linked to ProgramId: {ProgramId}", request.CurriculumProgramId);
+            throw new NotFoundException($"No subjects are associated with program {request.CurriculumProgramId}");
         }
-        _logger.LogInformation("Determined latest active version code for program is '{VersionCode}'", latestVersionCode);
 
-        var subjectsForVersion = allProgramSubjects
-            .Where(s => s.Version == latestVersionCode)
-            .ToDictionary(s => s.SubjectCode);
+        var subjectCatalog = allProgramSubjects.ToDictionary(s => s.SubjectCode);
+        _logger.LogInformation("Built subject catalog for program with {Count} subjects.", subjectCatalog.Count);
+        // MODIFICATION END
 
         // STEP 6: Synchronize subjects into the student's "gradebook" (`student_semester_subjects`).
         var existingSemesterSubjects = (await _semesterSubjectRepository.FindAsync(
@@ -140,9 +137,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         foreach (var subjectRecord in fapData.Subjects)
         {
-            if (!subjectsForVersion.TryGetValue(subjectRecord.SubjectCode, out var subject))
+            // MODIFIED: Use the new 'subjectCatalog' dictionary.
+            if (!subjectCatalog.TryGetValue(subjectRecord.SubjectCode, out var subject))
             {
-                _logger.LogWarning("Subject {SubjectCode} with version {Version} not found in this program's catalog. Skipping.", subjectRecord.SubjectCode, latestVersionCode);
+                // MODIFIED: Log message no longer references a version.
+                _logger.LogWarning("Subject {SubjectCode} not found in this program's catalog. Skipping.", subjectRecord.SubjectCode);
                 continue;
             }
 

@@ -10,7 +10,6 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
 using HtmlAgilityPack;
 using System.Text;
-// NEW: Add this using statement to access the enum converter
 using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum
@@ -23,7 +22,6 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
         private readonly ICurriculumImportStorage _storage;
         private readonly CurriculumImportDataValidator _validator;
         private readonly ILogger<ImportCurriculumCommandHandler> _logger;
-        // MODIFIED: Dependency changed to the specific curriculum plugin.
         private readonly ICurriculumExtractionPlugin _curriculumPlugin;
         private readonly IHtmlCleaningService _htmlCleaningService;
 
@@ -34,7 +32,6 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             ICurriculumImportStorage storage,
             CurriculumImportDataValidator validator,
             ILogger<ImportCurriculumCommandHandler> logger,
-            // MODIFIED: Dependency changed to the specific curriculum plugin.
             ICurriculumExtractionPlugin curriculumPlugin,
             IHtmlCleaningService htmlCleaningService)
         {
@@ -59,7 +56,6 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 throw new Exceptions.BadRequestException("Failed to extract meaningful text from the provided HTML.");
             }
 
-            // MODIFIED: Method call updated to use the new specific plugin.
             var extractedJson = await _curriculumPlugin.ExtractCurriculumJsonAsync(cleanText, cancellationToken);
             if (string.IsNullOrEmpty(extractedJson))
             {
@@ -70,7 +66,6 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             CurriculumImportData? curriculumData;
             try
             {
-                // FIX: Configure the serializer to correctly handle enums represented as strings.
                 var serializerOptions = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -116,7 +111,9 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
 
             var subjectEntities = new List<Subject>();
 
-            // Only process subjects that are not placeholders
+            // Construct an effective date from the version info to use for UpdatedAt
+            DateTimeOffset effectiveDate = new DateTimeOffset(curriculumData.Version.EffectiveYear, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
             foreach (var subjectData in curriculumData.Subjects.Where(s => s.IsPlaceholder == false))
             {
                 var subject = new Subject
@@ -125,10 +122,10 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                     SubjectName = subjectData.SubjectName,
                     Credits = subjectData.Credits,
                     Description = subjectData.Description,
-                    Version = curriculumData.Version.VersionCode,
                     Semester = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode)?.TermNumber ?? 0,
-                    // MODIFIED: Content is explicitly set to null. It will be populated by the syllabus import workflow.
-                    Content = null
+                    Content = null,
+                    // MODIFIED: Set UpdatedAt to the effective date of the curriculum import.
+                    UpdatedAt = effectiveDate
                 };
                 subjectEntities.Add(subject);
             }
@@ -136,14 +133,15 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
             var createdSubjects = new List<Subject>();
             foreach (var subjectEntity in subjectEntities)
             {
-                var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectEntity.SubjectCode && s.Version == subjectEntity.Version, cancellationToken);
+                // MODIFIED: Lookup is now only by SubjectCode.
+                var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectEntity.SubjectCode, cancellationToken);
                 if (existing != null)
                 {
                     existing.SubjectName = subjectEntity.SubjectName;
                     existing.Credits = subjectEntity.Credits;
                     existing.Description = subjectEntity.Description;
                     existing.Semester = subjectEntity.Semester;
-                    existing.UpdatedAt = DateTimeOffset.UtcNow;
+                    existing.UpdatedAt = subjectEntity.UpdatedAt;
                     var updated = await _subjectRepository.UpdateAsync(existing, cancellationToken);
                     createdSubjects.Add(updated);
                 }
