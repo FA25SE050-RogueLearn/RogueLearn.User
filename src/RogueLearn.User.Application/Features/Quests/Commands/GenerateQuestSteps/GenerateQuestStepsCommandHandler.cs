@@ -32,7 +32,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IClassRepository _classRepository;
     private readonly ISkillRepository _skillRepository;
-    // MODIFICATION: Added the mapping repository to fetch the pre-approved skills for a subject.
+    // The mapping repository is used to fetch the pre-approved skills for a subject.
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IPromptBuilder _promptBuilder;
 
@@ -69,7 +69,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             throw new BadRequestException("Quest Steps already created.");
         }
-        
+
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
         if (userProfile == null)
         {
@@ -86,7 +86,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             throw new BadRequestException("Class not found");
         }
-        
+
 
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
             ?? throw new NotFoundException("Quest", request.QuestId);
@@ -119,7 +119,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         var syllabusJson = JsonSerializer.Serialize(subject.Content);
 
-        // MODIFICATION: The curated list of skills is now passed to the AI plugin.
+        // The curated list of skills is now passed to the AI plugin.
         var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(syllabusJson, userContext, relevantSkills, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(generatedStepsJson))
@@ -158,7 +158,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             Enum.TryParse<Domain.Enums.StepType>(aiStep.StepType, true, out var stepType);
 
-            // MODIFICATION: This is a critical security and integrity check.
+            // This is a critical security and integrity check.
             // We verify that the skillId returned by the AI is one of the valid IDs we provided from our admin-curated list.
             // This prevents the AI from hallucinating invalid IDs and corrupting the data.
             if (!aiStep.Content.TryGetProperty("skillId", out var skillIdElement) || !Guid.TryParse(skillIdElement.GetString(), out var skillId) || !relevantSkillIds.Contains(skillId))
