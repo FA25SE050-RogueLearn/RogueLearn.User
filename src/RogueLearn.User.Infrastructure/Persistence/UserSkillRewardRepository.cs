@@ -13,7 +13,7 @@ public class UserSkillRewardRepository : GenericRepository<UserSkillReward>, IUs
     {
     }
 
-    // ADDED: Implementation of the new interface method.
+    // Implementation of the new interface method.
     /// <summary>
     /// Finds a single UserSkillReward based on the combination of user, source service, and source ID.
     /// This uses chained filters to avoid LINQ translation issues with complex predicates.

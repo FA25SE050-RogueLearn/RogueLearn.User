@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Quest.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -9,6 +10,9 @@ namespace RogueLearn.User.Domain.Entities;
 [Table("quests")]
 public class Quest : BaseEntity
 {
+    [Column("quest_chapter_id")]
+    public Guid? QuestChapterId { get; set; }
+
     [Column("title")]
     public string Title { get; set; } = string.Empty;
 
@@ -29,8 +33,12 @@ public class Quest : BaseEntity
     [Column("experience_points_reward")]
     public int ExperiencePointsReward { get; set; } = 0;
 
-    [Column("skill_tags")]
-    public string[]? SkillTags { get; set; }
+    [Column("sequence")]
+    public int? Sequence { get; set; } // CHANGED: Made nullable
+
+    [Column("quest_status")]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
 
     [Column("subject_id")]
     public Guid? SubjectId { get; set; }

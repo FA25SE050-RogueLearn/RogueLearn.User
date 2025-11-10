@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/LearningPaths/Commands/DeleteLearningPath/DeleteLearningPathCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -6,23 +7,22 @@ using RogueLearn.User.Domain.Interfaces;
 namespace RogueLearn.User.Application.Features.LearningPaths.Commands.DeleteLearningPath;
 
 /// <summary>
-/// Handles deletion of a Learning Path and its related entities.
-/// - Throws standardized NotFoundException when the learning path does not exist.
-/// - Deletes related QuestChapters and LearningPathQuest entries to avoid orphaned data.
+/// Handles deletion of a Learning Path.
+/// - Throws a standardized NotFoundException when the learning path does not exist.
+/// - Relies on database cascading deletes to remove child entities (QuestChapters, Quests),
+///   aligning with the new, simplified architecture.
 /// </summary>
 public class DeleteLearningPathCommandHandler : IRequestHandler<DeleteLearningPathCommand>
 {
     private readonly ILearningPathRepository _learningPathRepository;
-    private readonly ILearningPathQuestRepository _learningPathQuestRepository;
+    // MODIFICATION: Removed the obsolete ILearningPathQuestRepository dependency.
     private readonly ILogger<DeleteLearningPathCommandHandler> _logger;
 
     public DeleteLearningPathCommandHandler(
         ILearningPathRepository learningPathRepository,
-        ILearningPathQuestRepository learningPathQuestRepository,
         ILogger<DeleteLearningPathCommandHandler> logger)
     {
         _learningPathRepository = learningPathRepository;
-        _learningPathQuestRepository = learningPathQuestRepository;
         _logger = logger;
     }
 
@@ -37,16 +37,14 @@ public class DeleteLearningPathCommandHandler : IRequestHandler<DeleteLearningPa
             throw new NotFoundException("LearningPath", request.Id);
         }
 
-        // Delete related LearningPathQuests
-        var lpQuests = (await _learningPathQuestRepository.FindAsync(lpq => lpq.LearningPathId == request.Id, cancellationToken)).ToList();
-        foreach (var lpq in lpQuests)
-        {
-            await _learningPathQuestRepository.DeleteAsync(lpq.Id, cancellationToken);
-        }
+        // MODIFICATION: Removed the manual deletion of LearningPathQuest entries.
+        // The database schema's "ON DELETE CASCADE" constraint on the quest_chapters table
+        // will automatically handle the deletion of all associated chapters and their quests.
+        // This simplifies the logic and makes it more robust.
 
-        // Finally, delete the LearningPath itself
+        // Finally, delete the LearningPath itself. The database handles the rest.
         await _learningPathRepository.DeleteAsync(request.Id, cancellationToken);
 
-        _logger.LogInformation("Deleted LearningPath and related entities: LearningPathId={LearningPathId}. QuestsDeleted={QuestsCount}", request.Id, lpQuests.Count);
+        _logger.LogInformation("Deleted LearningPath and its related entities via cascade: LearningPathId={LearningPathId}", request.Id);
     }
 }

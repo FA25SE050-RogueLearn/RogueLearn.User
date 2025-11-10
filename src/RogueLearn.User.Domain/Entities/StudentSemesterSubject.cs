@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/StudentSemesterSubject.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -9,21 +10,18 @@ namespace RogueLearn.User.Domain.Entities;
 [Table("student_semester_subjects")]
 public class StudentSemesterSubject : BaseEntity
 {
-    [Column("enrollment_id")]
-    public Guid EnrollmentId { get; set; }
+    [Column("auth_user_id")]
+    public Guid AuthUserId { get; set; }
 
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
 
     [Column("academic_year")]
     public string AcademicYear { get; set; } = string.Empty;
-
-    [Column("semester")]
-    public int Semester { get; set; }
-
+    
     [Column("status")]
     [JsonConverter(typeof(StringEnumConverter))]
-    public SubjectEnrollmentStatus Status { get; set; } = SubjectEnrollmentStatus.Enrolled;
+    public SubjectEnrollmentStatus Status { get; set; } = SubjectEnrollmentStatus.NotStarted;
 
     [Column("grade")]
     public string? Grade { get; set; }

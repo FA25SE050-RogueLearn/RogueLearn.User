@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        // MODIFICATION START: Register Supabase client as SCOPED with proper JWT handling per request.
+        // Register Supabase client as SCOPED with proper JWT handling per request.
         // This is the correct, stable, and performant approach.
         services.AddScoped<Client>(sp =>
         {
@@ -48,7 +48,7 @@ public static class ServiceCollectionExtensions
 
             var client = new Client(supabaseUrl, supabaseKey, options);
 
-            // MODIFICATION: The blocking `.GetAwaiter().GetResult()` call is removed.
+            // The blocking `.GetAwaiter().GetResult()` call is removed.
             // Initialization is now handled in a non-blocking, fire-and-forget task,
             // which prevents deadlocks and thread pool starvation that caused the connection errors.
             _ = Task.Run(async () =>
@@ -66,7 +66,6 @@ public static class ServiceCollectionExtensions
 
             return client;
         });
-        // MODIFICATION END
 
         // Register Generic Repository
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
@@ -85,7 +84,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
         services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
-        // ADDED: Register the new repository for specialization subjects
+
+        // instance of `ClassSpecializationSubjectRepository` when `IClassSpecializationSubjectRepository` is requested.
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
         services.AddScoped<IStudentSemesterSubjectRepository, StudentSemesterSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
@@ -93,23 +93,22 @@ public static class ServiceCollectionExtensions
 
         // Curriculum repositories
         services.AddScoped<ICurriculumProgramRepository, CurriculumProgramRepository>();
-        services.AddScoped<ICurriculumVersionRepository, CurriculumVersionRepository>();
-        services.AddScoped<ICurriculumVersionActivationRepository, CurriculumVersionActivationRepository>();
-        services.AddScoped<ICurriculumStructureRepository, CurriculumStructureRepository>();
-        services.AddScoped<ISyllabusVersionRepository, SyllabusVersionRepository>();
+        services.AddScoped<ICurriculumProgramSubjectRepository, CurriculumProgramSubjectRepository>();
+        // Register the repository for the new subject_skill_mappings table.
+        services.AddScoped<ISubjectSkillMappingRepository, SubjectSkillMappingRepository>();
 
         // Gamification repositories
         services.AddScoped<IAchievementRepository, AchievementRepository>();
         services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
 
-        // ADDED: Quest and Learning Path Repositories
+        // Quest and Learning Path Repositories
         services.AddScoped<ILearningPathRepository, LearningPathRepository>();
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
-        services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
+        // MODIFICATION: The obsolete repository registration has been removed.
+        // services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
-        // ADDED: Repositories for tracking quest attempts and step progress.
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();
 
@@ -140,6 +139,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMeetingRepository, MeetingRepository>();
         services.AddScoped<IMeetingParticipantRepository, MeetingParticipantRepository>();
         services.AddScoped<IMeetingSummaryRepository, MeetingSummaryRepository>();
+
+        // NEW: Register the shared HTML Cleaning Service
+        services.AddScoped<IHtmlCleaningService, HtmlCleaningService>();
 
         // Storage services
         services.AddScoped<ICurriculumImportStorage, CurriculumImportStorage>();

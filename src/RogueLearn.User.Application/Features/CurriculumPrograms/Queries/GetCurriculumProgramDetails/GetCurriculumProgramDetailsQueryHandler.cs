@@ -8,198 +8,101 @@ using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 
-/// <summary>
-/// Handles retrieval of detailed curriculum program information, including versions and subjects.
-/// Adds structured logging to improve observability across the multi-step aggregation.
-/// </summary>
 public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurriculumProgramDetailsQuery, CurriculumProgramDetailsResponse>
 {
     private readonly ICurriculumProgramRepository _curriculumProgramRepository;
-    private readonly ICurriculumVersionRepository _curriculumVersionRepository;
-    private readonly ICurriculumStructureRepository _curriculumStructureRepository;
+    private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
     private readonly ISubjectRepository _subjectRepository;
-    private readonly ISyllabusVersionRepository _syllabusVersionRepository;
     private readonly IMapper _mapper;
     private readonly ILogger<GetCurriculumProgramDetailsQueryHandler> _logger;
 
     public GetCurriculumProgramDetailsQueryHandler(
         ICurriculumProgramRepository curriculumProgramRepository,
-        ICurriculumVersionRepository curriculumVersionRepository,
-        ICurriculumStructureRepository curriculumStructureRepository,
+        ICurriculumProgramSubjectRepository programSubjectRepository,
         ISubjectRepository subjectRepository,
-        ISyllabusVersionRepository syllabusVersionRepository,
         IMapper mapper,
         ILogger<GetCurriculumProgramDetailsQueryHandler> logger)
     {
         _curriculumProgramRepository = curriculumProgramRepository;
-        _curriculumVersionRepository = curriculumVersionRepository;
-        _curriculumStructureRepository = curriculumStructureRepository;
+        _programSubjectRepository = programSubjectRepository;
         _subjectRepository = subjectRepository;
-        _syllabusVersionRepository = syllabusVersionRepository;
         _mapper = mapper;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Retrieves curriculum program details based on ProgramId or VersionId and composes nested analysis.
-    /// </summary>
-    /// <param name="request">The query containing either ProgramId or VersionId.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The composed curriculum program details response.</returns>
-    /// <exception cref="BadRequestException">Thrown when neither ProgramId nor VersionId is provided.</exception>
-    /// <exception cref="NotFoundException">Thrown when referenced entities cannot be found.</exception>
     public async Task<CurriculumProgramDetailsResponse> Handle(GetCurriculumProgramDetailsQuery request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation(
-            "Handling {Handler} - retrieving curriculum program details (ProgramId={ProgramId}, VersionId={VersionId})",
-            nameof(GetCurriculumProgramDetailsQueryHandler), request.ProgramId, request.VersionId);
+        _logger.LogInformation("Handling GetCurriculumProgramDetailsQuery for ProgramId={ProgramId}", request.ProgramId);
 
-        CurriculumProgram? program;
-
-        // MODIFIED LOGIC: Determine how to fetch the program based on the provided ID.
-        if (request.VersionId.HasValue)
+        if (!request.ProgramId.HasValue)
         {
-            // If a VersionId is provided, find the version first.
-            var version = await _curriculumVersionRepository.GetByIdAsync(request.VersionId.Value, cancellationToken);
-            if (version == null)
-            {
-                // This is the error the QuestService will now receive if the ID is wrong.
-                _logger.LogWarning("{Handler} - CurriculumVersion not found for Id={VersionId}", nameof(GetCurriculumProgramDetailsQueryHandler), request.VersionId);
-                throw new NotFoundException("CurriculumVersion", request.VersionId.Value);
-            }
-            // Then, use the ProgramId from the version to get the program.
-            program = await _curriculumProgramRepository.GetByIdAsync(version.ProgramId, cancellationToken);
-        }
-        else if (request.ProgramId.HasValue)
-        {
-            // If a ProgramId is provided, fetch the program directly.
-            program = await _curriculumProgramRepository.GetByIdAsync(request.ProgramId.Value, cancellationToken);
-        }
-        else
-        {
-            _logger.LogWarning("{Handler} - neither ProgramId nor VersionId provided", nameof(GetCurriculumProgramDetailsQueryHandler));
-            throw new BadRequestException("Either a ProgramId or a VersionId must be provided.");
+            throw new BadRequestException("A ProgramId must be provided.");
         }
 
-        // The original error occurred here because a VersionId was used to search the program repository.
-        if (program == null)
-        {
-            _logger.LogWarning("{Handler} - CurriculumProgram not found (ProgramId={ProgramId}, VersionId={VersionId})", nameof(GetCurriculumProgramDetailsQueryHandler), request.ProgramId, request.VersionId);
-            throw new NotFoundException("CurriculumProgram", request.ProgramId ?? request.VersionId ?? Guid.Empty);
-        }
+        var program = await _curriculumProgramRepository.GetByIdAsync(request.ProgramId.Value, cancellationToken)
+            ?? throw new NotFoundException(nameof(CurriculumProgram), request.ProgramId.Value);
 
         var response = _mapper.Map<CurriculumProgramDetailsResponse>(program);
 
-        // Get all curriculum versions for this program
-        var curriculumVersions = await _curriculumVersionRepository.FindAsync(
-            cv => cv.ProgramId == program.Id,
-            cancellationToken);
+        var programSubjectLinks = (await _programSubjectRepository.FindAsync(ps => ps.ProgramId == program.Id, cancellationToken)).ToList();
+        var subjectIds = programSubjectLinks.Select(ps => ps.SubjectId).ToList();
 
-        response.CurriculumVersions = new List<CurriculumVersionDetailsDto>();
-
-        foreach (var version in curriculumVersions.OrderByDescending(v => v.EffectiveYear))
+        if (!subjectIds.Any())
         {
-            var versionDto = _mapper.Map<CurriculumVersionDetailsDto>(version);
-
-            // Get curriculum structure (subjects) for this version
-            var curriculumStructures = await _curriculumStructureRepository.FindAsync(
-                cs => cs.CurriculumVersionId == version.Id,
-                cancellationToken);
-
-            versionDto.Subjects = new List<CurriculumSubjectDetailsDto>();
-
-            foreach (var structure in curriculumStructures.OrderBy(s => s.Semester).ThenBy(s => s.IsMandatory ? 0 : 1))
-            {
-                // Get subject details
-                var subject = await _subjectRepository.GetByIdAsync(structure.SubjectId, cancellationToken);
-                if (subject == null) continue;
-
-                var subjectDto = new CurriculumSubjectDetailsDto
-                {
-                    SubjectId = subject.Id,
-                    SubjectCode = subject.SubjectCode,
-                    SubjectName = subject.SubjectName,
-                    Credits = subject.Credits,
-                    Description = subject.Description,
-                    TermNumber = structure.Semester,
-                    IsMandatory = structure.IsMandatory,
-                    PrerequisiteSubjectIds = structure.PrerequisiteSubjectIds,
-                    PrerequisitesText = structure.PrerequisitesText
-                };
-
-                // Get syllabus versions for this subject
-                var syllabusVersions = await _syllabusVersionRepository.FindAsync(
-                    sv => sv.SubjectId == subject.Id,
-                    cancellationToken);
-
-                subjectDto.SyllabusVersions = syllabusVersions
-                    .OrderByDescending(sv => sv.VersionNumber)
-                    .Select(sv => new SyllabusVersionDetailsDto
-                    {
-                        Id = sv.Id,
-                        VersionNumber = sv.VersionNumber,
-                        EffectiveDate = sv.EffectiveDate,
-                        IsActive = sv.IsActive,
-                        CreatedBy = sv.CreatedBy,
-                        CreatedAt = sv.CreatedAt,
-                        // MODIFIED: This check is updated to work with the Dictionary<string, object>? type.
-                        // It now checks if the dictionary is not null and contains any elements.
-                        HasContent = sv.Content != null && sv.Content.Any()
-                    })
-                    .ToList();
-
-                // Analyze subject syllabus status
-                subjectDto.Analysis = AnalyzeSubject(subjectDto);
-
-                versionDto.Subjects.Add(subjectDto);
-            }
-
-            // Analyze curriculum version
-            versionDto.Analysis = AnalyzeCurriculumVersion(versionDto);
-
-            response.CurriculumVersions.Add(versionDto);
+            _logger.LogInformation("No subjects found for program {ProgramId}", program.Id);
+            response.Analysis = AnalyzeCurriculumProgram(response);
+            return response;
         }
 
-        // Analyze overall curriculum program
-        response.Analysis = AnalyzeCurriculumProgram(response);
+        var allSubjectsInProgram = (await _subjectRepository.GetAllAsync(cancellationToken))
+            .Where(s => subjectIds.Contains(s.Id))
+            .ToList();
 
-        _logger.LogInformation(
-            "{Handler} - returning details: Versions={VersionsCount}, UniqueSubjects={UniqueSubjectsCount}",
-            nameof(GetCurriculumProgramDetailsQueryHandler),
-            response.CurriculumVersions.Count,
-            response.CurriculumVersions.SelectMany(v => v.Subjects).GroupBy(s => s.SubjectId).Count());
+        var singleVersionDto = new CurriculumVersionDetailsDto
+        {
+            Id = Guid.NewGuid(), // Synthetic ID for DTO compatibility
+            VersionCode = "Current",
+            IsActive = true,
+            CreatedAt = allSubjectsInProgram.Any() ? allSubjectsInProgram.Min(s => s.CreatedAt) : program.CreatedAt
+        };
+
+        foreach (var subject in allSubjectsInProgram.OrderBy(s => s.Semester).ThenBy(s => s.SubjectCode))
+        {
+            var subjectDto = new CurriculumSubjectDetailsDto
+            {
+                SubjectId = subject.Id,
+                SubjectCode = subject.SubjectCode,
+                SubjectName = subject.SubjectName,
+                Credits = subject.Credits,
+                Description = subject.Description,
+                TermNumber = subject.Semester,
+                PrerequisiteSubjectIds = subject.PrerequisiteSubjectIds,
+                IsMandatory = true, // Defaulting as before
+                Analysis = AnalyzeSubject(subject)
+            };
+            singleVersionDto.Subjects.Add(subjectDto);
+        }
+
+        singleVersionDto.Analysis = AnalyzeCurriculumVersion(singleVersionDto);
+        response.CurriculumVersions.Add(singleVersionDto);
+
+        response.Analysis = AnalyzeCurriculumProgram(response);
+        _logger.LogInformation("Returning details for Program {ProgramId}: {SubjectsCount} subjects.",
+            program.Id, allSubjectsInProgram.Count);
 
         return response;
     }
 
-    private SubjectAnalysisDto AnalyzeSubject(CurriculumSubjectDetailsDto subject)
+    private SubjectAnalysisDto AnalyzeSubject(Subject subject)
     {
-        var analysis = new SubjectAnalysisDto
+        // MODIFIED: The check for content is updated to correctly handle a Dictionary, not a string.
+        // It now checks if the dictionary is not null and has any elements.
+        var hasContent = subject.Content != null && subject.Content.Any();
+        return new SubjectAnalysisDto
         {
-            TotalSyllabusVersions = subject.SyllabusVersions.Count,
-            ActiveSyllabusVersions = subject.SyllabusVersions.Count(sv => sv.IsActive),
-            HasAnySyllabus = subject.SyllabusVersions.Any(),
-            HasActiveSyllabus = subject.SyllabusVersions.Any(sv => sv.IsActive)
+            HasContentInLatestVersion = hasContent,
+            Status = hasContent ? "Complete" : "Missing"
         };
-
-        var latestVersion = subject.SyllabusVersions.FirstOrDefault();
-        analysis.HasContentInLatestVersion = latestVersion?.HasContent ?? false;
-
-        // Determine status
-        if (!analysis.HasAnySyllabus)
-        {
-            analysis.Status = "Missing";
-        }
-        else if (!analysis.HasContentInLatestVersion)
-        {
-            analysis.Status = "Incomplete";
-        }
-        else
-        {
-            analysis.Status = "Complete";
-        }
-
-        return analysis;
     }
 
     private CurriculumVersionAnalysisDto AnalyzeCurriculumVersion(CurriculumVersionDetailsDto version)
@@ -209,48 +112,38 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
             TotalSubjects = version.Subjects.Count,
             MandatorySubjects = version.Subjects.Count(s => s.IsMandatory),
             ElectiveSubjects = version.Subjects.Count(s => !s.IsMandatory),
-            SubjectsWithSyllabus = version.Subjects.Count(s => s.Analysis.HasAnySyllabus),
-            TotalSyllabusVersions = version.Subjects.Sum(s => s.SyllabusVersions.Count)
+            SubjectsWithContent = version.Subjects.Count(s => s.Analysis.HasContentInLatestVersion)
         };
-
-        analysis.SubjectsWithoutSyllabus = analysis.TotalSubjects - analysis.SubjectsWithSyllabus;
-        analysis.SyllabusCompletionPercentage = analysis.TotalSubjects > 0
-            ? Math.Round((double)analysis.SubjectsWithSyllabus / analysis.TotalSubjects * 100, 2)
+        analysis.SubjectsWithoutContent = analysis.TotalSubjects - analysis.SubjectsWithContent;
+        analysis.ContentCompletionPercentage = analysis.TotalSubjects > 0
+            ? Math.Round((double)analysis.SubjectsWithContent / analysis.TotalSubjects * 100, 2)
             : 0;
-
         analysis.MissingContentSubjects = version.Subjects
             .Where(s => s.Analysis.Status != "Complete")
-            .Select(s => $"{s.SubjectCode} - {s.SubjectName} ({s.Analysis.Status})")
+            .Select(s => $"{s.SubjectCode} ({s.Analysis.Status})")
             .ToList();
-
         return analysis;
     }
 
     private CurriculumAnalysisDto AnalyzeCurriculumProgram(CurriculumProgramDetailsResponse program)
     {
         var allSubjects = program.CurriculumVersions.SelectMany(v => v.Subjects).ToList();
-        var uniqueSubjects = allSubjects.GroupBy(s => s.SubjectId).Select(g => g.First()).ToList();
 
         var analysis = new CurriculumAnalysisDto
         {
             TotalVersions = program.CurriculumVersions.Count,
-            ActiveVersions = program.CurriculumVersions.Count(v => v.IsActive),
-            TotalSubjects = uniqueSubjects.Count,
-            SubjectsWithSyllabus = uniqueSubjects.Count(s => s.Analysis.HasAnySyllabus),
-            TotalSyllabusVersions = allSubjects.Sum(s => s.SyllabusVersions.Count)
+            TotalSubjects = allSubjects.Count,
+            SubjectsWithContent = allSubjects.Count(s => s.Analysis.HasContentInLatestVersion)
         };
-
-        analysis.SubjectsWithoutSyllabus = analysis.TotalSubjects - analysis.SubjectsWithSyllabus;
-        analysis.SyllabusCompletionPercentage = analysis.TotalSubjects > 0
-            ? Math.Round((double)analysis.SubjectsWithSyllabus / analysis.TotalSubjects * 100, 2)
+        analysis.SubjectsWithoutContent = analysis.TotalSubjects - analysis.SubjectsWithContent;
+        analysis.ContentCompletionPercentage = analysis.TotalSubjects > 0
+            ? Math.Round((double)analysis.SubjectsWithContent / analysis.TotalSubjects * 100, 2)
             : 0;
-
-        analysis.MissingContentSubjects = uniqueSubjects
+        analysis.MissingContentSubjects = allSubjects
             .Where(s => s.Analysis.Status != "Complete")
-            .Select(s => $"{s.SubjectCode} - {s.SubjectName} ({s.Analysis.Status})")
+            .Select(s => $"{s.SubjectCode} ({s.Analysis.Status})")
             .Distinct()
             .ToList();
-
         return analysis;
     }
 }

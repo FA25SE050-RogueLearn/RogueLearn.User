@@ -1,11 +1,10 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Mappings/MappingProfile.cs
 using AutoMapper;
 using RogueLearn.User.Application.Features.ClassSpecialization.Commands.AddSpecializationSubject;
 using RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
 using RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
-// ADDED: Import for the new onboarding version DTO.
-using RogueLearn.User.Application.Features.Onboarding.Queries.GetOnboardingVersionsByProgram;
+// MODIFICATION: Commented out the using statement for a missing query to resolve compilation error.
+// using RogueLearn.User.Application.Features.Onboarding.Queries.GetOnboardingVersionsByProgram;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.Roles.Queries.GetAllRoles;
 using RogueLearn.User.Application.Features.Roles.Commands.CreateRole;
@@ -15,16 +14,17 @@ using RogueLearn.User.Application.Features.CurriculumPrograms.Commands.CreateCur
 using RogueLearn.User.Application.Features.CurriculumPrograms.Commands.UpdateCurriculumProgram;
 using GetAllCurriculumProgramDto = RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetAllCurriculumPrograms.CurriculumProgramDto;
 using GetByIdCurriculumProgramDto = RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetAllCurriculumPrograms.CurriculumProgramDto;
-using RogueLearn.User.Application.Features.CurriculumVersions.Commands.CreateCurriculumVersion;
-using CurriculumVersionDto = RogueLearn.User.Application.Features.CurriculumVersions.Queries.GetCurriculumVersionsByProgram.CurriculumVersionDto;
+// MODIFICATION: Commented out unused using statements related to obsolete entities.
+// using RogueLearn.User.Application.Features.CurriculumVersions.Commands.CreateCurriculumVersion;
+// using CurriculumVersionDto = RogueLearn.User.Application.Features.CurriculumVersions.Queries.GetCurriculumVersionsByProgram.CurriculumVersionDto;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 using RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;
 using RogueLearn.User.Application.Features.Subjects.Commands.UpdateSubject;
-using RogueLearn.User.Application.Features.CurriculumStructure.Commands.AddSubjectToCurriculum;
-using RogueLearn.User.Application.Features.CurriculumStructure.Commands.UpdateCurriculumStructure;
-using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusVersionsBySubject;
-using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
-using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
+// using RogueLearn.User.Application.Features.CurriculumStructure.Commands.AddSubjectToCurriculum;
+// using RogueLearn.User.Application.Features.CurriculumStructure.Commands.UpdateCurriculumStructure;
+// using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusVersionsBySubject;
+// using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
+// using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Queries.GetCurriculumProgramDetails;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
@@ -67,11 +67,12 @@ public class MappingProfile : Profile
         CreateMap<CurriculumProgram, CreateCurriculumProgramResponse>();
         CreateMap<CurriculumProgram, UpdateCurriculumProgramResponse>();
 
-        // CurriculumVersion mappings
-        CreateMap<CurriculumVersion, CurriculumVersionDto>();
-        CreateMap<CurriculumVersion, CreateCurriculumVersionResponse>();
-        // ADDED: Mapping for the new onboarding DTO.
-        CreateMap<CurriculumVersion, OnboardingVersionDto>();
+        // MODIFICATION: Commented out mappings for obsolete entities.
+        // CreateMap<CurriculumVersion, CurriculumVersionDto>();
+        // CreateMap<CurriculumVersion, CreateCurriculumVersionResponse>();
+
+        // MODIFICATION: Commented out mapping for a non-existent DTO to resolve compilation error.
+        // CreateMap<CurriculumVersion, OnboardingVersionDto>();
 
 
         // Subject mappings
@@ -79,23 +80,23 @@ public class MappingProfile : Profile
         CreateMap<Subject, CreateSubjectResponse>();
         CreateMap<Subject, UpdateSubjectResponse>();
 
-        // CurriculumStructure mappings
-        CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
-        CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
+        // MODIFICATION: Commented out mappings for obsolete entities.
+        // CreateMap<CurriculumStructure, AddSubjectToCurriculumResponse>();
+        // CreateMap<CurriculumStructure, UpdateCurriculumStructureResponse>();
 
-        CreateMap<SyllabusVersion, SyllabusVersionDto>()
-            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
-                src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
-        CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>()
-            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
-                src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
-        CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>()
-            .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
-                src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
+        // CreateMap<SyllabusVersion, SyllabusVersionDto>()
+        //     .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+        //         src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
+        // CreateMap<SyllabusVersion, CreateSyllabusVersionResponse>()
+        //     .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+        //         src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
+        // CreateMap<SyllabusVersion, UpdateSyllabusVersionResponse>()
+        //     .ForMember(dest => dest.Content, opt => opt.MapFrom(src =>
+        //         src.Content != null ? JsonSerializer.Serialize(src.Content, (JsonSerializerOptions)null!) : string.Empty));
 
         // CurriculumProgramDetails mappings
         CreateMap<CurriculumProgram, CurriculumProgramDetailsResponse>();
-        CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
+        // CreateMap<CurriculumVersion, CurriculumVersionDetailsDto>();
 
         // Note mappings
         CreateMap<Note, NoteDto>()

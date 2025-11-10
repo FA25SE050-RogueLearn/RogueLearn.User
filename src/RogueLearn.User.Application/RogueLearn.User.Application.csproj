@@ -1,23 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\RogueLearn.User.Domain\RogueLearn.User.Domain.csproj" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="AutoMapper" Version="15.0.1" />
-    <PackageReference Include="FluentValidation" Version="12.0.0" />
-    <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
-    <PackageReference Include="MediatR" Version="13.0.0" />
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.66.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Google" Version="1.66.0-alpha" />
-    <PackageReference Include="DocumentFormat.OpenXml" Version="3.0.2" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\RogueLearn.User.Domain\RogueLearn.User.Domain.csproj" />
+	</ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="AutoMapper" Version="15.0.1" />
+		<PackageReference Include="FluentValidation" Version="12.0.0" />
+		<PackageReference Include="Hangfire.AspNetCore" Version="1.8.22" />
+		<PackageReference Include="Hangfire.Core" Version="1.8.22" />
+		<PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
+		<PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
+		<PackageReference Include="MediatR" Version="13.0.0" />
+		<PackageReference Include="Microsoft.SemanticKernel" Version="1.66.0" />
+		<PackageReference Include="Microsoft.SemanticKernel.Connectors.Google" Version="1.66.0-alpha" />
+		<PackageReference Include="DocumentFormat.OpenXml" Version="3.0.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Features\CurriculumImport\Prompts\" />
+	</ItemGroup>
+
+	<!-- MODIFICATION START: Instruct the build system to copy prompt files -->
+	<!-- This ensures that all .txt files within the Features directory are copied -->
+	<!-- to the output folder (e.g., bin/Debug), making them available at runtime. -->
+	<ItemGroup>
+		<Content Include="Features\**\*.txt">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+	<!-- MODIFICATION END -->
 
 </Project>

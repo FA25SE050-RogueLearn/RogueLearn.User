@@ -60,7 +60,7 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
             throw new RogueLearn.User.Application.Exceptions.BadRequestException("SkillId is required to ingest an XP event.");
         }
 
-        // MODIFICATION: The skill is now fetched from the database using the reliable SkillId.
+        // The skill is now fetched from the database using the reliable SkillId.
         var skill = await _skillRepository.GetByIdAsync(request.SkillId.Value, cancellationToken);
         if (skill is null)
         {

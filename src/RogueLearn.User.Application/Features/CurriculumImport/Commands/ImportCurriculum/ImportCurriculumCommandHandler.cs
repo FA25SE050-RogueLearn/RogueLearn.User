@@ -1,387 +1,197 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Commands/ImportCurriculum/ImportCurriculumCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Security.Cryptography;
-using System.Text;
-using System.Linq;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
+using HtmlAgilityPack;
+using System.Text;
+using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum
 {
     public class ImportCurriculumCommandHandler : IRequestHandler<ImportCurriculumCommand, ImportCurriculumResponse>
     {
         private readonly ICurriculumProgramRepository _curriculumProgramRepository;
-        private readonly ICurriculumVersionRepository _curriculumVersionRepository;
         private readonly ISubjectRepository _subjectRepository;
-        private readonly ICurriculumStructureRepository _curriculumStructureRepository;
+        private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
         private readonly ICurriculumImportStorage _storage;
         private readonly CurriculumImportDataValidator _validator;
         private readonly ILogger<ImportCurriculumCommandHandler> _logger;
-        private readonly IFlmExtractionPlugin _flmPlugin;
+        private readonly ICurriculumExtractionPlugin _curriculumPlugin;
+        private readonly IHtmlCleaningService _htmlCleaningService;
 
         public ImportCurriculumCommandHandler(
             ICurriculumProgramRepository curriculumProgramRepository,
-            ICurriculumVersionRepository curriculumVersionRepository,
             ISubjectRepository subjectRepository,
-            ICurriculumStructureRepository curriculumStructureRepository,
-            ICurriculumImportStorage curriculumImportStorage,
+            ICurriculumProgramSubjectRepository programSubjectRepository,
+            ICurriculumImportStorage storage,
             CurriculumImportDataValidator validator,
             ILogger<ImportCurriculumCommandHandler> logger,
-            IFlmExtractionPlugin flmPlugin)
+            ICurriculumExtractionPlugin curriculumPlugin,
+            IHtmlCleaningService htmlCleaningService)
         {
             _curriculumProgramRepository = curriculumProgramRepository;
-            _curriculumVersionRepository = curriculumVersionRepository;
             _subjectRepository = subjectRepository;
-            _curriculumStructureRepository = curriculumStructureRepository;
-            _storage = curriculumImportStorage;
+            _programSubjectRepository = programSubjectRepository;
+            _storage = storage;
             _validator = validator;
             _logger = logger;
-            _flmPlugin = flmPlugin;
+            _curriculumPlugin = curriculumPlugin;
+            _htmlCleaningService = htmlCleaningService;
         }
 
         public async Task<ImportCurriculumResponse> Handle(ImportCurriculumCommand request, CancellationToken cancellationToken)
         {
+            _logger.LogInformation("Starting curriculum import from text");
+
+            var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.RawText);
+            if (string.IsNullOrWhiteSpace(cleanText))
+            {
+                _logger.LogError("HTML cleaning service failed to extract meaningful text from the provided HTML.");
+                throw new Exceptions.BadRequestException("Failed to extract meaningful text from the provided HTML.");
+            }
+
+            var extractedJson = await _curriculumPlugin.ExtractCurriculumJsonAsync(cleanText, cancellationToken);
+            if (string.IsNullOrEmpty(extractedJson))
+            {
+                _logger.LogError("AI plugin failed to extract curriculum JSON from the cleaned text.");
+                throw new Exceptions.BadRequestException("Failed to extract curriculum data from the provided text");
+            }
+
+            CurriculumImportData? curriculumData;
             try
             {
-                _logger.LogInformation("Starting curriculum import from text");
-
-                // Step 1: Check if we have cached data for this text
-                var textHash = ComputeSha256Hash(request.RawText);
-                var cachedData = await TryGetCachedDataAsync(textHash, cancellationToken);
-
-                CurriculumImportData? curriculumData;
-
-                if (cachedData != null)
+                var serializerOptions = new JsonSerializerOptions
                 {
-                    _logger.LogInformation("Using cached curriculum data for hash: {Hash}", textHash);
-                    curriculumData = cachedData;
-                }
-                else
-                {
-                    // Step 2: Extract structured data using AI
-                    var extractedJson = await ExtractCurriculumDataAsync(request.RawText);
-                    if (string.IsNullOrEmpty(extractedJson))
-                    {
-                        return new ImportCurriculumResponse
-                        {
-                            IsSuccess = false,
-                            Message = "Failed to extract curriculum data from the provided text"
-                        };
-                    }
-
-                    // Step 3: Parse JSON
-                    try
-                    {
-                        var jsonOptions = new JsonSerializerOptions
-                        {
-                            PropertyNameCaseInsensitive = true,
-                            Converters = { new JsonStringEnumConverter() }
-                        };
-                        curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, jsonOptions);
-                    }
-                    catch (JsonException ex)
-                    {
-                        _logger.LogError(ex, "Failed to parse extracted JSON");
-                        return new ImportCurriculumResponse
-                        {
-                            IsSuccess = false,
-                            Message = "Failed to parse extracted curriculum data"
-                        };
-                    }
-
-                    if (curriculumData == null)
-                    {
-                        return new ImportCurriculumResponse
-                        {
-                            IsSuccess = false,
-                            Message = "No curriculum data was extracted"
-                        };
-                    }
-
-                    // Step 4: Save extracted data to storage for future use
-                    // await SaveDataToStorageAsync(curriculumData, request.RawText, textHash, cancellationToken);
-                }
-
-                // Step 5: Validate extracted data
-                var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
-                if (!validationResult.IsValid)
-                {
-                    return new ImportCurriculumResponse
-                    {
-                        IsSuccess = false,
-                        Message = "Validation failed",
-                        ValidationErrors = validationResult.Errors.Select(e => e.ErrorMessage).ToList()
-                    };
-                }
-
-                // Step 6: Map and persist data
-                var result = await PersistCurriculumDataAsync(curriculumData, request.CreatedBy, cancellationToken);
-
-                _logger.LogInformation("Curriculum import completed successfully");
-                return result;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during curriculum import");
-                return new ImportCurriculumResponse
-                {
-                    IsSuccess = false,
-                    Message = "An error occurred during curriculum import"
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new JsonStringEnumConverter() }
                 };
+                curriculumData = JsonSerializer.Deserialize<CurriculumImportData>(extractedJson, serializerOptions);
             }
-        }
-
-        private async Task<CurriculumImportData?> TryGetCachedDataAsync(string textHash, CancellationToken cancellationToken)
-        {
-            try
+            catch (JsonException ex)
             {
-                var cachedJson = await _storage.TryGetByHashJsonAsync("curriculum-imports", textHash, cancellationToken);
-                _logger.LogInformation("Cache lookup for hash: {Hash}, found: {Found}", textHash, cachedJson != null);
-                if (!string.IsNullOrEmpty(cachedJson))
-                {
-                    var jsonOptions = new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true,
-                        Converters = { new JsonStringEnumConverter() }
-                    };
-                    return JsonSerializer.Deserialize<CurriculumImportData>(cachedJson, jsonOptions);
-                }
+                _logger.LogError(ex, "Failed to deserialize extracted JSON: {Json}", extractedJson);
+                throw new Exceptions.BadRequestException("AI returned invalid JSON format.");
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to retrieve cached data for hash: {Hash}", textHash);
-            }
-            return null;
-        }
 
-        private async Task SaveDataToStorageAsync(CurriculumImportData data, string rawText, string textHash, CancellationToken cancellationToken)
-        {
-            try
+            if (curriculumData == null)
             {
-                var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-                await _storage.SaveLatestAsync(
-                    "curriculum-imports",
-                    data.Program.ProgramCode,
-                    data.Version.VersionCode,
-                    json,
-                    rawText,
-                    textHash,
-                    cancellationToken);
-                _logger.LogInformation("Saved curriculum data to storage with hash: {Hash}", textHash);
+                throw new Exceptions.BadRequestException("No curriculum data was extracted");
             }
-            catch (Exception ex)
+
+            var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
+            if (!validationResult.IsValid)
             {
-                _logger.LogWarning(ex, "Failed to save curriculum data to storage for hash: {Hash}", textHash);
+                throw new Exceptions.ValidationException(validationResult.Errors);
             }
-        }
 
-        private async Task<string> ExtractCurriculumDataAsync(string rawText)
-        {
-            return await _flmPlugin.ExtractCurriculumJsonAsync(rawText);
-        }
-
-        private async Task<ImportCurriculumResponse> PersistCurriculumDataAsync(
-            CurriculumImportData data,
-            Guid? createdBy,
-            CancellationToken cancellationToken)
-        {
             var response = new ImportCurriculumResponse { IsSuccess = true };
 
-            // Create or get curriculum program
-            var existingProgram = await _curriculumProgramRepository.FirstOrDefaultAsync(p => p.ProgramCode == data.Program.ProgramCode, cancellationToken);
-
-            CurriculumProgram curriculumProgram;
-            if (existingProgram == null)
+            var program = await _curriculumProgramRepository.FirstOrDefaultAsync(p => p.ProgramCode == curriculumData.Program.ProgramCode, cancellationToken);
+            if (program == null)
             {
-                curriculumProgram = new CurriculumProgram
+                program = new CurriculumProgram
                 {
-                    ProgramName = data.Program.ProgramName,
-                    ProgramCode = data.Program.ProgramCode,
-                    Description = data.Program.Description,
-                    DegreeLevel = data.Program.DegreeLevel,
-                    TotalCredits = data.Program.TotalCredits,
-                    // Convert extracted double? to int? for domain entity
-                    DurationYears = data.Program.DurationYears.HasValue
-                        ? (int?)Convert.ToInt32(data.Program.DurationYears.Value)
-                        : null,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    UpdatedAt = DateTimeOffset.UtcNow
+                    ProgramName = curriculumData.Program.ProgramName,
+                    ProgramCode = curriculumData.Program.ProgramCode,
+                    Description = curriculumData.Program.Description,
+                    DegreeLevel = curriculumData.Program.DegreeLevel,
+                    TotalCredits = curriculumData.Program.TotalCredits,
+                    DurationYears = (int?)curriculumData.Program.DurationYears
                 };
-
-                curriculumProgram = await _curriculumProgramRepository.AddAsync(curriculumProgram, cancellationToken);
-                _logger.LogInformation("Created new curriculum program with ID {ProgramId}", curriculumProgram.Id);
+                program = await _curriculumProgramRepository.AddAsync(program, cancellationToken);
+                _logger.LogInformation("Created new curriculum program with ID {ProgramId}", program.Id);
             }
-            else
+            response.CurriculumProgramId = program.Id;
+
+            var subjectEntities = new List<Subject>();
+
+            // Construct an effective date from the version info to use for UpdatedAt
+            DateTimeOffset effectiveDate = new DateTimeOffset(curriculumData.Version.EffectiveYear, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+            foreach (var subjectData in curriculumData.Subjects.Where(s => s.IsPlaceholder == false))
             {
-                curriculumProgram = existingProgram;
-            }
-
-            response.CurriculumProgramId = curriculumProgram.Id;
-
-            // Check if curriculum version already exists
-            var existingVersion = await _curriculumVersionRepository.FirstOrDefaultAsync(
-                v => v.ProgramId == curriculumProgram.Id && v.VersionCode == data.Version.VersionCode, cancellationToken);
-
-            CurriculumVersion curriculumVersion;
-            if (existingVersion != null)
-            {
-                _logger.LogWarning("Curriculum version {VersionCode} for program {ProgramCode} already exists. Skipping import.", data.Version.VersionCode, data.Program.ProgramCode);
-                return new ImportCurriculumResponse
+                var subject = new Subject
                 {
-                    IsSuccess = false,
-                    Message = $"Curriculum version {data.Version.VersionCode} for program {data.Program.ProgramCode} already exists. Import skipped to prevent duplicates."
+                    SubjectCode = subjectData.SubjectCode,
+                    SubjectName = subjectData.SubjectName,
+                    Credits = subjectData.Credits,
+                    Description = subjectData.Description,
+                    Semester = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode)?.TermNumber ?? 0,
+                    Content = null,
+                    // MODIFIED: Set UpdatedAt to the effective date of the curriculum import.
+                    UpdatedAt = effectiveDate
                 };
+                subjectEntities.Add(subject);
             }
 
-            // Create curriculum version
-            curriculumVersion = new CurriculumVersion
+            var createdSubjects = new List<Subject>();
+            foreach (var subjectEntity in subjectEntities)
             {
-                ProgramId = curriculumProgram.Id,
-                VersionCode = data.Version.VersionCode,
-                EffectiveYear = data.Version.EffectiveYear,
-                IsActive = data.Version.IsActive,
-                Description = data.Version.Description,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-
-            curriculumVersion = await _curriculumVersionRepository.AddAsync(curriculumVersion, cancellationToken);
-            _logger.LogInformation("Created new curriculum version with ID {VersionId}", curriculumVersion.Id);
-            response.CurriculumVersionId = curriculumVersion.Id;
-
-            // Bulk create/update subjects
-            var subjectCodes = data.Subjects
-                .Select(s => s.SubjectCode)
-                .Union(data.Structure.SelectMany(st => st.PrerequisiteSubjectCodes ?? Enumerable.Empty<string>()))
-                .Distinct()
-                .ToList();
-            
-            // Fetch existing subjects by individual queries to avoid LINQ expression issues
-            var existingSubjects = new List<Subject>();
-            foreach (var code in subjectCodes)
-            {
-                var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == code, cancellationToken);
+                // MODIFIED: Lookup is now only by SubjectCode.
+                var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectEntity.SubjectCode, cancellationToken);
                 if (existing != null)
                 {
-                    existingSubjects.Add(existing);
-                }
-            }
-            var existingSubjectsByCode = existingSubjects.ToDictionary(s => s.SubjectCode, s => s);
-
-            var subjectsToUpdate = new List<Subject>();
-            var subjectsToInsert = new List<Subject>();
-
-            foreach (var subjectData in data.Subjects)
-            {
-                if (existingSubjectsByCode.TryGetValue(subjectData.SubjectCode, out var existing))
-                {
-                    existing.SubjectName = subjectData.SubjectName;
-                    existing.Credits = subjectData.Credits;
-                    existing.Description = subjectData.Description;
-                    existing.UpdatedAt = DateTimeOffset.UtcNow;
-                    subjectsToUpdate.Add(existing);
+                    existing.SubjectName = subjectEntity.SubjectName;
+                    existing.Credits = subjectEntity.Credits;
+                    existing.Description = subjectEntity.Description;
+                    existing.Semester = subjectEntity.Semester;
+                    existing.UpdatedAt = subjectEntity.UpdatedAt;
+                    var updated = await _subjectRepository.UpdateAsync(existing, cancellationToken);
+                    createdSubjects.Add(updated);
                 }
                 else
                 {
-                    subjectsToInsert.Add(new Subject
-                    {
-                        SubjectCode = subjectData.SubjectCode,
-                        SubjectName = subjectData.SubjectName,
-                        Credits = subjectData.Credits,
-                        Description = subjectData.Description,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                        UpdatedAt = DateTimeOffset.UtcNow
-                    });
+                    var created = await _subjectRepository.AddAsync(subjectEntity, cancellationToken);
+                    createdSubjects.Add(created);
                 }
             }
+            var subjectMapByCode = createdSubjects.ToDictionary(s => s.SubjectCode, s => s);
 
-            IEnumerable<Subject> updatedSubjects = Enumerable.Empty<Subject>();
-            IEnumerable<Subject> insertedSubjects = Enumerable.Empty<Subject>();
-
-            if (subjectsToUpdate.Any())
+            foreach (var createdSubject in createdSubjects)
             {
-                updatedSubjects = await _subjectRepository.UpdateRangeAsync(subjectsToUpdate, cancellationToken);
-                _logger.LogInformation("Bulk updated {Count} subjects", subjectsToUpdate.Count);
-            }
-
-            if (subjectsToInsert.Any())
-            {
-                insertedSubjects = await _subjectRepository.AddRangeAsync(subjectsToInsert, cancellationToken);
-                _logger.LogInformation("Bulk created {Count} subjects", subjectsToInsert.Count);
-            }
-
-            var allSubjects = updatedSubjects.Concat(insertedSubjects).ToList();
-            response.SubjectIds.AddRange(allSubjects.Select(s => s.Id));
-
-            // Build a lookup for subject code -> subject id for structures and prerequisites
-            var subjectIdByCode = allSubjects.ToDictionary(s => s.SubjectCode, s => s.Id);
-            // For any subjects that were already existing but weren't updated/inserted, ensure they are present in the lookup
-            foreach (var kvp in existingSubjectsByCode)
-            {
-                if (!subjectIdByCode.ContainsKey(kvp.Key))
+                var structureData = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == createdSubject.SubjectCode);
+                if (structureData?.PrerequisiteSubjectCodes?.Any() == true)
                 {
-                    subjectIdByCode[kvp.Key] = kvp.Value.Id;
-                }
-            }
+                    var prereqIds = new List<Guid>();
 
-            // Bulk create curriculum structures
-            var structuresToInsert = new List<Domain.Entities.CurriculumStructure>();
-            foreach (var structureData in data.Structure)
-            {
-                if (!subjectIdByCode.TryGetValue(structureData.SubjectCode, out var subjectId))
-                {
-                    // Subject not found; skip this structure
-                    continue;
-                }
-
-                // Map prerequisite subject codes to IDs
-                Guid[]? prerequisiteIds = null;
-                if (structureData.PrerequisiteSubjectCodes?.Any() == true)
-                {
-                    var ids = new List<Guid>();
                     foreach (var prereqCode in structureData.PrerequisiteSubjectCodes)
                     {
-                        if (subjectIdByCode.TryGetValue(prereqCode, out var prereqId))
+                        if (subjectMapByCode.TryGetValue(prereqCode, out var prereqSubject))
                         {
-                            ids.Add(prereqId);
+                            prereqIds.Add(prereqSubject.Id);
                         }
                     }
-                    prerequisiteIds = ids.Any() ? ids.ToArray() : null;
+                    createdSubject.PrerequisiteSubjectIds = prereqIds.ToArray();
+                    await _subjectRepository.UpdateAsync(createdSubject, cancellationToken);
                 }
-
-                structuresToInsert.Add(new Domain.Entities.CurriculumStructure
-                {
-                    CurriculumVersionId = curriculumVersion.Id,
-                    SubjectId = subjectId,
-                    Semester = structureData.TermNumber,
-                    IsMandatory = structureData.IsMandatory,
-                    PrerequisiteSubjectIds = prerequisiteIds,
-                    PrerequisitesText = structureData.PrerequisitesText,
-                    CreatedAt = DateTimeOffset.UtcNow
-                });
             }
+            response.SubjectIds.AddRange(createdSubjects.Select(s => s.Id));
 
-            if (structuresToInsert.Any())
+
+            foreach (var subject in createdSubjects)
             {
-                var insertedStructures = await _curriculumStructureRepository.AddRangeAsync(structuresToInsert, cancellationToken);
-                _logger.LogInformation("Bulk created {Count} curriculum structures", structuresToInsert.Count);
+                var mappingExists = await _programSubjectRepository.AnyAsync(ps => ps.ProgramId == program.Id && ps.SubjectId == subject.Id, cancellationToken);
+                if (!mappingExists)
+                {
+                    var programSubject = new CurriculumProgramSubject
+                    {
+                        ProgramId = program.Id,
+                        SubjectId = subject.Id
+                    };
+                    await _programSubjectRepository.AddAsync(programSubject, cancellationToken);
+                }
             }
+            _logger.LogInformation("Created {Count} program-subject mappings.", createdSubjects.Count);
+
 
             response.Message = "Curriculum imported successfully";
             return response;
-        }
-
-        private string ComputeSha256Hash(string input)
-        {
-            using var sha256 = SHA256.Create();
-            var bytes = Encoding.UTF8.GetBytes(input);
-            var hash = sha256.ComputeHash(bytes);
-            return Convert.ToHexString(hash).ToLowerInvariant();
         }
     }
 }

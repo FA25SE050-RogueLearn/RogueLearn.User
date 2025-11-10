@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
@@ -5,9 +6,12 @@ using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using DotNetEnv;
 using BuildingBlocks.Shared.Authentication;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.SemanticKernel;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
+using RogueLearn.User.Application.Services;
 
 // Load environment variables from .env file
 Env.Load();
@@ -39,7 +43,20 @@ try
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
+    
+    var supabaseConnStr =  builder.Configuration["Supabase:ConnStr"];
+    builder.Services.AddHangfire(configuration => configuration
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(supabaseConnStr, new PostgreSqlStorageOptions()
+        {
+            SchemaName = "hangfire"
+        }));
+    
+    builder.Services.AddScoped<IQuestStepGenerationService, QuestStepGenerationService>(); 
 
+    builder.Services.AddHangfireServer();
     // --- SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
     builder.Services.AddScoped(sp =>
     {
@@ -96,22 +113,20 @@ try
     app.UseSwagger(c =>
     {
         c.RouteTemplate = "swagger/{documentName}/swagger.json";
-        // Support reverse proxy path base
-        c.PreSerializeFilters.Add((swagger, httpReq) =>
-        {
-            swagger.Servers = new List<Microsoft.OpenApi.Models.OpenApiServer>
-            {
-                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/user-service" },
-                new Microsoft.OpenApi.Models.OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}/" }
-            };
-        });
+
+        // MODIFICATION: The PreSerializeFilters block has been removed entirely
+        // to prevent the '/user-service' prefix from being added to the server URLs
+        // in the generated swagger.json file.
     });
     app.UseSwaggerUI(c =>
     {
-        // Use a relative endpoint so it works whether or not a reverse proxy path base is present
-        // With RouteTemplate = "swagger/{documentName}/swagger.json" this resolves to /swagger/v1/swagger.json
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
-        c.RoutePrefix = "swagger";
+        c.RoutePrefix = string.Empty;
+    });
+    
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        // Optional: Add authentication to prevent public access
     });
 
     app.UseCors("AllowAll");

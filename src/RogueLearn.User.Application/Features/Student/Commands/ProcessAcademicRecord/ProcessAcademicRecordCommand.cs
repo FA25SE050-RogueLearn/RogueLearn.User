@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommand.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommand.cs
 using MediatR;
 using System.Text.Json.Serialization;
 
@@ -11,7 +11,5 @@ public class ProcessAcademicRecordCommand : IRequest<ProcessAcademicRecordRespon
 
     public string FapHtmlContent { get; set; } = string.Empty;
 
-    // We need to know which curriculum this record belongs to,
-    // as the HTML might not contain this context.
-    public Guid CurriculumVersionId { get; set; }
+    public Guid CurriculumProgramId { get; set; }
 }

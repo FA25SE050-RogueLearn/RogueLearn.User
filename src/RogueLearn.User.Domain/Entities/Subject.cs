@@ -1,5 +1,7 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Subject.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
+using System.Collections.Generic;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -17,6 +19,16 @@ public class Subject : BaseEntity
 
     [Column("description")]
     public string? Description { get; set; }
+
+    // MODIFIED: This property is reverted to Dictionary<string, object> to work with the new deep deserialization logic.
+    [Column("content")]
+    public Dictionary<string, object>? Content { get; set; }
+
+    [Column("semester")]
+    public int? Semester { get; set; }
+
+    [Column("prerequisite_subject_ids")]
+    public Guid[]? PrerequisiteSubjectIds { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

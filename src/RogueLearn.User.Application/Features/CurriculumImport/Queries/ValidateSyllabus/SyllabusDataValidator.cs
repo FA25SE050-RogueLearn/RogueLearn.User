@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Queries/ValidateSyllabus/SyllabusDataValidator.cs
 using FluentValidation;
 using RogueLearn.User.Application.Models;
 
@@ -47,9 +48,11 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .SetValidator(new CourseLearningOutcomeValidator())
             .When(x => x.CourseLearningOutcomes != null);
 
-        RuleForEach(x => x.WeeklySchedule)
-            .SetValidator(new SyllabusWeekValidator())
-            .When(x => x.WeeklySchedule != null);
+        // MODIFIED: The validation rule now targets the 'SessionSchedule' property
+        // and uses the correctly renamed 'SyllabusSessionValidator'.
+        RuleForEach(x => x.SessionSchedule)
+            .SetValidator(new SyllabusSessionValidator())
+            .When(x => x.SessionSchedule != null);
 
         RuleForEach(x => x.Assessments)
             .SetValidator(new AssessmentItemValidator())
@@ -87,21 +90,26 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
     }
 }
 
-public class SyllabusWeekValidator : AbstractValidator<SyllabusWeek>
+// MODIFIED: The class has been renamed from 'SyllabusWeekValidator' to 'SyllabusSessionValidator'
+// and now validates the 'SyllabusSessionDto' type.
+public class SyllabusSessionValidator : AbstractValidator<SyllabusSessionDto>
 {
-    public SyllabusWeekValidator()
+    public SyllabusSessionValidator()
     {
-        RuleFor(x => x.WeekNumber)
+        // MODIFIED: The rule now validates 'SessionNumber' instead of 'WeekNumber'.
+        RuleFor(x => x.SessionNumber)
             .GreaterThan(0)
-            .WithMessage("Week number must be greater than 0.")
-            .LessThanOrEqualTo(52)
-            .WithMessage("Week number cannot exceed 52.");
+            .WithMessage("Session number must be greater than 0.")
+            // MODIFIED: The upper limit is increased to accommodate more sessions than weeks.
+            .LessThanOrEqualTo(100)
+            .WithMessage("Session number cannot exceed 100.");
 
         RuleFor(x => x.Topic)
             .NotEmpty()
-            .WithMessage("Week topic is required.")
+            // MODIFIED: The error message is updated for clarity.
+            .WithMessage("Session topic is required.")
             .MaximumLength(500)
-            .WithMessage("Week topic cannot exceed 500 characters.");
+            .WithMessage("Session topic cannot exceed 500 characters.");
 
         RuleFor(x => x.Activities)
             .Must(activities => activities == null || activities.All(a => !string.IsNullOrWhiteSpace(a)))
@@ -123,7 +131,7 @@ public class SyllabusWeekValidator : AbstractValidator<SyllabusWeek>
             .WithMessage("Each reading material cannot exceed 300 characters.")
             .When(x => x.Readings != null);
 
-        // Per-week constructive questions
+        // Per-session constructive questions
         RuleForEach(x => x.ConstructiveQuestions)
             .SetValidator(new ConstructiveQuestionValidator())
             .When(x => x.ConstructiveQuestions != null);

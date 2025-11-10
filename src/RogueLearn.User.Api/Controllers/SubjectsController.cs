@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/SubjectsController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
@@ -6,11 +7,11 @@ using RogueLearn.User.Application.Features.Subjects.Commands.UpdateSubject;
 using RogueLearn.User.Application.Features.Subjects.Commands.DeleteSubject;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetSubjectById;
-using RogueLearn.User.Application.Features.SyllabusVersions.Queries.GetSyllabusVersionsBySubject;
-using RogueLearn.User.Application.Features.SyllabusVersions.Commands.CreateSyllabusVersion;
-using RogueLearn.User.Application.Features.SyllabusVersions.Commands.UpdateSyllabusVersion;
-using RogueLearn.User.Application.Features.SyllabusVersions.Commands.DeleteSyllabusVersion;
-using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText; 
+using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
+using RogueLearn.User.Application.Features.SubjectSkillMappings.Queries.GetSubjectSkillMappings;
+using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.AddSubjectSkillMapping;
+using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.RemoveSubjectSkillMapping;
+using BuildingBlocks.Shared.Authentication; // Ensure this is present
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -28,22 +29,29 @@ public class SubjectsController : ControllerBase
 
     /// <summary>
     /// Imports a single subject from raw text, creating or updating it in the master catalog.
+    /// This is the primary endpoint for populating syllabus content.
     /// </summary>
-    [HttpPost("import-from-text")] // NEW ENDPOINT
+    // MODIFIED: Endpoint signature is simplified. ProgramId is no longer needed from the client.
+    [HttpPost("import-from-text")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<CreateSubjectResponse>> ImportFromText([FromForm] string rawText, CancellationToken cancellationToken)
+    public async Task<ActionResult<CreateSubjectResponse>> ImportFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(rawText))
+        if (string.IsNullOrWhiteSpace(request.RawText))
         {
             return BadRequest("The 'rawText' form field is required and cannot be empty.");
         }
 
-        var command = new ImportSubjectFromTextCommand { RawText = rawText };
+        // MODIFIED: We now get the user's ID directly from their authenticated token.
+        var command = new ImportSubjectFromTextCommand
+        {
+            RawText = request.RawText,
+            AuthUserId = User.GetAuthUserId()
+        };
         var result = await _mediator.Send(command, cancellationToken);
-        // Return 200 OK because it's an "upsert" operation which could be a create or update.
+        // Returns 200 OK because it's an "upsert" (create or update).
         return Ok(result);
     }
 
@@ -102,6 +110,43 @@ public class SubjectsController : ControllerBase
     {
         var command = new DeleteSubjectCommand { Id = id };
         await _mediator.Send(command);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Gets all skill mappings for a specific subject.
+    /// </summary>
+    [HttpGet("{subjectId:guid}/skill-mappings")]
+    [ProducesResponseType(typeof(List<SubjectSkillMappingDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSkillMappings(Guid subjectId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSubjectSkillMappingsQuery { SubjectId = subjectId }, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Maps a skill to a subject with a specific relevance weight.
+    /// </summary>
+    [HttpPost("{subjectId:guid}/skill-mappings")]
+    [ProducesResponseType(typeof(AddSubjectSkillMappingResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> AddSkillMapping(Guid subjectId, [FromBody] AddSubjectSkillMappingCommand command, CancellationToken cancellationToken)
+    {
+        command.SubjectId = subjectId;
+        var result = await _mediator.Send(command, cancellationToken);
+        return CreatedAtAction(nameof(GetSkillMappings), new { subjectId = result.SubjectId }, result);
+    }
+
+    /// <summary>
+    /// Removes a skill mapping from a subject.
+    /// </summary>
+    [HttpDelete("{subjectId:guid}/skill-mappings/{skillId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RemoveSkillMapping(Guid subjectId, Guid skillId, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new RemoveSubjectSkillMappingCommand { SubjectId = subjectId, SkillId = skillId }, cancellationToken);
         return NoContent();
     }
 }

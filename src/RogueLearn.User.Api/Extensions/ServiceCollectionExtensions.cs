@@ -7,6 +7,7 @@ using RogueLearn.User.Application.Features.UserProfiles.Commands.LogNewUser;
 using RogueLearn.User.Application.Mappings;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Services;
 using System.Reflection;
 using RogueLearn.User.Infrastructure.Services;
 
@@ -38,8 +39,9 @@ public static class ServiceCollectionExtensions
         var googleSearchEngineId = configuration["GoogleSearch:SearchEngineId"] ?? throw new InvalidOperationException("GoogleSearch:SearchEngineId is not configured.");
         services.AddSingleton<IWebSearchService>(
                 new GoogleWebSearchService(googleSearchApiKey, googleSearchEngineId));
-        // Register FLM SK plugin
-        services.AddScoped<IFlmExtractionPlugin, FlmExtractionPlugin>();
+        // Register extraction plugins with new, separated responsibilities.
+        services.AddScoped<ICurriculumExtractionPlugin, CurriculumExtractionPlugin>();
+        services.AddScoped<ISyllabusExtractionPlugin, SyllabusExtractionPlugin>();
         // Register Roadmap SK plugin
         services.AddScoped<IRoadmapExtractionPlugin, RoadmapExtractionPlugin>();
         // Register Tagging SK plugin
@@ -55,6 +57,11 @@ public static class ServiceCollectionExtensions
         // ADDED: Register the new plugin for quest step generation.
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
         services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
+
+        // Register prompt builders
+        services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
+        services.AddScoped<QuestStepsPromptBuilder>();
+
         return services;
     }
 

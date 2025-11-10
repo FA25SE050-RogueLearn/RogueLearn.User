@@ -11,102 +11,54 @@ public class CompleteOnboardingCommandHandler : IRequestHandler<CompleteOnboardi
 {
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly ICurriculumProgramRepository _curriculumProgramRepository;
-    private readonly ICurriculumVersionRepository _curriculumVersionRepository;
     private readonly IClassRepository _classRepository;
-    private readonly IStudentEnrollmentRepository _studentEnrollmentRepository;
     private readonly ILogger<CompleteOnboardingCommandHandler> _logger;
 
     public CompleteOnboardingCommandHandler(
         IUserProfileRepository userProfileRepository,
         ICurriculumProgramRepository curriculumProgramRepository,
-        ICurriculumVersionRepository curriculumVersionRepository,
         IClassRepository classRepository,
-        IStudentEnrollmentRepository studentEnrollmentRepository,
         ILogger<CompleteOnboardingCommandHandler> logger)
     {
         _userProfileRepository = userProfileRepository;
         _curriculumProgramRepository = curriculumProgramRepository;
-        _curriculumVersionRepository = curriculumVersionRepository;
         _classRepository = classRepository;
-        _studentEnrollmentRepository = studentEnrollmentRepository;
         _logger = logger;
     }
 
     public async Task Handle(CompleteOnboardingCommand request, CancellationToken cancellationToken)
     {
-        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
-        if (userProfile == null)
-        {
-            throw new NotFoundException("UserProfile", request.AuthUserId);
-        }
+        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
+            ?? throw new NotFoundException(nameof(UserProfile), request.AuthUserId);
 
         if (userProfile.OnboardingCompleted)
         {
             throw new BadRequestException("User has already completed onboarding.");
         }
 
-        // --- MODIFIED LOGIC START ---
-
-        // 1. Validate the provided Program ID.
-        var curriculumProgram = await _curriculumProgramRepository.GetByIdAsync(request.CurriculumProgramId, cancellationToken);
-        if (curriculumProgram == null)
+        // 1. Validate the provided Program ID exists.
+        if (!await _curriculumProgramRepository.ExistsAsync(request.CurriculumProgramId, cancellationToken))
         {
             throw new BadRequestException($"Invalid CurriculumProgramId: {request.CurriculumProgramId}");
         }
 
-        // 2. Find the latest active version for the selected program.
-        var versions = await _curriculumVersionRepository.FindAsync(
-            v => v.ProgramId == request.CurriculumProgramId && v.IsActive == true,
-            cancellationToken);
-
-        var latestVersion = versions.OrderByDescending(v => v.EffectiveYear).ThenByDescending(v => v.CreatedAt).FirstOrDefault();
-        if (latestVersion == null)
-        {
-            throw new BadRequestException($"No active curriculum version found for program: {curriculumProgram.ProgramName}");
-        }
-
-        // 3. Validate the Career Roadmap ID.
+        // 2. Validate the Career Roadmap (Class) ID exists.
         if (!await _classRepository.ExistsAsync(request.CareerRoadmapId, cancellationToken))
         {
             throw new BadRequestException($"Invalid CareerRoadmapId: {request.CareerRoadmapId}");
         }
 
-        // 4. MODIFIED: Check for an existing enrollment to ensure idempotency.
-        var existingEnrollment = await _studentEnrollmentRepository.FirstOrDefaultAsync(
-            e => e.AuthUserId == request.AuthUserId && e.CurriculumVersionId == latestVersion.Id,
-            cancellationToken);
-
-        if (existingEnrollment == null)
-        {
-            // If no enrollment exists, create it.
-            var enrollment = new StudentEnrollment
-            {
-                AuthUserId = request.AuthUserId,
-                CurriculumVersionId = latestVersion.Id,
-                EnrollmentDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                Status = Domain.Enums.EnrollmentStatus.Active
-            };
-            await _studentEnrollmentRepository.AddAsync(enrollment, cancellationToken);
-            _logger.LogInformation("Created new enrollment for user {AuthUserId} in curriculum version {VersionId}", request.AuthUserId, latestVersion.Id);
-        }
-        else
-        {
-            // If enrollment already exists, log it and proceed.
-            _logger.LogInformation("Existing enrollment found for user {AuthUserId} in curriculum version {VersionId}. Skipping creation.", request.AuthUserId, latestVersion.Id);
-        }
-
-
-        // 5. Update the user's profile with their final choices.
-        userProfile.RouteId = curriculumProgram.Id;
+        // 3. Update the user's profile with their final choices.
+        // This handler no longer creates an enrollment record. That is now the responsibility
+        // of the ProcessAcademicRecord command handler upon first transcript sync.
+        userProfile.RouteId = request.CurriculumProgramId;
         userProfile.ClassId = request.CareerRoadmapId;
         userProfile.OnboardingCompleted = true;
         userProfile.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _userProfileRepository.UpdateAsync(userProfile, cancellationToken);
 
-        _logger.LogInformation("User {AuthUserId} completed onboarding with RouteId {RouteId} (VersionId: {VersionId}) and ClassId {ClassId}",
-            request.AuthUserId, userProfile.RouteId, latestVersion.Id, userProfile.ClassId);
-
-        // --- MODIFIED LOGIC END ---
+        _logger.LogInformation("User {AuthUserId} completed onboarding with RouteId {RouteId} and ClassId {ClassId}",
+            request.AuthUserId, userProfile.RouteId, userProfile.ClassId);
     }
 }

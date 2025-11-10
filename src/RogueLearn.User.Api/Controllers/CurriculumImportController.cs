@@ -1,9 +1,9 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/CurriculumImportController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum;
-using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportSyllabus;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
 using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateSyllabus;
 using RogueLearn.User.Application.Interfaces;
@@ -36,18 +36,17 @@ public class CurriculumImportController : ControllerBase
     /// <response code="200">Curriculum imported successfully</response>
     /// <response code="400">Invalid request data or import validation failed</response>
     [HttpPost("curriculum")]
-    [Consumes("multipart/form-data")] // MODIFIED: Specifies the expected content type.
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ImportCurriculum([FromForm] string rawText) // MODIFIED: Changed from [FromBody] to [FromForm] and simplified signature.
+    public async Task<IActionResult> ImportCurriculum([FromForm] string rawText)
     {
         if (string.IsNullOrWhiteSpace(rawText))
         {
             return BadRequest("Raw text is required");
         }
 
-        // MODIFIED: Manually construct the command from the form data.
         var command = new ImportCurriculumCommand { RawText = rawText };
 
         var result = await _mediator.Send(command);
@@ -60,37 +59,7 @@ public class CurriculumImportController : ControllerBase
         return BadRequest(result);
     }
 
-    /// <summary>
-    /// Imports syllabus data from raw text and processes it into structured syllabus entities.
-    /// </summary>
-    /// <param name="rawText">The import command containing raw syllabus text.</param>
-    /// <returns>Success response with imported syllabus data or error response with validation details</returns>
-    /// <response code="200">Syllabus imported successfully</response>
-    /// <response code="400">Invalid request data or import validation failed</response>
-    [HttpPost("syllabus")]
-    [Consumes("multipart/form-data")] // MODIFIED: Specifies the expected content type.
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ImportSyllabus([FromForm] string rawText) // MODIFIED: Changed from [FromBody] to [FromForm].
-    {
-        if (string.IsNullOrWhiteSpace(rawText))
-        {
-            return BadRequest("Raw text is required");
-        }
 
-        // MODIFIED: Manually construct the command.
-        var command = new ImportSyllabusCommand { RawText = rawText };
-
-        var result = await _mediator.Send(command);
-
-        if (result.IsSuccess)
-        {
-            return Ok(result);
-        }
-
-        return BadRequest(result);
-    }
 
     /// <summary>
     /// Validates curriculum data from raw text without importing it.
@@ -101,18 +70,17 @@ public class CurriculumImportController : ControllerBase
     /// <response code="400">Invalid request data</response>
     [HttpPost("curriculum/validate")]
     [AllowAnonymous] // TEMP: Allow local testing without auth
-    [Consumes("multipart/form-data")] // MODIFIED: Specifies the expected content type.
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ValidateCurriculum([FromForm] string rawText) // MODIFIED: Changed from [FromBody] to [FromForm].
+    public async Task<IActionResult> ValidateCurriculum([FromForm] string rawText)
     {
         if (string.IsNullOrWhiteSpace(rawText))
         {
             return BadRequest("Raw text is required");
         }
 
-        // MODIFIED: Manually construct the query.
         var query = new ValidateCurriculumQuery { RawText = rawText };
 
         var result = await _mediator.Send(query);
@@ -128,18 +96,17 @@ public class CurriculumImportController : ControllerBase
     /// <response code="400">Invalid request data</response>
     [HttpPost("syllabus/validate")]
     [AllowAnonymous] // TEMP: Allow local testing without auth
-    [Consumes("multipart/form-data")] // MODIFIED: Specifies the expected content type.
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ValidateSyllabus([FromForm] string rawText) // MODIFIED: Changed from [FromBody] to [FromForm].
+    public async Task<IActionResult> ValidateSyllabus([FromForm] string rawText)
     {
         if (string.IsNullOrWhiteSpace(rawText))
         {
             return BadRequest("Raw text is required");
         }
 
-        // MODIFIED: Manually construct the query.
         var query = new ValidateSyllabusQuery { RawText = rawText };
 
         var result = await _mediator.Send(query);
