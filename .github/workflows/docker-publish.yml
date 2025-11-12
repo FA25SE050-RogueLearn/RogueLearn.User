@@ -81,9 +81,6 @@ jobs:
               echo "No old image found to remove."
             fi
 
-            echo "--- Pulling new image from Docker Hub ---"
-            docker pull ${{ env.IMAGE_NAME }}:latest
-
             echo "--- Bringing up Docker Swarm services ---"
             rlup
 
