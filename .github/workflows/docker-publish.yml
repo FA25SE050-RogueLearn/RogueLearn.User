@@ -91,3 +91,22 @@ jobs:
           docker stack deploy -c docker-compose-swarm.yaml roguelearn || true
 
           echo "--- Deployment complete ---"
+          
+      - name: Create Deployment Summary
+        # The 'if: always()' condition ensures this step runs even if the one above fails
+        if: always()
+        run: |
+          echo "### 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY # Adds a blank line
+          
+          if [[ ${{ job.status }} == 'success' ]]; then
+            echo "✅ **Status:** Deployment completed successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status:** Deployment failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Deployed** | \`${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Stack** | \`${{ env.STACK_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed On** | \`${{ runner.name }}\` |" >> $GITHUB_STEP_SUMMARY
