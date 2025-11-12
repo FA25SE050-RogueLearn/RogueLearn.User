@@ -62,24 +62,18 @@ jobs:
       - name: Show runner context
         run: |
           echo "Runner name: ${{ runner.name }}"
-          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "Current directory is: $(pwd)"
+          echo "Workspace is: $GITHUB_WORKSPACE"
+          
       - name: Redeploy Docker Swarm Stack
         shell: bash
         run: |
-          set -e
-          TARGET_DIR=""
-          if [ -n "${{ vars.DEPLOY_DIR }}" ] && [ -d "${{ vars.DEPLOY_DIR }}" ]; then
-            TARGET_DIR="${{ vars.DEPLOY_DIR }}"
-          elif [ -d "$GITHUB_WORKSPACE/roguelearn" ]; then
-            TARGET_DIR="$GITHUB_WORKSPACE/roguelearn"
-          else
-            TARGET_DIR="$GITHUB_WORKSPACE"
-          fi
-          echo "--- Using deploy directory: ${TARGET_DIR} ---"
-          cd "${TARGET_DIR}"
+          echo "--- Changing to deploy directory: /home/ubuntu/roguelearn ---"
+          cd /home/ubuntu/roguelearn
 
+          # The rest of your script can now remain the same
           echo "--- Bringing down Docker Swarm services ---"
-          rldown || true
+          docker stack rm roguelearn
 
           echo "--- Removing old Docker image (latest) ---"
           OLD_IMAGE_ID=$(docker images -q $IMAGE_NAME:latest)
@@ -89,7 +83,30 @@ jobs:
             echo "No old image found to remove."
           fi
 
+          echo "--- Pulling new image from Docker Hub ---"
+          docker pull $IMAGE_NAME:latest
+
+          # ... etc. ...
           echo "--- Bringing up Docker Swarm services ---"
-          rlup
+          docker stack deploy -c docker-compose-swarm.yaml roguelearn || true
 
           echo "--- Deployment complete ---"
+          
+      - name: Create Deployment Summary
+        # The 'if: always()' condition ensures this step runs even if the one above fails
+        if: always()
+        run: |
+          echo "### 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY # Adds a blank line
+          
+          if [[ ${{ job.status }} == 'success' ]]; then
+            echo "✅ **Status:** Deployment completed successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status:** Deployment failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Deployed** | \`${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Stack** | \`${{ env.STACK_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed On** | \`${{ runner.name }}\` |" >> $GITHUB_STEP_SUMMARY
