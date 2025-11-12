@@ -62,12 +62,15 @@ jobs:
       - name: Show runner context
         run: |
           echo "Runner name: ${{ runner.name }}"
-          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "Current directory is: $(pwd)"
+          echo "Workspace is: $GITHUB_WORKSPACE"
+          
       - name: Redeploy Docker Swarm Stack
         shell: bash
         run: |
-          echo "--- Using deploy directory: ${TARGET_DIR} ---"
-          cd "roguelearn"
+          # Use the absolute path to your deployment directory
+          echo "--- Changing to deploy directory: /home/ubuntu/roguelearn ---"
+          cd /home/ubuntu/roguelearn
 
           echo "--- Bringing down Docker Swarm services ---"
           rldown || true
@@ -79,6 +82,10 @@ jobs:
           else
             echo "No old image found to remove."
           fi
+          
+          # You might need to explicitly pull the new image on the runner
+          echo "--- Pulling new image from Docker Hub ---"
+          docker pull $IMAGE_NAME:latest
 
           echo "--- Bringing up Docker Swarm services ---"
           rlup
