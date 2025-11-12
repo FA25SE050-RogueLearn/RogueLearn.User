@@ -1,4 +1,4 @@
-name: Build and Push RogueLearn.User Docker Image
+name: Build, Push, and Deploy RogueLearn.User
 
 on:
   push:
@@ -53,35 +53,43 @@ jobs:
           echo "Image pushed: $IMAGE_NAME:latest"
 
   deploy-to-server:
-    name: Deploy to Proxmox VM
+    name: Deploy on Self-Hosted Runner
     needs: docker
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     env:
       IMAGE_NAME: soybean2610/roguelearn-user
     steps:
-      - name: SSH and Redeploy on Proxmox VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-            echo "--- Navigating to project directory ---"
-            cd roguelearn
+      - name: Show runner context
+        run: |
+          echo "Runner name: ${{ runner.name }}"
+          echo "Workspace: $GITHUB_WORKSPACE"
+      - name: Redeploy Docker Swarm Stack
+        shell: bash
+        run: |
+          set -e
+          TARGET_DIR=""
+          if [ -n "${{ vars.DEPLOY_DIR }}" ] && [ -d "${{ vars.DEPLOY_DIR }}" ]; then
+            TARGET_DIR="${{ vars.DEPLOY_DIR }}"
+          elif [ -d "$GITHUB_WORKSPACE/roguelearn" ]; then
+            TARGET_DIR="$GITHUB_WORKSPACE/roguelearn"
+          else
+            TARGET_DIR="$GITHUB_WORKSPACE"
+          fi
+          echo "--- Using deploy directory: ${TARGET_DIR} ---"
+          cd "${TARGET_DIR}"
 
-            echo "--- Bringing down Docker Swarm services ---"
-            rldown || true
+          echo "--- Bringing down Docker Swarm services ---"
+          rldown || true
 
-            echo "--- Removing old Docker image (latest) ---"
-            OLD_IMAGE_ID=$(docker images -q ${{ env.IMAGE_NAME }}:latest)
-            if [ -n "$OLD_IMAGE_ID" ]; then
-              docker rmi "$OLD_IMAGE_ID" || true
-            else
-              echo "No old image found to remove."
-            fi
+          echo "--- Removing old Docker image (latest) ---"
+          OLD_IMAGE_ID=$(docker images -q $IMAGE_NAME:latest)
+          if [ -n "$OLD_IMAGE_ID" ]; then
+            docker rmi "$OLD_IMAGE_ID" || true
+          else
+            echo "No old image found to remove."
+          fi
 
-            echo "--- Bringing up Docker Swarm services ---"
-            rlup
+          echo "--- Bringing up Docker Swarm services ---"
+          rlup
 
-            echo "--- Deployment complete ---"
+          echo "--- Deployment complete ---"
