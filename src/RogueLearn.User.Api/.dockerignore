@@ -1,0 +1,7 @@
+# Ignore common build artifacts and development files
+node_modules/
+.git/
+.env
+*.log
+tmp/
+dist/
