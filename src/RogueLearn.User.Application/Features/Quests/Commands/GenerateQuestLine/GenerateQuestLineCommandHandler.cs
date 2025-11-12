@@ -20,8 +20,6 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
     private readonly IQuestChapterRepository _questChapterRepository;
     private readonly IQuestRepository _questRepository;
     private readonly ILogger<GenerateQuestLineCommandHandler> _logger;
-    private readonly IMediator _mediator;
-    private readonly IBackgroundJobClient _backgroundJobClient;
 
     public GenerateQuestLineCommandHandler(
         IUserProfileRepository userProfileRepository,
@@ -31,10 +29,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         ILearningPathRepository learningPathRepository,
         IQuestChapterRepository questChapterRepository,
         IQuestRepository questRepository,
-        ILogger<GenerateQuestLineCommandHandler> logger,
-        IMediator mediator,
-        IBackgroundJobClient backgroundJobClient
-        )
+        ILogger<GenerateQuestLineCommandHandler> logger)
     {
         _userProfileRepository = userProfileRepository;
         _subjectRepository = subjectRepository;
@@ -44,8 +39,6 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         _questChapterRepository = questChapterRepository;
         _questRepository = questRepository;
         _logger = logger;
-        _mediator = mediator;
-        _backgroundJobClient = backgroundJobClient;
     }
 
     public async Task<GenerateQuestLineResponse> Handle(GenerateQuestLine request, CancellationToken cancellationToken)
@@ -66,7 +59,33 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             throw new BadRequestException("Please select a class first.");
         }
 
-        _logger.LogInformation("Generating QuestLine for User: {username}", userProfile.Username);
+        _logger.LogInformation("Generating QuestLine structure for User: {username}", userProfile.Username);
+
+        var existingLearningPath = (await _learningPathRepository.FindAsync(lp => lp.CreatedBy == request.AuthUserId, cancellationToken))
+            .FirstOrDefault();
+        if (existingLearningPath != null)
+        {
+            _logger.LogInformation("Existing learning path {LearningPathId} found for user. Deleting to regenerate.", existingLearningPath.Id);
+
+            var chaptersToDelete = (await _questChapterRepository.FindAsync(c => c.LearningPathId == existingLearningPath.Id, cancellationToken)).ToList();
+            var chapterIds = chaptersToDelete.Select(c => c.Id).ToList();
+
+            if (chapterIds.Any())
+            {
+                var questsToDelete = (await _questRepository.GetAllAsync(cancellationToken))
+                    .Where(q => q.QuestChapterId.HasValue && chapterIds.Contains(q.QuestChapterId.Value))
+                    .ToList();
+                var questIdsToDelete = questsToDelete.Select(q => q.Id).ToList();
+
+                if (questIdsToDelete.Any())
+                {
+                    _logger.LogInformation("Deleting {QuestCount} quests from old learning path.", questIdsToDelete.Count);
+                    await _questRepository.DeleteRangeAsync(questIdsToDelete, cancellationToken);
+                }
+            }
+
+            await _learningPathRepository.DeleteAsync(existingLearningPath.Id, cancellationToken);
+        }
 
         var learningPathToCreate = new LearningPath
         {
@@ -80,68 +99,22 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         var persistedLearningPath = await _learningPathRepository.AddAsync(learningPathToCreate, cancellationToken);
 
         var routeSubjects = await _subjectRepository.GetSubjectsByRoute(userProfile.RouteId.Value, cancellationToken);
-
-        var subjectMap = routeSubjects.ToDictionary(
-            subject => subject.Id,
-            subject => false
-        );
-
         var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(userProfile.ClassId.Value, cancellationToken);
 
-        foreach (var subject in classSubjects)
-        {
-            subjectMap[subject.Id] = false;
-        }
+        var allUserSubjects = routeSubjects.Concat(classSubjects).DistinctBy(s => s.Id).ToList();
 
-        var userSubjects =
-            await _studentSemesterSubjectRepository.FindAsync(s =>
-                s.AuthUserId == userProfile.AuthUserId,
-                cancellationToken
-            );
-
-        foreach (var subject in userSubjects)
-        {
-            if (subject.Status == SubjectEnrollmentStatus.Studying ||
-                subject.Status == SubjectEnrollmentStatus.NotPassed)
-            {
-                subjectMap.TryAdd(subject.SubjectId, true);
-            }
-        }
-
-        var semesterSubjectsMap = routeSubjects
+        var semesterSubjectsMap = allUserSubjects
             .Where(subject => subject.Semester.HasValue)
             .GroupBy(subject => subject.Semester!.Value)
             .ToDictionary(
                 group => group.Key,
-                group => group.Select(subject => subject.Id).ToList()
+                group => group.ToList()
             );
 
-        foreach (var subject in classSubjects)
-        {
-            if (subject.Semester.HasValue)
-            {
-                var semesterKey = subject.Semester.Value;
-                if (!semesterSubjectsMap.ContainsKey(semesterKey))
-                {
-                    semesterSubjectsMap[semesterKey] = new List<Guid>();
-                }
-
-                if (!semesterSubjectsMap[semesterKey].Contains(subject.Id))
-                {
-                    semesterSubjectsMap[semesterKey].Add(subject.Id);
-                }
-            }
-            else
-            {
-                _logger.LogWarning("Specialized subject {SubjectCode} with ID {SubjectId} has a null semester and will not be included in any Quest Chapter.", subject.SubjectCode, subject.Id);
-            }
-        }
-
         var questChaptersToInsert = new List<QuestChapter>();
-        // Create a temporary structure to hold chapter and its subjects before insertion.
-        var chapterPreperationList = new List<(QuestChapter chapter, List<Guid> subjectIds)>();
+        var chapterPreperationList = new List<(QuestChapter chapter, List<Subject> subjects)>();
 
-        foreach (var (semesterNumber, subjectIds) in semesterSubjectsMap.OrderBy(kvp => kvp.Key))
+        foreach (var (semesterNumber, subjectsInSemester) in semesterSubjectsMap.OrderBy(kvp => kvp.Key))
         {
             var questChapter = new QuestChapter
             {
@@ -154,67 +127,48 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             questChaptersToInsert.Add(questChapter);
-            chapterPreperationList.Add((questChapter, subjectIds));
+            chapterPreperationList.Add((questChapter, subjectsInSemester));
         }
 
-        // STEP 4a: First, bulk insert all the parent QuestChapter objects.
-        // Capture the result, which contains the entities with their final, database-assigned IDs.
         var persistedChapters = (await _questChapterRepository.AddRangeAsync(questChaptersToInsert, cancellationToken)).ToList();
 
         var questsToInsert = new List<Quest>();
 
-        // STEP 4b: Now, iterate through the *persisted* chapters to create the child Quest objects.
         foreach (var persistedChapter in persistedChapters)
         {
-            // Find the original list of subjects that belong to this chapter.
             var originalChapterData = chapterPreperationList.FirstOrDefault(p => p.chapter.Title == persistedChapter.Title);
-            if (originalChapterData.subjectIds == null) continue;
+            if (originalChapterData.subjects == null) continue;
 
             int questSequence = 1;
-            foreach (var subjectId in originalChapterData.subjectIds)
+            foreach (var subjectDetails in originalChapterData.subjects.OrderBy(s => s.SubjectCode))
             {
-                var subjectDetails = routeSubjects.FirstOrDefault(s => s.Id == subjectId) ?? classSubjects.FirstOrDefault(s => s.Id == subjectId);
-                if (subjectDetails != null)
+                // ARCHITECTURAL FIX: The content check is removed from here.
+                // This handler's responsibility is to create the quest 'shell' for ALL subjects in the curriculum.
+                // The check for content readiness will be performed by the process that schedules the step generation.
+
+                var quest = new Quest
                 {
-                    var quest = new Quest
-                    {
-                        Id = Guid.NewGuid(),
-                        Title = subjectDetails.SubjectName,
-                        Description = subjectDetails.Description ?? $"Embark on the quest for {subjectDetails.SubjectName}.",
-                        QuestType = QuestType.Practice,
-                        DifficultyLevel = DifficultyLevel.Beginner,
-                        // CRITICAL FIX: Use the ID from the `persistedChapter`, not the temporary in-memory object.
-                        QuestChapterId = persistedChapter.Id,
-                        SubjectId = subjectId,
-                        Sequence = questSequence++,
-                        Status = QuestStatus.NotStarted,
-                        CreatedBy = userProfile.AuthUserId,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                        UpdatedAt = DateTimeOffset.UtcNow
-                    };
-                    questsToInsert.Add(quest);
-                }
+                    Id = Guid.NewGuid(),
+                    Title = subjectDetails.SubjectName,
+                    Description = subjectDetails.Description ?? $"Embark on the quest for {subjectDetails.SubjectName}.",
+                    QuestType = QuestType.Practice,
+                    DifficultyLevel = DifficultyLevel.Beginner,
+                    QuestChapterId = persistedChapter.Id,
+                    SubjectId = subjectDetails.Id,
+                    Sequence = questSequence++,
+                    Status = QuestStatus.NotStarted,
+                    CreatedBy = userProfile.AuthUserId,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                };
+                questsToInsert.Add(quest);
             }
         }
 
-        // STEP 4c: With the correct parent IDs set, now bulk insert all the child Quest objects.
         await _questRepository.AddRangeAsync(questsToInsert, cancellationToken);
+        _logger.LogInformation("Successfully persisted {QuestCount} quest shells to the database.", questsToInsert.Count);
 
-        foreach (var quest in questsToInsert)
-        {
-            if (quest.SubjectId.HasValue &&
-                subjectMap.TryGetValue(quest.SubjectId.Value, out var shouldGenerateSteps))
-            {
-                if (shouldGenerateSteps)
-                {
-                    _logger.LogInformation("Queuing background job for quest step generation for Quest {QuestId}", quest.Id);
-                    _backgroundJobClient.Enqueue<IQuestStepGenerationService>(service =>
-                        service.GenerateQuestStepsAsync(request.AuthUserId, quest.Id));
-                }
-            }
-        }
-
-        _logger.LogInformation("Successfully generated QuestLine {LearningPathId}", persistedLearningPath.Id);
+        _logger.LogInformation("Successfully generated QuestLine structure {LearningPathId}", persistedLearningPath.Id);
 
         return new GenerateQuestLineResponse
         {

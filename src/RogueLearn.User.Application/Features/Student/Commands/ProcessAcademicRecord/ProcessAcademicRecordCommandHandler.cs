@@ -1,17 +1,18 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommandHandler.cs
+using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
+using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-using System.Text.Json;
-using RogueLearn.User.Application.Interfaces;
-using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
-// ADDED: For hashing the raw HTML content to create a unique cache key.
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
@@ -43,8 +44,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly IHtmlCleaningService _htmlCleaningService;
     private readonly ILogger<ProcessAcademicRecordCommandHandler> _logger;
     private readonly IMediator _mediator;
-    // ADDED: Inject the storage service to handle caching operations.
     private readonly ICurriculumImportStorage _storage;
+    private readonly IBackgroundJobClient _backgroundJobClient;
+    private readonly IQuestRepository _questRepository;
+    private readonly IQuestStepGenerationService _questStepGenerationService;
+
 
     public ProcessAcademicRecordCommandHandler(
         IFapExtractionPlugin fapPlugin,
@@ -58,8 +62,10 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         IHtmlCleaningService htmlCleaningService,
         ILogger<ProcessAcademicRecordCommandHandler> logger,
         IMediator mediator,
-        // ADDED: The storage service is now a required dependency.
-        ICurriculumImportStorage storage)
+        ICurriculumImportStorage storage,
+        IBackgroundJobClient backgroundJobClient,
+        IQuestRepository questRepository,
+        IQuestStepGenerationService questStepGenerationService)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -72,8 +78,10 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _htmlCleaningService = htmlCleaningService;
         _logger = logger;
         _mediator = mediator;
-        // ADDED: Assign the injected storage service to the private field.
         _storage = storage;
+        _backgroundJobClient = backgroundJobClient;
+        _questRepository = questRepository;
+        _questStepGenerationService = questStepGenerationService;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
@@ -95,10 +103,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         }
 
         var allowedSubjectIds = await BuildAllowedSubjectList(request.CurriculumProgramId, userProfile.ClassId.Value, cancellationToken);
-
-        // --- CACHING LOGIC START ---
-
-        // 1. Compute a hash of the raw HTML to use as a unique key for caching.
         var rawTextHash = ComputeSha256Hash(request.FapHtmlContent);
         string? extractedJson = await _storage.TryGetByHashJsonAsync("academic-records", rawTextHash, cancellationToken);
 
@@ -112,12 +116,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
             extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanText, cancellationToken);
 
-            // 3. After a successful extraction (cache miss), save the result to storage for future requests.
             if (!string.IsNullOrWhiteSpace(extractedJson))
             {
                 await _storage.SaveLatestAsync(
                     bucketName: "academic-records",
-                    programCode: request.CurriculumProgramId.ToString(), // Using program ID for folder structure
+                    programCode: request.CurriculumProgramId.ToString(),
                     versionCode: "fap-sync",
                     jsonContent: extractedJson,
                     rawTextContent: request.FapHtmlContent,
@@ -126,8 +129,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 _logger.LogInformation("Cache WRITE: Saved new academic record to cache for hash {Hash}.", rawTextHash);
             }
         }
-
-        // --- CACHING LOGIC END ---
 
         var fapData = JsonSerializer.Deserialize<FapRecordData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -172,6 +173,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         int recordsUpdated = 0;
         int recordsIgnored = 0;
 
+        var highPrioritySubjectIds = new HashSet<Guid>();
+
         foreach (var subjectRecord in fapData.Subjects)
         {
             if (!subjectCatalog.TryGetValue(subjectRecord.SubjectCode, out var subject))
@@ -186,6 +189,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 ss.AcademicYear == subjectRecord.AcademicYear);
 
             var parsedStatus = MapFapStatusToEnum(subjectRecord.Status);
+
+            if (parsedStatus == SubjectEnrollmentStatus.Studying || parsedStatus == SubjectEnrollmentStatus.NotPassed)
+            {
+                highPrioritySubjectIds.Add(subject.Id);
+            }
 
             if (existingRecord == null)
             {
@@ -215,8 +223,33 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             "Academic record sync complete. Records Added: {Added}, Records Updated: {Updated}, Records Ignored: {Ignored}",
             recordsAdded, recordsUpdated, recordsIgnored);
 
-        _logger.LogInformation("Dispatching GenerateQuestLine command for user {AuthUserId} to create learning path.", request.AuthUserId);
+        _logger.LogInformation("Dispatching GenerateQuestLine command for user {AuthUserId} to create learning path structure.", request.AuthUserId);
         var questLineResponse = await _mediator.Send(new GenerateQuestLine { AuthUserId = request.AuthUserId }, cancellationToken);
+
+        _logger.LogInformation("Scheduling background jobs for {Count} high-priority subjects.", highPrioritySubjectIds.Count);
+        var questsToSchedule = (await _questRepository.GetAllAsync(cancellationToken))
+            .Where(q => q.SubjectId.HasValue && highPrioritySubjectIds.Contains(q.SubjectId.Value))
+            .ToList();
+
+        int jobsScheduled = 0;
+        foreach (var quest in questsToSchedule)
+        {
+            // ARCHITECTURAL FIX: Check if the subject has content before scheduling the background job.
+            var subjectForQuest = subjectCatalog.Values.FirstOrDefault(s => s.Id == quest.SubjectId);
+            if (subjectForQuest != null && subjectForQuest.Content != null && subjectForQuest.Content.Any())
+            {
+                _logger.LogInformation("Scheduling background job for quest step generation for Quest {QuestId} (Subject: {SubjectCode})", quest.Id, subjectForQuest.SubjectCode);
+                _backgroundJobClient.Schedule<IQuestStepGenerationService>(
+                    service => service.GenerateQuestStepsAsync(request.AuthUserId, quest.Id),
+                    TimeSpan.FromSeconds(15));
+                jobsScheduled++;
+            }
+            else
+            {
+                _logger.LogWarning("Skipping auto-generation for priority quest {QuestId} because its subject ({SubjectCode}) is missing syllabus content.", quest.Id, subjectForQuest?.SubjectCode ?? "N/A");
+            }
+        }
+        _logger.LogInformation("Successfully scheduled {JobCount} background jobs for immediate quest step generation.", jobsScheduled);
 
         return new ProcessAcademicRecordResponse
         {
@@ -257,7 +290,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         };
     }
 
-    // ADDED: Helper method to compute a consistent hash for the raw HTML content.
     private static string ComputeSha256Hash(string input)
     {
         using var sha256 = SHA256.Create();

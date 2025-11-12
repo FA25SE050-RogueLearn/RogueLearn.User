@@ -3,6 +3,7 @@ using BuildingBlocks.Shared.Common;
 using BuildingBlocks.Shared.Interfaces;
 using Supabase;
 using System.Linq.Expressions;
+using static Supabase.Postgrest.Constants;
 
 namespace BuildingBlocks.Shared.Repositories;
 
@@ -179,13 +180,16 @@ public class GenericRepository<T> : IGenericRepository<T> where T : BaseEntity, 
 
     public virtual async Task DeleteRangeAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
     {
-        if (!ids.Any())
+        var idList = ids.ToList();
+        if (!idList.Any())
             return;
 
-        // Supabase supports bulk delete with IN clause
+        // ARCHITECTURAL FIX: The Supabase client's LINQ provider does not support .Contains() for where clauses.
+        // We must use the explicit Filter method with the "In" operator to perform a bulk delete.
+        // This correctly translates to a "id=in.(guid1,guid2,...)" PostgREST query.
         await _supabaseClient
             .From<T>()
-            .Where(x => ids.Contains(x.Id))
+            .Filter("id", Operator.In, idList.Select(id => id.ToString()).ToList())
             .Delete(cancellationToken: cancellationToken);
     }
 
