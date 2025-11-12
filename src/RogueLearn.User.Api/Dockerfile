@@ -31,6 +31,4 @@ RUN dotnet publish "./RogueLearn.User.Api.csproj" -c $BUILD_CONFIGURATION -o /ap
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-# Copy environment file for runtime configuration (if your app reads .env)
-COPY ["src/RogueLearn.User.Api/.env", ".env"]
 ENTRYPOINT ["dotnet", "RogueLearn.User.Api.dll"]

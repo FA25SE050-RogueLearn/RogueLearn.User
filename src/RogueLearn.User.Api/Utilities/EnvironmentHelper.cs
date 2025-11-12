@@ -7,6 +7,7 @@ public class EnvironmentHelper
     public static void LoadConfiguration()
     {
         var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
+        Console.WriteLine("App Environment: " + environment);
         
         if (environment == "Development")
         {
@@ -37,7 +38,6 @@ public class EnvironmentHelper
     private static void LoadProductionConfig()
     {
         Console.WriteLine("Loading Docker Secrets...");
-        // In production (Docker Swarm), try Docker Secrets first
         LoadDockerSecrets();
         
     }
@@ -67,10 +67,10 @@ public class EnvironmentHelper
                 var secretName = Path.GetFileName(secretFile);
                 var secretValue = File.ReadAllText(secretFile).Trim();
                 
-                // Use the secret name as-is (should be uppercase)
                 Environment.SetEnvironmentVariable(secretName, secretValue);
                 
-                Console.WriteLine($"✓ Loaded secret: {secretName}");
+                // Testing purpose, delete later
+                Console.WriteLine($"✓ Loaded secret: {secretName}, value = {secretValue}");
             }
             catch (Exception ex)
             {
