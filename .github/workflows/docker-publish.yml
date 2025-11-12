@@ -68,15 +68,12 @@ jobs:
       - name: Redeploy Docker Swarm Stack
         shell: bash
         run: |
-          # Source the bashrc file to load your aliases
-          source ~/.bashrc
-
           echo "--- Changing to deploy directory: /home/ubuntu/roguelearn ---"
           cd /home/ubuntu/roguelearn
 
           # The rest of your script can now remain the same
           echo "--- Bringing down Docker Swarm services ---"
-          rldown || true
+          docker stack rm roguelearn
 
           echo "--- Removing old Docker image (latest) ---"
           OLD_IMAGE_ID=$(docker images -q $IMAGE_NAME:latest)
@@ -91,6 +88,6 @@ jobs:
 
           # ... etc. ...
           echo "--- Bringing up Docker Swarm services ---"
-          rlup
+          docker stack deploy -c docker-compose-swarm.yaml roguelearn || true
 
           echo "--- Deployment complete ---"
