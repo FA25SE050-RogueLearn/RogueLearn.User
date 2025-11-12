@@ -67,10 +67,10 @@ public class EnvironmentHelper
                 var secretName = Path.GetFileName(secretFile);
                 var secretValue = File.ReadAllText(secretFile).Trim();
                 
-                // Use the secret name as-is (should be uppercase)
                 Environment.SetEnvironmentVariable(secretName, secretValue);
                 
-                Console.WriteLine($"✓ Loaded secret: {secretName}");
+                // Testing purpose, delete later
+                Console.WriteLine($"✓ Loaded secret: {secretName}, value = {secretValue}");
             }
             catch (Exception ex)
             {
