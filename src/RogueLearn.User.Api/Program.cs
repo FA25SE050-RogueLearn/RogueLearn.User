@@ -11,10 +11,12 @@ using Hangfire.PostgreSql;
 using Microsoft.SemanticKernel;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
+using RogueLearn.User.Api.Utilities;
 using RogueLearn.User.Application.Services;
 
 // Load environment variables from .env file
-Env.Load();
+
+EnvironmentHelper.LoadConfiguration();
 
 // Configure Serilog
 Log.Logger = SerilogConfiguration.CreateLogger();
