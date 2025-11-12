@@ -9,16 +9,6 @@ on:
       - 'building_blocks/**'
       - 'src/**'
       - '.github/workflows/docker-publish.yml'
-  workflow_dispatch:
-    inputs:
-      bump_strategy:
-        description: 'Version bump type: patch | minor | major (default: patch)'
-        required: false
-        default: 'patch'
-      base_version:
-        description: 'Optional base version to bump from (e.g., v1.0.7). If omitted, the workflow will detect the latest v1.x.x tag.'
-        required: false
-        default: ''
 
 concurrency:
   group: docker-publish-${{ github.ref }}
@@ -48,53 +38,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Determine next v1.x.x tag
-        id: version
-        env:
-          BUMP: ${{ inputs.bump_strategy || 'patch' }}
-          BASE_VERSION: ${{ inputs.base_version }}
-          REPO: soybean2610/roguelearn-user
-        shell: bash
-        run: |
-          set -eo pipefail
-          sudo apt-get update -y && sudo apt-get install -y jq
-
-          # Prefer Git tags (fast, avoids Docker Hub API auth). Fallback to Docker Hub tags if none found.
-          git fetch --tags --force || true
-          GIT_TAGS=$(git tag -l 'v1.*' || true)
-
-          if [ -n "$BASE_VERSION" ]; then
-            CURRENT="$BASE_VERSION"
-            echo "Using provided base_version: $CURRENT"
-          elif [ -n "$GIT_TAGS" ]; then
-            CURRENT=$(echo "$GIT_TAGS" | grep -E '^v1\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-            echo "Latest repo tag: $CURRENT"
-          else
-            echo "No repo tags found, checking Docker Hub for existing image tags..."
-            TAGS_JSON=$(curl -s "https://hub.docker.com/v2/repositories/${REPO}/tags/?page_size=100")
-            CURRENT=$(echo "$TAGS_JSON" | jq -r '.results[].name' | grep -E '^v1\.[0-9]+\.[0-9]+$' | \
-              awk -F'[v.]' '{printf "%s.%s.%s %s\n",$2,$3,$4,$0}' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n1 | awk '{print $2}')
-            if [ -z "$CURRENT" ]; then
-              CURRENT="v1.0.0"
-            fi
-            echo "Latest registry tag: $CURRENT"
-          fi
-
-          MAJOR=$(echo "$CURRENT" | sed -E 's/^v([0-9]+)\.[0-9]+\.[0-9]+$/\1/')
-          MINOR=$(echo "$CURRENT" | sed -E 's/^v[0-9]+\.([0-9]+)\.[0-9]+$/\1/')
-          PATCH=$(echo "$CURRENT" | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+)$/\1/')
-
-          case "$BUMP" in
-            patch) PATCH=$((PATCH + 1));;
-            minor) MINOR=$((MINOR + 1)); PATCH=0;;
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0;;
-            *) PATCH=$((PATCH + 1));; # default
-          esac
-
-          NEXT="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "next_tag=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Resolved next tag: $NEXT"
-
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -103,8 +46,45 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.next_tag }}
+            ${{ env.IMAGE_NAME }}:latest
 
       - name: Summary
         run: |
-          echo "Image pushed: $IMAGE_NAME:${{ steps.version.outputs.next_tag }}"
+          echo "Image pushed: $IMAGE_NAME:latest"
+
+  deploy-to-server:
+    name: Deploy to Proxmox VM
+    needs: docker
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: soybean2610/roguelearn-user
+    steps:
+      - name: SSH and Redeploy on Proxmox VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "--- Navigating to project directory ---"
+            cd roguelearn
+
+            echo "--- Bringing down Docker Swarm services ---"
+            rldown || true
+
+            echo "--- Removing old Docker image (latest) ---"
+            OLD_IMAGE_ID=$(docker images -q ${{ env.IMAGE_NAME }}:latest)
+            if [ -n "$OLD_IMAGE_ID" ]; then
+              docker rmi "$OLD_IMAGE_ID" || true
+            else
+              echo "No old image found to remove."
+            fi
+
+            echo "--- Pulling new image from Docker Hub ---"
+            docker pull ${{ env.IMAGE_NAME }}:latest
+
+            echo "--- Bringing up Docker Swarm services ---"
+            rlup
+
+            echo "--- Deployment complete ---"
