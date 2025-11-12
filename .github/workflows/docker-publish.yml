@@ -63,32 +63,11 @@ jobs:
         run: |
           echo "Runner name: ${{ runner.name }}"
           echo "Workspace: $GITHUB_WORKSPACE"
-          echo "Home: $HOME"
       - name: Redeploy Docker Swarm Stack
         shell: bash
         run: |
-          set -e
-          TARGET_DIR=""
-          CANDIDATES=(
-            "/roguelearn"
-            "$GITHUB_WORKSPACE/roguelearn"
-            "$HOME/roguelearn"
-            "/home/ubuntu/roguelearn"
-          )
-
-          for dir in "${CANDIDATES[@]}"; do
-            if [ -n "$dir" ] && [ -d "$dir" ]; then
-              TARGET_DIR="$dir"
-              break
-            fi
-          done
-
-          if [ -z "$TARGET_DIR" ]; then
-            echo "Deploy directory not found. Checked: ${CANDIDATES[*]}"
-            exit 1
-          fi
           echo "--- Using deploy directory: ${TARGET_DIR} ---"
-          cd "${TARGET_DIR}"
+          cd "roguelearn"
 
           echo "--- Bringing down Docker Swarm services ---"
           rldown || true
