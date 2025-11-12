@@ -9,6 +9,9 @@ using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
+// ADDED: For hashing the raw HTML content to create a unique cache key.
+using System.Security.Cryptography;
+using System.Text;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
@@ -35,12 +38,13 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ISubjectRepository _subjectRepository;
     private readonly ICurriculumProgramRepository _programRepository;
     private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
-    // FIX: The field name is corrected to match its usage throughout the class.
     private readonly IClassSpecializationSubjectRepository _classSpecializationSubjectRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IHtmlCleaningService _htmlCleaningService;
     private readonly ILogger<ProcessAcademicRecordCommandHandler> _logger;
     private readonly IMediator _mediator;
+    // ADDED: Inject the storage service to handle caching operations.
+    private readonly ICurriculumImportStorage _storage;
 
     public ProcessAcademicRecordCommandHandler(
         IFapExtractionPlugin fapPlugin,
@@ -49,11 +53,13 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         ISubjectRepository subjectRepository,
         ICurriculumProgramRepository programRepository,
         ICurriculumProgramSubjectRepository programSubjectRepository,
-        IClassSpecializationSubjectRepository classSpecializationSubjectRepository, // Parameter name is correct
+        IClassSpecializationSubjectRepository classSpecializationSubjectRepository,
         IUserProfileRepository userProfileRepository,
         IHtmlCleaningService htmlCleaningService,
         ILogger<ProcessAcademicRecordCommandHandler> logger,
-        IMediator mediator)
+        IMediator mediator,
+        // ADDED: The storage service is now a required dependency.
+        ICurriculumImportStorage storage)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -61,20 +67,19 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _subjectRepository = subjectRepository;
         _programRepository = programRepository;
         _programSubjectRepository = programSubjectRepository;
-        // FIX: The field assignment is corrected to use the consistent, descriptive name.
         _classSpecializationSubjectRepository = classSpecializationSubjectRepository;
         _userProfileRepository = userProfileRepository;
         _htmlCleaningService = htmlCleaningService;
         _logger = logger;
         _mediator = mediator;
+        // ADDED: Assign the injected storage service to the private field.
+        _storage = storage;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("[START] Processing academic record for user {AuthUserId}", request.AuthUserId);
 
-        // STEP 1: Get the user's profile to find their selected program (RouteId) and specialization (ClassId).
-        // This is the source of truth for the user's context.
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
             ?? throw new NotFoundException(nameof(UserProfile), request.AuthUserId);
 
@@ -89,12 +94,41 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             throw new NotFoundException(nameof(CurriculumProgram), request.CurriculumProgramId);
         }
 
-        // STEP 2: Call the helper method to build the master list of all valid subjects for this user.
-        // This is where the core validation logic resides.
         var allowedSubjectIds = await BuildAllowedSubjectList(request.CurriculumProgramId, userProfile.ClassId.Value, cancellationToken);
 
-        var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
-        var extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanText, cancellationToken);
+        // --- CACHING LOGIC START ---
+
+        // 1. Compute a hash of the raw HTML to use as a unique key for caching.
+        var rawTextHash = ComputeSha256Hash(request.FapHtmlContent);
+        string? extractedJson = await _storage.TryGetByHashJsonAsync("academic-records", rawTextHash, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(extractedJson))
+        {
+            _logger.LogInformation("Cache HIT: Found cached academic record for hash {Hash}. Skipping AI extraction.", rawTextHash);
+        }
+        else
+        {
+            _logger.LogInformation("Cache MISS: No cached record found for hash {Hash}. Proceeding with AI extraction.", rawTextHash);
+            var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
+            extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanText, cancellationToken);
+
+            // 3. After a successful extraction (cache miss), save the result to storage for future requests.
+            if (!string.IsNullOrWhiteSpace(extractedJson))
+            {
+                await _storage.SaveLatestAsync(
+                    bucketName: "academic-records",
+                    programCode: request.CurriculumProgramId.ToString(), // Using program ID for folder structure
+                    versionCode: "fap-sync",
+                    jsonContent: extractedJson,
+                    rawTextContent: request.FapHtmlContent,
+                    rawTextHash: rawTextHash,
+                    cancellationToken: cancellationToken);
+                _logger.LogInformation("Cache WRITE: Saved new academic record to cache for hash {Hash}.", rawTextHash);
+            }
+        }
+
+        // --- CACHING LOGIC END ---
+
         var fapData = JsonSerializer.Deserialize<FapRecordData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
         if (fapData == null)
@@ -117,8 +151,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             await _enrollmentRepository.AddAsync(enrollment, cancellationToken);
         }
 
-        // STEP 3: Build a local "catalog" of all subject details that the user is allowed to access.
-        // This query is now filtered by the master list we built in Step 2.
         var allAllowedSubjects = (await _subjectRepository.GetAllAsync(cancellationToken))
             .Where(s => allowedSubjectIds.Contains(s.Id))
             .ToList();
@@ -142,9 +174,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         foreach (var subjectRecord in fapData.Subjects)
         {
-            // STEP 4: This is the enforcement step.
-            // We look up the subject from the transcript in our master catalog.
-            // If it's not found, it means the subject is not part of the user's program OR their class, so we ignore it.
             if (!subjectCatalog.TryGetValue(subjectRecord.SubjectCode, out var subject))
             {
                 _logger.LogWarning("Subject {SubjectCode} from transcript not found in user's program/class catalog. Skipping.", subjectRecord.SubjectCode);
@@ -186,8 +215,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             "Academic record sync complete. Records Added: {Added}, Records Updated: {Updated}, Records Ignored: {Ignored}",
             recordsAdded, recordsUpdated, recordsIgnored);
 
-        // STEP 5: After successfully syncing the academic record, dispatch the next command in the workflow.
-        // This will create the LearningPath and the high-level Quests.
         _logger.LogInformation("Dispatching GenerateQuestLine command for user {AuthUserId} to create learning path.", request.AuthUserId);
         var questLineResponse = await _mediator.Send(new GenerateQuestLine { AuthUserId = request.AuthUserId }, cancellationToken);
 
@@ -201,31 +228,19 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         };
     }
 
-    /// <summary>
-    /// This private helper method is the core of the contextual validation.
-    /// It builds a complete and unique list of all subject IDs a user is associated with.
-    /// </summary>
     private async Task<HashSet<Guid>> BuildAllowedSubjectList(Guid programId, Guid classId, CancellationToken cancellationToken)
     {
-        // STEP 2a: Get all generic subjects linked directly to the user's main curriculum program.
-        // This is where 'PRF192' and other core subjects are found.
         var programSubjects = await _programSubjectRepository.FindAsync(ps => ps.ProgramId == programId, cancellationToken);
         var allowedSet = new HashSet<Guid>(programSubjects.Select(ps => ps.SubjectId));
 
-        // STEP 2b: Get all specialized subjects linked to the user's chosen Class.
-        // This is the exact step that addresses your question. It queries the `class_specialization_subjects` table.
-        // This is where 'PRM392' is found.
-        // FIX: The variable name `_classSubjectRepository` is corrected to `_classSpecializationSubjectRepository` to match the declaration.
         var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(classId, cancellationToken);
         foreach (var subject in classSubjects)
         {
-            // Add the specialized subject ID to the master list.
             allowedSet.Add(subject.Id);
         }
 
         _logger.LogInformation("Built allowed subject list for Program {ProgramId} and Class {ClassId}. Total allowed subjects: {Count}", programId, classId, allowedSet.Count);
 
-        // STEP 2c: Return the combined master list.
         return allowedSet;
     }
 
@@ -236,8 +251,18 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             "passed" => SubjectEnrollmentStatus.Passed,
             "studying" => SubjectEnrollmentStatus.Studying,
             "not started" => SubjectEnrollmentStatus.NotStarted,
+            "failed" => SubjectEnrollmentStatus.NotPassed,
             "not passed" => SubjectEnrollmentStatus.NotPassed,
             _ => SubjectEnrollmentStatus.NotStarted
         };
+    }
+
+    // ADDED: Helper method to compute a consistent hash for the raw HTML content.
+    private static string ComputeSha256Hash(string input)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(input);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
