@@ -68,10 +68,13 @@ jobs:
       - name: Redeploy Docker Swarm Stack
         shell: bash
         run: |
-          # Use the absolute path to your deployment directory
+          # Source the bashrc file to load your aliases
+          source ~/.bashrc
+
           echo "--- Changing to deploy directory: /home/ubuntu/roguelearn ---"
           cd /home/ubuntu/roguelearn
 
+          # The rest of your script can now remain the same
           echo "--- Bringing down Docker Swarm services ---"
           rldown || true
 
@@ -82,11 +85,11 @@ jobs:
           else
             echo "No old image found to remove."
           fi
-          
-          # You might need to explicitly pull the new image on the runner
+
           echo "--- Pulling new image from Docker Hub ---"
           docker pull $IMAGE_NAME:latest
 
+          # ... etc. ...
           echo "--- Bringing up Docker Swarm services ---"
           rlup
 
