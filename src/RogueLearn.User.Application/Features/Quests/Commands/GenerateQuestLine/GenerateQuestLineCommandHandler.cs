@@ -59,51 +59,58 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             throw new BadRequestException("Please select a class first.");
         }
 
-        _logger.LogInformation("Generating QuestLine structure for User: {username}", userProfile.Username);
+        _logger.LogInformation("Reconciling QuestLine structure for User: {username}", userProfile.Username);
 
-        var existingLearningPath = (await _learningPathRepository.FindAsync(lp => lp.CreatedBy == request.AuthUserId, cancellationToken))
+        // ARCHITECTURAL CHANGE: Fetch existing learning path or create a new one. DO NOT DELETE.
+        var learningPath = (await _learningPathRepository.FindAsync(lp => lp.CreatedBy == request.AuthUserId, cancellationToken))
             .FirstOrDefault();
-        if (existingLearningPath != null)
+
+        if (learningPath == null)
         {
-            _logger.LogInformation("Existing learning path {LearningPathId} found for user. Deleting to regenerate.", existingLearningPath.Id);
-
-            var chaptersToDelete = (await _questChapterRepository.FindAsync(c => c.LearningPathId == existingLearningPath.Id, cancellationToken)).ToList();
-            var chapterIds = chaptersToDelete.Select(c => c.Id).ToList();
-
-            if (chapterIds.Any())
+            _logger.LogInformation("No existing learning path found. Creating a new one for user {AuthUserId}", request.AuthUserId);
+            learningPath = new LearningPath
             {
-                var questsToDelete = (await _questRepository.GetAllAsync(cancellationToken))
-                    .Where(q => q.QuestChapterId.HasValue && chapterIds.Contains(q.QuestChapterId.Value))
-                    .ToList();
-                var questIdsToDelete = questsToDelete.Select(q => q.Id).ToList();
-
-                if (questIdsToDelete.Any())
-                {
-                    _logger.LogInformation("Deleting {QuestCount} quests from old learning path.", questIdsToDelete.Count);
-                    await _questRepository.DeleteRangeAsync(questIdsToDelete, cancellationToken);
-                }
-            }
-
-            await _learningPathRepository.DeleteAsync(existingLearningPath.Id, cancellationToken);
+                Name = $"{userProfile.Username}'s Path of Knowledge",
+                Description = $"Your learning journey awaits!",
+                PathType = PathType.Course,
+                IsPublished = true,
+                CreatedBy = userProfile.AuthUserId
+            };
+            learningPath = await _learningPathRepository.AddAsync(learningPath, cancellationToken);
         }
 
-        var learningPathToCreate = new LearningPath
-        {
-            Name = $"{userProfile.Username}'s Path of Knowledge",
-            Description = $"Your learning journey awaits!",
-            PathType = PathType.Course,
-            IsPublished = true,
-            CreatedBy = userProfile.AuthUserId
-        };
+        // --- Start Reconciliation Logic ---
 
-        var persistedLearningPath = await _learningPathRepository.AddAsync(learningPathToCreate, cancellationToken);
-
+        // 1. Get the "ideal" state from the curriculum
         var routeSubjects = await _subjectRepository.GetSubjectsByRoute(userProfile.RouteId.Value, cancellationToken);
         var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(userProfile.ClassId.Value, cancellationToken);
+        var idealSubjects = routeSubjects.Concat(classSubjects).DistinctBy(s => s.Id).ToList();
+        var idealSubjectIds = idealSubjects.Select(s => s.Id).ToHashSet();
 
-        var allUserSubjects = routeSubjects.Concat(classSubjects).DistinctBy(s => s.Id).ToList();
+        // 2. Get the "current" state from the user's learning path
+        var currentChapters = (await _questChapterRepository.FindAsync(c => c.LearningPathId == learningPath.Id, cancellationToken)).ToList();
+        var currentQuests = (await _questRepository.GetAllAsync(cancellationToken))
+            .Where(q => q.QuestChapterId.HasValue && currentChapters.Select(c => c.Id).Contains(q.QuestChapterId.Value))
+            .ToList();
+        var currentSubjectIdsWithQuests = currentQuests.Where(q => q.SubjectId.HasValue).Select(q => q.SubjectId!.Value).ToHashSet();
 
-        var semesterSubjectsMap = allUserSubjects
+        // 3. Identify quests to archive (subjects that are no longer in the curriculum)
+        var questsToArchive = currentQuests
+            .Where(q => q.SubjectId.HasValue && !idealSubjectIds.Contains(q.SubjectId.Value) && q.IsActive)
+            .ToList();
+
+        if (questsToArchive.Any())
+        {
+            _logger.LogInformation("Archiving {Count} quests for subjects no longer in the user's curriculum.", questsToArchive.Count);
+            foreach (var quest in questsToArchive)
+            {
+                quest.IsActive = false; // Soft delete
+                await _questRepository.UpdateAsync(quest, cancellationToken);
+            }
+        }
+
+        // 4. Group ideal subjects by semester to create/update chapters and quests
+        var idealSemesterMap = idealSubjects
             .Where(subject => subject.Semester.HasValue)
             .GroupBy(subject => subject.Semester!.Value)
             .ToDictionary(
@@ -111,68 +118,68 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 group => group.ToList()
             );
 
-        var questChaptersToInsert = new List<QuestChapter>();
-        var chapterPreperationList = new List<(QuestChapter chapter, List<Subject> subjects)>();
-
-        foreach (var (semesterNumber, subjectsInSemester) in semesterSubjectsMap.OrderBy(kvp => kvp.Key))
+        foreach (var (semesterNumber, subjectsInSemester) in idealSemesterMap.OrderBy(kvp => kvp.Key))
         {
-            var questChapter = new QuestChapter
+            // Find or create the chapter for this semester
+            var chapterTitle = $"Semester {semesterNumber}";
+            var chapter = currentChapters.FirstOrDefault(c => c.Title == chapterTitle);
+            if (chapter == null)
             {
-                Id = Guid.NewGuid(),
-                LearningPathId = persistedLearningPath.Id,
-                Title = $"Semester {semesterNumber}",
-                Sequence = semesterNumber,
-                Status = PathProgressStatus.NotStarted,
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow
-            };
-            questChaptersToInsert.Add(questChapter);
-            chapterPreperationList.Add((questChapter, subjectsInSemester));
-        }
-
-        var persistedChapters = (await _questChapterRepository.AddRangeAsync(questChaptersToInsert, cancellationToken)).ToList();
-
-        var questsToInsert = new List<Quest>();
-
-        foreach (var persistedChapter in persistedChapters)
-        {
-            var originalChapterData = chapterPreperationList.FirstOrDefault(p => p.chapter.Title == persistedChapter.Title);
-            if (originalChapterData.subjects == null) continue;
-
-            int questSequence = 1;
-            foreach (var subjectDetails in originalChapterData.subjects.OrderBy(s => s.SubjectCode))
-            {
-                // ARCHITECTURAL FIX: The content check is removed from here.
-                // This handler's responsibility is to create the quest 'shell' for ALL subjects in the curriculum.
-                // The check for content readiness will be performed by the process that schedules the step generation.
-
-                var quest = new Quest
+                chapter = new QuestChapter
                 {
-                    Id = Guid.NewGuid(),
-                    Title = subjectDetails.SubjectName,
-                    Description = subjectDetails.Description ?? $"Embark on the quest for {subjectDetails.SubjectName}.",
-                    QuestType = QuestType.Practice,
-                    DifficultyLevel = DifficultyLevel.Beginner,
-                    QuestChapterId = persistedChapter.Id,
-                    SubjectId = subjectDetails.Id,
-                    Sequence = questSequence++,
-                    Status = QuestStatus.NotStarted,
-                    CreatedBy = userProfile.AuthUserId,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    UpdatedAt = DateTimeOffset.UtcNow
+                    LearningPathId = learningPath.Id,
+                    Title = chapterTitle,
+                    Sequence = semesterNumber,
+                    Status = PathProgressStatus.NotStarted
                 };
-                questsToInsert.Add(quest);
+                chapter = await _questChapterRepository.AddAsync(chapter, cancellationToken);
+                _logger.LogInformation("Created new QuestChapter: {Title}", chapter.Title);
+            }
+
+            // 5. Identify new quests to create for this chapter
+            int questSequence = 1;
+            foreach (var subject in subjectsInSemester.OrderBy(s => s.SubjectCode))
+            {
+                if (!currentSubjectIdsWithQuests.Contains(subject.Id))
+                {
+                    // This subject is in the ideal curriculum but doesn't have a quest yet. Create one.
+                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode}", subject.SubjectCode);
+                    var newQuest = new Quest
+                    {
+                        Title = subject.SubjectName,
+                        Description = subject.Description ?? $"Embark on the quest for {subject.SubjectName}.",
+                        QuestType = QuestType.Practice,
+                        DifficultyLevel = DifficultyLevel.Beginner,
+                        QuestChapterId = chapter.Id,
+                        SubjectId = subject.Id,
+                        Sequence = questSequence++,
+                        Status = QuestStatus.NotStarted,
+                        IsActive = true, // New quests are active by default
+                        CreatedBy = userProfile.AuthUserId
+                    };
+                    await _questRepository.AddAsync(newQuest, cancellationToken);
+                }
+                else
+                {
+                    // If the quest already exists, we could update its details here if needed (e.g., name change).
+                    // For now, we just ensure its sequence is correct.
+                    var existingQuest = currentQuests.First(q => q.SubjectId == subject.Id);
+                    if (existingQuest.Sequence != questSequence || !existingQuest.IsActive)
+                    {
+                        existingQuest.Sequence = questSequence;
+                        existingQuest.IsActive = true; // Re-activate if it was previously archived
+                        await _questRepository.UpdateAsync(existingQuest, cancellationToken);
+                    }
+                    questSequence++;
+                }
             }
         }
 
-        await _questRepository.AddRangeAsync(questsToInsert, cancellationToken);
-        _logger.LogInformation("Successfully persisted {QuestCount} quest shells to the database.", questsToInsert.Count);
-
-        _logger.LogInformation("Successfully generated QuestLine structure {LearningPathId}", persistedLearningPath.Id);
+        _logger.LogInformation("Successfully reconciled QuestLine structure {LearningPathId}", learningPath.Id);
 
         return new GenerateQuestLineResponse
         {
-            LearningPathId = persistedLearningPath.Id,
+            LearningPathId = learningPath.Id,
         };
     }
 }
