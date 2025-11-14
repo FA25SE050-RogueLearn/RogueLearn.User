@@ -1,9 +1,52 @@
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/CurriculumImportStorage.cs
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
+/*
+ * ==========================================================================================
+ * SUPABASE STORAGE BUCKET SETUP INSTRUCTIONS
+ * ==========================================================================================
+ * This service requires a Supabase Storage bucket to cache AI-processed data.
+ *
+ * 1. BUCKET NAME:
+ *    Create a bucket named: `curriculum-imports`
+ *
+ * 2. PUBLIC BUCKET:
+ *    Make the bucket PUBLIC. This is necessary for retrieving cached JSON files via URL.
+ *    The contents are non-sensitive JSON caches of public curriculum/syllabus data.
+ *
+ * 3. POLICIES:
+ *    The following policies allow authenticated users to perform all necessary operations (CRUD).
+ *    Navigate to `Storage -> Policies` and create these policies for the `curriculum-imports` bucket.
+ *
+ *    -- Policy: Allow authenticated select (read)
+ *    CREATE POLICY "Allow authenticated read access"
+ *    ON storage.objects FOR SELECT
+ *    TO authenticated
+ *    USING (bucket_id = 'curriculum-imports');
+ *
+ *    -- Policy: Allow authenticated insert (create)
+ *    CREATE POLICY "Allow authenticated insert access"
+ *    ON storage.objects FOR INSERT
+ *    TO authenticated
+ *    WITH CHECK (bucket_id = 'curriculum-imports');
+ *
+ *    -- Policy: Allow authenticated update
+ *    CREATE POLICY "Allow authenticated update access"
+ *    ON storage.objects FOR UPDATE
+ *    TO authenticated
+ *    USING (bucket_id = 'curriculum-imports');
+ *
+ *    -- Policy: Allow authenticated delete
+ *    CREATE POLICY "Allow authenticated delete access"
+ *    ON storage.objects FOR DELETE
+ *    TO authenticated
+ *    USING (bucket_id = 'curriculum-imports');
+ * ==========================================================================================
+ */
 namespace RogueLearn.User.Infrastructure.Services;
 
 public class CurriculumImportStorage : ICurriculumImportStorage
@@ -280,24 +323,18 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         string inputHash,
         CancellationToken cancellationToken = default)
     {
+        var byHashJsonPath = $"syllabus/_hashes/{inputHash}.json";
+        var storage = _client.Storage.From("curriculum-imports");
         try
         {
-            const string bucketName = "curriculum-imports";
-            var cachedData = await TryGetByHashJsonAsync(
-                bucketName,
-                inputHash,
-                cancellationToken);
-
-            if (cachedData != null)
-            {
-                _logger.LogInformation("Retrieved cached syllabus data for hash: {Hash}", inputHash);
-            }
-
-            return cachedData;
+            // This is the corrected line. It explicitly provides null for the optional parameters,
+            // resolving the CS0121 ambiguity error.
+            var bytes = await storage.Download(byHashJsonPath, (Supabase.Storage.TransformOptions?)null, (EventHandler<float>?)null);
+            return bytes is null ? null : Encoding.UTF8.GetString(bytes);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogWarning(ex, "Failed to retrieve cached syllabus data for hash: {Hash}", inputHash);
+            // Supabase client throws an exception for 404s, which is expected for cache misses.
             return null;
         }
     }

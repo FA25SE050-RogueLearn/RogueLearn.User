@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommandHandler.cs
+﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommandHandler.cs
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -30,7 +30,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
     private readonly IMapper _mapper;
     private readonly ILogger<ImportSubjectFromTextCommandHandler> _logger;
     private readonly IHtmlCleaningService _htmlCleaningService;
-    private readonly IUserProfileRepository _userProfileRepository; // ADDED
+    private readonly IUserProfileRepository _userProfileRepository;
 
     public ImportSubjectFromTextCommandHandler(
         ISyllabusExtractionPlugin syllabusExtractionPlugin,
@@ -39,7 +39,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         IMapper mapper,
         ILogger<ImportSubjectFromTextCommandHandler> logger,
         IHtmlCleaningService htmlCleaningService,
-        IUserProfileRepository userProfileRepository) // ADDED
+        IUserProfileRepository userProfileRepository)
     {
         _syllabusExtractionPlugin = syllabusExtractionPlugin;
         _subjectRepository = subjectRepository;
@@ -47,7 +47,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         _mapper = mapper;
         _logger = logger;
         _htmlCleaningService = htmlCleaningService;
-        _userProfileRepository = userProfileRepository; // ADDED
+        _userProfileRepository = userProfileRepository;
     }
 
     public async Task<CreateSubjectResponse> Handle(ImportSubjectFromTextCommand request, CancellationToken cancellationToken)
@@ -83,7 +83,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             throw new BadRequestException("Extracted syllabus data is missing a valid SubjectCode.");
         }
 
-        // FIX: Use the new, unambiguous method that searches within the user's full context.
         var existingSubject = await _subjectRepository.GetSubjectForUserContextAsync(
             syllabusData.SubjectCode,
             request.AuthUserId,
@@ -97,7 +96,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         _logger.LogWarning("Subject with code {SubjectCode} not found within user's context. Creating a new subject shell and linking it to the user's program.", syllabusData.SubjectCode);
 
-        // If the subject does not exist in the user's context, create it and link it to their program.
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
             ?? throw new NotFoundException("UserProfile", request.AuthUserId);
 
@@ -110,7 +108,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         var createdSubject = await UpdateSubjectContent(newSubject, extractedJson, syllabusData, cancellationToken);
 
-        // Link the newly created subject to the user's program.
         var programSubjectLink = new CurriculumProgramSubject
         {
             ProgramId = userProfile.RouteId.Value,
@@ -128,6 +125,10 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         {
             if (jsonDoc.RootElement.TryGetProperty("content", out var contentElement))
             {
+                // THIS IS THE FIX: The ObjectToInferredTypesConverter is now correctly used here.
+                // This ensures that when the "content" JSON block is deserialized, its nested structures 
+                // (like the 'assessments' array) are converted to native C# Dictionaries and Lists, 
+                // not left as JsonElement objects. This prevents the "ValueKind" serialization error.
                 var serializerOptions = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,

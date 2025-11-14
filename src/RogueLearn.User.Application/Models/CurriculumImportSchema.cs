@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using RogueLearn.User.Domain.Enums;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Models;
 
@@ -40,7 +41,7 @@ public class CurriculumProgramData
     public string? Description { get; set; }
 
     [Required]
-    [JsonConverter(typeof(StringEnumConverter))]
+    [System.Text.Json.Serialization.JsonConverter(typeof(JsonStringEnumConverter))]
     public DegreeLevel DegreeLevel { get; set; }
 
     public int? TotalCredits { get; set; }
@@ -110,7 +111,12 @@ public class CurriculumStructureData
 public class SyllabusData
 {
     [Required]
+    [JsonPropertyName("subjectCode")]
     public string SubjectCode { get; set; } = string.Empty;
+
+    // This property is added to match the AI's output from the syllabus extraction prompt.
+    [JsonPropertyName("subjectName")]
+    public string SubjectName { get; set; } = string.Empty;
 
     [Required]
     public int VersionNumber { get; set; } = 1;
@@ -118,7 +124,10 @@ public class SyllabusData
     [Required]
     public SyllabusContent Content { get; set; } = new();
 
-    public DateOnly? EffectiveDate { get; set; }
+    // This property is renamed from EffectiveDate and the JsonPropertyName is added
+    // to correctly deserialize the 'approvedDate' field from the AI's JSON output.
+    [JsonPropertyName("approvedDate")]
+    public DateOnly? ApprovedDate { get; set; }
 
     public bool IsActive { get; set; } = true;
 
@@ -138,7 +147,6 @@ public class SyllabusData
     public string DecisionNo { get; set; } = string.Empty;
     public bool IsApproved { get; set; }
     public string Note { get; set; } = string.Empty;
-    public DateOnly? ApprovedDate { get; set; }
 
     // Materials
     public List<SyllabusMaterial> Materials { get; set; } = new();

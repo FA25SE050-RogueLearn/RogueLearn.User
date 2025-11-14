@@ -31,7 +31,6 @@ public class SubjectsController : ControllerBase
     /// Imports a single subject from raw text, creating or updating it in the master catalog.
     /// This is the primary endpoint for populating syllabus content.
     /// </summary>
-    // MODIFIED: Endpoint signature is simplified. ProgramId is no longer needed from the client.
     [HttpPost("import-from-text")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
@@ -44,7 +43,6 @@ public class SubjectsController : ControllerBase
             return BadRequest("The 'rawText' form field is required and cannot be empty.");
         }
 
-        // MODIFIED: We now get the user's ID directly from their authenticated token.
         var command = new ImportSubjectFromTextCommand
         {
             RawText = request.RawText,
@@ -53,6 +51,20 @@ public class SubjectsController : ControllerBase
         var result = await _mediator.Send(command, cancellationToken);
         // Returns 200 OK because it's an "upsert" (create or update).
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Imports or updates a single subject from raw text. This endpoint is idempotent.
+    /// This is a semantic alias for the POST endpoint, both perform an upsert.
+    /// </summary>
+    [HttpPut("import-from-text")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<CreateSubjectResponse>> UpdateFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
+    {
+        return await ImportFromText(request, cancellationToken);
     }
 
     [HttpGet]

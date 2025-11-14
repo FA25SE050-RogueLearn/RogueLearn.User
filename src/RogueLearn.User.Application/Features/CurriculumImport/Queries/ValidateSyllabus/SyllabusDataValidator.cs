@@ -25,12 +25,12 @@ public class SyllabusDataValidator : AbstractValidator<SyllabusData>
             .WithMessage("Syllabus content is required.")
             .SetValidator(new SyllabusContentValidator());
 
-        RuleFor(x => x.EffectiveDate)
+        RuleFor(x => x.ApprovedDate)
             .Must(date => date == null || date >= DateOnly.FromDateTime(DateTime.Now.AddYears(-10)))
             .WithMessage("Effective date cannot be more than 10 years in the past.")
             .Must(date => date == null || date <= DateOnly.FromDateTime(DateTime.Now.AddYears(5)))
             .WithMessage("Effective date cannot be more than 5 years in the future.")
-            .When(x => x.EffectiveDate.HasValue);
+            .When(x => x.ApprovedDate.HasValue);
     }
 }
 
