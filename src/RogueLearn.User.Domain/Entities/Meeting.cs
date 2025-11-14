@@ -10,7 +10,10 @@ public class Meeting : BaseModel
     public Guid MeetingId { get; set; }
 
     [Column("party_id")]
-    public Guid PartyId { get; set; }
+    public Guid? PartyId { get; set; }
+
+    [Column("guild_id")]
+    public Guid? GuildId { get; set; }
 
     [Column("title")]
     public string Title { get; set; } = string.Empty;
