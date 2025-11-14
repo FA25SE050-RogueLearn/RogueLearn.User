@@ -5,22 +5,19 @@ using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Common;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;
-using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Models; // MODIFICATION: Using the correct shared model namespace
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using RogueLearn.User.Application.Interfaces;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
 
-public class SyllabusImportData
-{
-    public string SubjectCode { get; set; } = string.Empty;
-    public string SubjectName { get; set; } = string.Empty;
-    public string? ApprovedDate { get; set; }
-}
+// MODIFICATION: The local, redundant SyllabusImportData class has been COMPLETELY REMOVED to resolve the type conflict.
 
 public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubjectFromTextCommand, CreateSubjectResponse>
 {
@@ -31,6 +28,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
     private readonly ILogger<ImportSubjectFromTextCommandHandler> _logger;
     private readonly IHtmlCleaningService _htmlCleaningService;
     private readonly IUserProfileRepository _userProfileRepository;
+    private readonly ICurriculumImportStorage _storage;
 
     public ImportSubjectFromTextCommandHandler(
         ISyllabusExtractionPlugin syllabusExtractionPlugin,
@@ -39,7 +37,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         IMapper mapper,
         ILogger<ImportSubjectFromTextCommandHandler> logger,
         IHtmlCleaningService htmlCleaningService,
-        IUserProfileRepository userProfileRepository)
+        IUserProfileRepository userProfileRepository,
+        ICurriculumImportStorage storage)
     {
         _syllabusExtractionPlugin = syllabusExtractionPlugin;
         _subjectRepository = subjectRepository;
@@ -48,6 +47,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         _logger = logger;
         _htmlCleaningService = htmlCleaningService;
         _userProfileRepository = userProfileRepository;
+        _storage = storage;
     }
 
     public async Task<CreateSubjectResponse> Handle(ImportSubjectFromTextCommand request, CancellationToken cancellationToken)
@@ -60,17 +60,31 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             throw new BadRequestException("Failed to extract meaningful text content from the provided HTML.");
         }
 
-        var extractedJson = await _syllabusExtractionPlugin.ExtractSyllabusJsonAsync(cleanText, cancellationToken);
-        if (string.IsNullOrWhiteSpace(extractedJson))
+        var rawTextHash = ComputeSha256Hash(cleanText);
+
+        string? extractedJson = await _storage.TryGetCachedSyllabusDataAsync(rawTextHash, cancellationToken);
+        bool isCacheHit = !string.IsNullOrWhiteSpace(extractedJson);
+
+        if (isCacheHit)
         {
-            throw new BadRequestException("AI extraction failed to produce valid JSON from the provided syllabus text.");
+            _logger.LogInformation("Cache HIT for syllabus hash {Hash}. Skipping AI extraction.", rawTextHash);
+        }
+        else
+        {
+            _logger.LogInformation("Cache MISS for syllabus hash {Hash}. Proceeding with AI extraction.", rawTextHash);
+            extractedJson = await _syllabusExtractionPlugin.ExtractSyllabusJsonAsync(cleanText, cancellationToken);
+            if (string.IsNullOrWhiteSpace(extractedJson))
+            {
+                throw new BadRequestException("AI extraction failed to produce valid JSON from the provided syllabus text.");
+            }
         }
 
-        SyllabusImportData? syllabusData;
+        // MODIFICATION: The type is now the correct, shared SyllabusData model.
+        SyllabusData? syllabusData;
         try
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };
-            syllabusData = JsonSerializer.Deserialize<SyllabusImportData>(extractedJson, options);
+            syllabusData = JsonSerializer.Deserialize<SyllabusData>(extractedJson, options);
         }
         catch (JsonException ex)
         {
@@ -81,6 +95,19 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         if (syllabusData == null || string.IsNullOrWhiteSpace(syllabusData.SubjectCode))
         {
             throw new BadRequestException("Extracted syllabus data is missing a valid SubjectCode.");
+        }
+
+        if (!isCacheHit)
+        {
+            // This call now works because 'syllabusData' is the correct type.
+            await _storage.SaveSyllabusDataAsync(
+                syllabusData.SubjectCode,
+                syllabusData.VersionNumber,
+                syllabusData,
+                extractedJson,
+                rawTextHash,
+                cancellationToken);
+            _logger.LogInformation("Cache WRITE for syllabus hash {Hash}.", rawTextHash);
         }
 
         var existingSubject = await _subjectRepository.GetSubjectForUserContextAsync(
@@ -119,16 +146,13 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         return createdSubject;
     }
 
-    private async Task<CreateSubjectResponse> UpdateSubjectContent(Subject subjectToUpdate, string extractedJson, SyllabusImportData syllabusData, CancellationToken cancellationToken)
+    // MODIFICATION: The parameter 'syllabusData' is now the correct shared type.
+    private async Task<CreateSubjectResponse> UpdateSubjectContent(Subject subjectToUpdate, string extractedJson, SyllabusData syllabusData, CancellationToken cancellationToken)
     {
         using (var jsonDoc = JsonDocument.Parse(extractedJson))
         {
             if (jsonDoc.RootElement.TryGetProperty("content", out var contentElement))
             {
-                // THIS IS THE FIX: The ObjectToInferredTypesConverter is now correctly used here.
-                // This ensures that when the "content" JSON block is deserialized, its nested structures 
-                // (like the 'assessments' array) are converted to native C# Dictionaries and Lists, 
-                // not left as JsonElement objects. This prevents the "ValueKind" serialization error.
                 var serializerOptions = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -140,9 +164,9 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         subjectToUpdate.SubjectName = syllabusData.SubjectName;
 
-        if (DateTimeOffset.TryParse(syllabusData.ApprovedDate, out var approvedDate))
+        if (syllabusData.ApprovedDate.HasValue)
         {
-            subjectToUpdate.UpdatedAt = approvedDate;
+            subjectToUpdate.UpdatedAt = new DateTimeOffset(syllabusData.ApprovedDate.Value.ToDateTime(TimeOnly.MinValue));
         }
         else
         {
@@ -156,5 +180,13 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         _logger.LogInformation("Successfully upserted subject {SubjectId} with new syllabus content.", resultSubject.Id);
 
         return _mapper.Map<CreateSubjectResponse>(resultSubject);
+    }
+
+    private static string ComputeSha256Hash(string input)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(input);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

@@ -1,8 +1,6 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Models/CurriculumImportSchema.cs
+// src/RogueLearn.User/src/RogueLearn.User.Application/Models/CurriculumImportSchema.cs
 using System.ComponentModel.DataAnnotations;
 using RogueLearn.User.Domain.Enums;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Models;
@@ -41,7 +39,7 @@ public class CurriculumProgramData
     public string? Description { get; set; }
 
     [Required]
-    [System.Text.Json.Serialization.JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public DegreeLevel DegreeLevel { get; set; }
 
     public int? TotalCredits { get; set; }
@@ -114,18 +112,17 @@ public class SyllabusData
     [JsonPropertyName("subjectCode")]
     public string SubjectCode { get; set; } = string.Empty;
 
-    // This property is added to match the AI's output from the syllabus extraction prompt.
+    // MODIFICATION: Added SubjectName to match the local definition and AI output.
     [JsonPropertyName("subjectName")]
     public string SubjectName { get; set; } = string.Empty;
 
+    // MODIFICATION: Added VersionNumber to match the local definition.
     [Required]
     public int VersionNumber { get; set; } = 1;
 
     [Required]
     public SyllabusContent Content { get; set; } = new();
 
-    // This property is renamed from EffectiveDate and the JsonPropertyName is added
-    // to correctly deserialize the 'approvedDate' field from the AI's JSON output.
     [JsonPropertyName("approvedDate")]
     public DateOnly? ApprovedDate { get; set; }
 
@@ -162,7 +159,6 @@ public class SyllabusContent
 {
     public string? CourseDescription { get; set; }
     public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
-    // MODIFIED: Renamed from WeeklySchedule to SessionSchedule.
     public List<SyllabusSessionDto>? SessionSchedule { get; set; }
     public List<AssessmentItem>? Assessments { get; set; }
     public List<string>? RequiredTexts { get; set; }
@@ -171,12 +167,11 @@ public class SyllabusContent
     public string? AttendancePolicy { get; set; }
 }
 
-// MODIFIED: Renamed from SyllabusWeek to SyllabusSessionDto and weekNumber to sessionNumber.
 public class SyllabusSessionDto
 {
     public int SessionNumber { get; set; }
     public string Topic { get; set; } = string.Empty;
-    public List<string> Activities { get; set; } = new(); // e.g., ["Lecture", "Group Discussion", "Lab Work"]
+    public List<string> Activities { get; set; } = new();
     public List<string> Readings { get; set; } = new();
     public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
     public List<string> MappedSkills { get; set; } = new();
@@ -184,7 +179,7 @@ public class SyllabusSessionDto
 
 public class AssessmentItem
 {
-    public string Type { get; set; } = string.Empty; // e.g., "Assignment", "Final Exam"
+    public string Type { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int? WeightPercentage { get; set; }
     public string? Description { get; set; }
@@ -205,8 +200,6 @@ public class SyllabusMaterial
     public bool IsOnline { get; set; }
     public string Note { get; set; } = string.Empty;
 }
-
-// Removed explicit learning outcomes from top-level schema; use content fields instead
 
 public class SyllabusSession
 {
