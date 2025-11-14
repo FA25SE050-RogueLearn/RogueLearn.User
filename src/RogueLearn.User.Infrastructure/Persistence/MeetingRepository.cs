@@ -36,6 +36,15 @@ public class MeetingRepository : IMeetingRepository
         return resp.Models;
     }
 
+    public async Task<IEnumerable<Meeting>> GetByGuildAsync(Guid guildId, CancellationToken cancellationToken = default)
+    {
+        var resp = await _client
+            .From<Meeting>()
+            .Where(m => m.GuildId == guildId)
+            .Get(cancellationToken);
+        return resp.Models;
+    }
+
     public async Task<Meeting> AddAsync(Meeting entity, CancellationToken cancellationToken = default)
     {
         var resp = await _client.From<Meeting>().Insert(entity, cancellationToken: cancellationToken);

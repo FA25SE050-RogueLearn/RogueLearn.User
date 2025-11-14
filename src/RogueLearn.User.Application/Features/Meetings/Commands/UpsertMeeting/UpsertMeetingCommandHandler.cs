@@ -24,7 +24,8 @@ public class UpsertMeetingCommandHandler : IRequestHandler<UpsertMeetingCommand,
         var dto = request.MeetingDto;
         if (dto.MeetingId == Guid.Empty)
         {
-            dto.MeetingId = CreateDeterministicGuid(dto.PartyId.ToString(), dto.Title, dto.ScheduledStartTime.UtcDateTime.ToString("o"));
+            var ownerId = dto.PartyId?.ToString() ?? dto.GuildId?.ToString() ?? string.Empty;
+            dto.MeetingId = CreateDeterministicGuid(ownerId, dto.Title, dto.ScheduledStartTime.UtcDateTime.ToString("o"));
         }
 
         var entity = _mapper.Map<Meeting>(dto);

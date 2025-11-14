@@ -7,7 +7,11 @@ public class UpsertMeetingCommandValidator : AbstractValidator<UpsertMeetingComm
     public UpsertMeetingCommandValidator()
     {
         RuleFor(x => x.MeetingDto).NotNull();
-        RuleFor(x => x.MeetingDto.PartyId).NotEqual(Guid.Empty);
+        RuleFor(x => x.MeetingDto)
+            .Must(dto =>
+                (dto.PartyId.HasValue && dto.PartyId.Value != Guid.Empty) ||
+                (dto.GuildId.HasValue && dto.GuildId.Value != Guid.Empty))
+            .WithMessage("Either PartyId or GuildId must be provided");
         RuleFor(x => x.MeetingDto.Title).NotEmpty().MaximumLength(300);
         RuleFor(x => x.MeetingDto.ScheduledStartTime)
             .LessThan(x => x.MeetingDto.ScheduledEndTime)
