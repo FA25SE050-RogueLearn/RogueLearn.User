@@ -8,6 +8,7 @@ using RogueLearn.User.Application.Features.Meetings.Commands.UpsertParticipants;
 using RogueLearn.User.Application.Features.Meetings.Queries.GetMeetingDetails;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
 using RogueLearn.User.Application.Features.Meetings.Queries.GetPartyMeetings;
+using RogueLearn.User.Application.Features.Meetings.Queries.GetGuildMeetings;
 using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -72,6 +73,13 @@ public class MeetingsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<MeetingDto>>> GetPartyMeetings([FromRoute] Guid partyId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetPartyMeetingsQuery(partyId), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("guild/{guildId}")]
+    public async Task<ActionResult<IReadOnlyList<MeetingDto>>> GetGuildMeetings([FromRoute] Guid guildId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetGuildMeetingsQuery(guildId), cancellationToken);
         return Ok(result);
     }
 }
