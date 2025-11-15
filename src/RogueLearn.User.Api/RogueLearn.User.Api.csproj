@@ -23,6 +23,10 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.61.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.61.0" PrivateAssets="All" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.2" />
+    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.61.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +35,10 @@
 
   <ItemGroup>
     <Folder Include="Agents\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\user\v1\user.proto" GrpcServices="Server" />
   </ItemGroup>
 
 </Project>

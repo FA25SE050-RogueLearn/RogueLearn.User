@@ -4,7 +4,6 @@ using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
 using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
-using DotNetEnv;
 using BuildingBlocks.Shared.Authentication;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -51,7 +50,7 @@ try
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(supabaseConnStr, new PostgreSqlStorageOptions()
+        .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(supabaseConnStr), new PostgreSqlStorageOptions()
         {
             SchemaName = "hangfire"
         }));
@@ -106,6 +105,12 @@ try
 
     builder.Services.AddApiServices();
 
+    builder.Services.AddGrpc();
+    if (builder.Environment.IsDevelopment())
+    {
+        builder.Services.AddGrpcReflection();
+    }
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline
@@ -138,6 +143,15 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+
+    app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserProfilesGrpcService>();
+    app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserContextGrpcService>();
+    app.MapGrpcService<RogueLearn.User.Api.GrpcServices.AchievementsGrpcService>();
+    app.MapGrpcService<RogueLearn.User.Api.GrpcServices.GuildsGrpcService>();
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapGrpcReflectionService();
+    }
 
     Log.Information("RogueLearn.User API started successfully");
     app.Run();
