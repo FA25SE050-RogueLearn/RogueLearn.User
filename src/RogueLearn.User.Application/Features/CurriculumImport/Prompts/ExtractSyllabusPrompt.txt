@@ -5,8 +5,11 @@ Your output MUST conform to this exact structure:
 {
   "subjectCode": "string",
   "subjectName": "string",
+  "credits": integer,
   "description": "string (A concise summary of the course's overall objective and content)",
   "approvedDate": "string (YYYY-MM-DD format, from the 'effective date' or 'approved date' in the text)",
+  "preRequisite": "string (The raw text of the prerequisites, e.g., 'PRO192, DBI202')",
+  "semester": integer (The semester number if available, otherwise null),
   "content": {
     "courseDescription": "string (A concise summary of the course)",
     "courseLearningOutcomes": [
@@ -26,6 +29,7 @@ Your output MUST conform to this exact structure:
     ],
     "constructiveQuestions": [
       {
+        "name": "string (formatted as CQ<sessionNumber>.<questionIndex>)",
         "question": "string",
         "sessionNumber": integer (optional, map to the session number if available)
       }
@@ -33,22 +37,25 @@ Your output MUST conform to this exact structure:
   }
 }
 
-## EXTRACTION RULES ##
-1.  **Subject Identification:** Extract the `subjectCode` and `subjectName`.
-2.  **Top-Level Description:** Create a concise summary of the course's main goal and content for the top-level `description` field. This should be a brief overview.
-3.  **Approved Date:** Find the 'effective date' or 'approved date' in the text and format it as `YYYY-MM-DD`. This is a critical field.
-4.  **Course Learning Outcomes (CLOs):** Populate the `courseLearningOutcomes` array with the ID and full text for each CLO found.
-5.  **Session Schedule:**
-    *   For each session in the syllabus, create an object in the `sessionSchedule` array.
-    *   Extract the `topic`, `activities`, and any assigned `readings`.
-6.  **CRITICAL - Constructive Questions Placement:**
+## CRITICAL RULES ##
+1.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
+2.  **Credits Extraction:** You MUST find the numeric value for "NoCredit" in the source text and place it in the top-level `credits` field. This is mandatory.
+3.  **Constructive Questions Placement:**
     *   Scan the entire document for all "Constructive Questions" or "CQ" sections.
     *   Extract every question you find and place it into the single, top-level `content.constructiveQuestions` array.
-    *   If a question is associated with a specific session number, include that number in the JSON object for that question.
+    *   If a question is associated with a specific session number, include that number.
     *   **Deduplication:** Ensure the final `constructiveQuestions` array does not contain duplicate question strings.
-7.  **CRITICAL - Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
-8.  **Completeness:** Fill in all other fields (`courseDescription`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
-9.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
+4.  **Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities` to list 2-4 concise, noun-based skill names in the `mappedSkills` array.
+
+## OTHER EXTRACTION RULES ##
+1.  **Subject Identification:** Extract the `subjectCode` and `subjectName`.
+2.  **Top-Level Description:** Create a concise summary for the top-level `description` field.
+3.  **Approved Date:** Find the 'effective date' or 'approved date' and format it as `YYYY-MM-DD`.
+4.  **Prerequisites:** Extract the text from the "Pre-Requisite" field.
+5.  **Semester:** Extract the semester number if it is explicitly mentioned in the text. If not found, this field should be `null`.
+6.  **Course Learning Outcomes (CLOs):** Populate the `courseLearningOutcomes` array.
+7.  **Session Schedule:** Create an object for each session, extracting the `topic`, `activities`, and `readings`.
+8.  **Completeness:** Fill in other fields if present. Use `null` or empty arrays `[]` for missing data.
 
 ## TEXT TO PROCESS ##
 {{RAW_TEXT}}

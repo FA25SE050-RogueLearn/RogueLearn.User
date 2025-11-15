@@ -14,6 +14,7 @@ For EACH session in the schedule, generate 2 to 3 thought-provoking questions th
 Your response MUST be a single, valid JSON array of objects. Each object must conform to this exact schema:
 [
   {
+    "name": "string (formatted as CQ<sessionNumber>.<questionIndex>)",
     "question": "string (The generated question)",
     "sessionNumber": integer (The session number this question applies to)
   }
@@ -22,5 +23,10 @@ Your response MUST be a single, valid JSON array of objects. Each object must co
 ## CRITICAL RULES ##
 1.  **Generate for Every Session:** You must generate at least two questions for every single session provided in the input JSON.
 2.  **Match Session Numbers:** The `sessionNumber` in your output MUST correctly correspond to the session the question was generated for.
-3.  **High-Quality Questions:** The questions should encourage critical thinking, not just simple fact recall. They should relate directly to the `topic`, `readings`, and `activities` of the session.
-4.  **JSON ONLY:** Your entire output must be a single, raw JSON array. Do NOT include any commentary, explanations, or markdown fences like ```json.
+3.  **Naming:** The `name` for each question MUST follow the format "CQ" + sessionNumber + "." + index (where index starts from 1 for each session). For example, the first question for session 3 is "CQ3.1", the second is "CQ3.2".
+4.  **High-Quality Questions:** The questions should encourage critical thinking, not just simple fact recall. They should relate directly to the `topic`, `readings`, and `activities` of the session.
+5.  **JSON ONLY:** Your entire output must be a single, raw JSON array. Do NOT include any commentary, explanations, or markdown fences like ```json.
+
+### File 3: Reinforced Syllabus Extraction Prompt
+
+This makes the `credits` extraction a critical, non-negotiable rule for the AI.

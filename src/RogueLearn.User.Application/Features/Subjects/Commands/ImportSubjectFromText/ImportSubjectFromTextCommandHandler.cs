@@ -20,7 +20,7 @@ namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFr
 public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubjectFromTextCommand, CreateSubjectResponse>
 {
     private readonly ISyllabusExtractionPlugin _syllabusExtractionPlugin;
-    private readonly IConstructiveQuestionGenerationPlugin _questionGenerationPlugin; // MODIFICATION: Added new plugin
+    private readonly IConstructiveQuestionGenerationPlugin _questionGenerationPlugin;
     private readonly ISubjectRepository _subjectRepository;
     private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
     private readonly IMapper _mapper;
@@ -31,7 +31,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
     public ImportSubjectFromTextCommandHandler(
         ISyllabusExtractionPlugin syllabusExtractionPlugin,
-        IConstructiveQuestionGenerationPlugin questionGenerationPlugin, // MODIFICATION: Added new plugin
+        IConstructiveQuestionGenerationPlugin questionGenerationPlugin,
         ISubjectRepository subjectRepository,
         ICurriculumProgramSubjectRepository programSubjectRepository,
         IMapper mapper,
@@ -41,7 +41,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         ICurriculumImportStorage storage)
     {
         _syllabusExtractionPlugin = syllabusExtractionPlugin;
-        _questionGenerationPlugin = questionGenerationPlugin; // MODIFICATION: Added new plugin
+        _questionGenerationPlugin = questionGenerationPlugin;
         _subjectRepository = subjectRepository;
         _programSubjectRepository = programSubjectRepository;
         _mapper = mapper;
@@ -97,7 +97,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             throw new BadRequestException("Extracted syllabus data is missing a valid SubjectCode.");
         }
 
-        // MODIFICATION START: Conditional generation of constructive questions.
         if (syllabusData.Content?.ConstructiveQuestions == null || !syllabusData.Content.ConstructiveQuestions.Any())
         {
             _logger.LogInformation("No constructive questions found in extracted syllabus. Attempting to generate them with AI.");
@@ -108,9 +107,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 {
                     syllabusData.Content.ConstructiveQuestions = generatedQuestions;
                     _logger.LogInformation("Successfully generated {Count} constructive questions for the syllabus.", generatedQuestions.Count);
-
-                    // Re-serialize the updated JSON to ensure the generated questions are cached correctly.
-                    extractedJson = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } });
                 }
                 else
                 {
@@ -118,7 +114,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 }
             }
         }
-        // MODIFICATION END
+
+        var finalJsonToCache = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } });
 
         if (!isCacheHit)
         {
@@ -126,7 +123,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 syllabusData.SubjectCode,
                 syllabusData.VersionNumber,
                 syllabusData,
-                extractedJson, // This now contains the generated questions if they were created.
+                finalJsonToCache,
                 rawTextHash,
                 cancellationToken);
             _logger.LogInformation("Cache WRITE for syllabus hash {Hash}.", rawTextHash);
@@ -140,7 +137,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         if (existingSubject != null)
         {
             _logger.LogInformation("Found existing subject {SubjectId} within user's context. Updating content.", existingSubject.Id);
-            return await UpdateExistingSubjectContent(existingSubject, extractedJson, syllabusData, cancellationToken);
+            return await UpdateExistingSubjectContent(existingSubject, syllabusData, cancellationToken);
         }
         else
         {
@@ -154,20 +151,23 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 throw new BadRequestException("Cannot create a new subject because the user has not selected a curriculum program (route).");
             }
 
-            var newSubject = new Subject { SubjectCode = syllabusData.SubjectCode, Description = syllabusData.Description };
-
-            using (var jsonDoc = JsonDocument.Parse(extractedJson))
+            var newSubject = new Subject
             {
-                if (jsonDoc.RootElement.TryGetProperty("content", out var contentElement))
-                {
-                    var serializerOptions = new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true,
-                        Converters = { new ObjectToInferredTypesConverter() }
-                    };
-                    newSubject.Content = JsonSerializer.Deserialize<Dictionary<string, object>>(contentElement.GetRawText(), serializerOptions);
-                }
-            }
+                SubjectCode = syllabusData.SubjectCode,
+                Description = syllabusData.Description,
+                Credits = syllabusData.Credits,
+                // MODIFICATION: Populate semester and prerequisites on creation.
+                Semester = syllabusData.Semester,
+                PrerequisiteSubjectIds = await ResolvePrerequisiteIdsAsync(syllabusData.PreRequisite, cancellationToken)
+            };
+
+            var contentJson = JsonSerializer.Serialize(syllabusData.Content);
+            var serializerOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                Converters = { new ObjectToInferredTypesConverter() }
+            };
+            newSubject.Content = JsonSerializer.Deserialize<Dictionary<string, object>>(contentJson, serializerOptions);
 
             newSubject.SubjectName = syllabusData.SubjectName;
 
@@ -191,23 +191,34 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         }
     }
 
-    private async Task<CreateSubjectResponse> UpdateExistingSubjectContent(Subject subjectToUpdate, string extractedJson, SyllabusData syllabusData, CancellationToken cancellationToken)
+    private async Task<CreateSubjectResponse> UpdateExistingSubjectContent(Subject subjectToUpdate, SyllabusData syllabusData, CancellationToken cancellationToken)
     {
-        using (var jsonDoc = JsonDocument.Parse(extractedJson))
+        var contentJson = JsonSerializer.Serialize(syllabusData.Content);
+
+        var serializerOptions = new JsonSerializerOptions
         {
-            if (jsonDoc.RootElement.TryGetProperty("content", out var contentElement))
-            {
-                var serializerOptions = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    Converters = { new ObjectToInferredTypesConverter() }
-                };
-                subjectToUpdate.Content = JsonSerializer.Deserialize<Dictionary<string, object>>(contentElement.GetRawText(), serializerOptions);
-            }
-        }
+            PropertyNameCaseInsensitive = true,
+            Converters = { new ObjectToInferredTypesConverter() }
+        };
+        subjectToUpdate.Content = JsonSerializer.Deserialize<Dictionary<string, object>>(contentJson, serializerOptions);
 
         subjectToUpdate.SubjectName = syllabusData.SubjectName;
         subjectToUpdate.Description = syllabusData.Description;
+        subjectToUpdate.Credits = syllabusData.Credits;
+
+        // MODIFICATION START: Implement intelligent, conditional updates to prevent data loss.
+        // Only update the semester if the syllabus explicitly provides a value.
+        if (syllabusData.Semester.HasValue)
+        {
+            subjectToUpdate.Semester = syllabusData.Semester.Value;
+        }
+
+        // Only update prerequisites if the syllabus text provides them.
+        if (!string.IsNullOrWhiteSpace(syllabusData.PreRequisite))
+        {
+            subjectToUpdate.PrerequisiteSubjectIds = await ResolvePrerequisiteIdsAsync(syllabusData.PreRequisite, cancellationToken);
+        }
+        // MODIFICATION END
 
         if (syllabusData.ApprovedDate.HasValue)
         {
@@ -224,6 +235,42 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         return _mapper.Map<CreateSubjectResponse>(resultSubject);
     }
+
+    // MODIFICATION START: Added a new helper method to resolve subject codes to UUIDs.
+    private async Task<Guid[]> ResolvePrerequisiteIdsAsync(string? preRequisiteText, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(preRequisiteText))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        var codes = preRequisiteText.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(code => code.Trim())
+                                    .ToList();
+
+        if (!codes.Any())
+        {
+            return Array.Empty<Guid>();
+        }
+
+        var prereqIds = new List<Guid>();
+        foreach (var code in codes)
+        {
+            // This query assumes subject codes are unique.
+            var subject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == code, cancellationToken);
+            if (subject != null)
+            {
+                prereqIds.Add(subject.Id);
+            }
+            else
+            {
+                _logger.LogWarning("Could not resolve prerequisite subject code '{SubjectCode}' to a valid subject ID.", code);
+            }
+        }
+
+        return prereqIds.ToArray();
+    }
+    // MODIFICATION END
 
     private static string ComputeSha256Hash(string input)
     {

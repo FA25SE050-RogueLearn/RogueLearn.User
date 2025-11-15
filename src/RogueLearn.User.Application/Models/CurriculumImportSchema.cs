@@ -115,8 +115,19 @@ public class SyllabusData
     [JsonPropertyName("subjectName")]
     public string SubjectName { get; set; } = string.Empty;
 
+    [JsonPropertyName("credits")]
+    public int Credits { get; set; }
+
     [JsonPropertyName("description")]
     public string? Description { get; set; }
+
+    // MODIFICATION START: Added PreRequisite and Semester properties.
+    [JsonPropertyName("preRequisite")]
+    public string? PreRequisite { get; set; }
+
+    [JsonPropertyName("semester")]
+    public int? Semester { get; set; }
+    // MODIFICATION END
 
     [Required]
     public int VersionNumber { get; set; } = 1;
@@ -136,7 +147,6 @@ public class SyllabusData
     public int NoCredit { get; set; }
     public string DegreeLevel { get; set; } = string.Empty;
     public string TimeAllocation { get; set; } = string.Empty;
-    public string PreRequisite { get; set; } = string.Empty;
     public List<string> StudentTasks { get; set; } = new();
     public List<string> Tools { get; set; } = new();
 
@@ -160,9 +170,7 @@ public class SyllabusContent
     public string? CourseDescription { get; set; }
     public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
     public List<SyllabusSessionDto>? SessionSchedule { get; set; }
-    // MODIFICATION START: Added the top-level ConstructiveQuestions property.
     public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
-    // MODIFICATION END
 }
 
 public class SyllabusSessionDto
@@ -171,9 +179,6 @@ public class SyllabusSessionDto
     public string Topic { get; set; } = string.Empty;
     public List<string> Activities { get; set; } = new();
     public List<string> Readings { get; set; } = new();
-    // MODIFICATION START: Removed the nested ConstructiveQuestions property.
-    // public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
-    // MODIFICATION END
     public List<string> MappedSkills { get; set; } = new();
 }
 
