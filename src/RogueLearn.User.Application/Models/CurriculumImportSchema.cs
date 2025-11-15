@@ -1,4 +1,4 @@
-// src/RogueLearn.User/src/RogueLearn.User.Application/Models/CurriculumImportSchema.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Models/CurriculumImportSchema.cs
 using System.ComponentModel.DataAnnotations;
 using RogueLearn.User.Domain.Enums;
 using System.Text.Json.Serialization;
@@ -112,11 +112,12 @@ public class SyllabusData
     [JsonPropertyName("subjectCode")]
     public string SubjectCode { get; set; } = string.Empty;
 
-    // MODIFICATION: Added SubjectName to match the local definition and AI output.
     [JsonPropertyName("subjectName")]
     public string SubjectName { get; set; } = string.Empty;
 
-    // MODIFICATION: Added VersionNumber to match the local definition.
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
     [Required]
     public int VersionNumber { get; set; } = 1;
 
@@ -136,7 +137,6 @@ public class SyllabusData
     public string DegreeLevel { get; set; } = string.Empty;
     public string TimeAllocation { get; set; } = string.Empty;
     public string PreRequisite { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
     public List<string> StudentTasks { get; set; } = new();
     public List<string> Tools { get; set; } = new();
 
@@ -160,11 +160,9 @@ public class SyllabusContent
     public string? CourseDescription { get; set; }
     public List<CourseLearningOutcome>? CourseLearningOutcomes { get; set; }
     public List<SyllabusSessionDto>? SessionSchedule { get; set; }
-    public List<AssessmentItem>? Assessments { get; set; }
-    public List<string>? RequiredTexts { get; set; }
-    public List<string>? RecommendedTexts { get; set; }
-    public string? GradingPolicy { get; set; }
-    public string? AttendancePolicy { get; set; }
+    // MODIFICATION START: Added the top-level ConstructiveQuestions property.
+    public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
+    // MODIFICATION END
 }
 
 public class SyllabusSessionDto
@@ -173,7 +171,9 @@ public class SyllabusSessionDto
     public string Topic { get; set; } = string.Empty;
     public List<string> Activities { get; set; } = new();
     public List<string> Readings { get; set; } = new();
-    public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
+    // MODIFICATION START: Removed the nested ConstructiveQuestions property.
+    // public List<ConstructiveQuestion> ConstructiveQuestions { get; set; } = new();
+    // MODIFICATION END
     public List<string> MappedSkills { get; set; } = new();
 }
 

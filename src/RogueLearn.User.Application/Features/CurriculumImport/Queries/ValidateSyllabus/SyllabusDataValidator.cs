@@ -48,65 +48,30 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .SetValidator(new CourseLearningOutcomeValidator())
             .When(x => x.CourseLearningOutcomes != null);
 
-        // MODIFIED: The validation rule now targets the 'SessionSchedule' property
-        // and uses the correctly renamed 'SyllabusSessionValidator'.
         RuleForEach(x => x.SessionSchedule)
             .SetValidator(new SyllabusSessionValidator())
             .When(x => x.SessionSchedule != null);
 
-        RuleForEach(x => x.Assessments)
-            .SetValidator(new AssessmentItemValidator())
-            .When(x => x.Assessments != null);
-
-        RuleFor(x => x.RequiredTexts)
-            .Must(texts => texts == null || texts.All(t => !string.IsNullOrWhiteSpace(t)))
-            .WithMessage("Required texts cannot contain empty or whitespace-only values.")
-            .When(x => x.RequiredTexts != null);
-
-        RuleForEach(x => x.RequiredTexts)
-            .MaximumLength(1000)
-            .WithMessage("Each required text cannot exceed 1000 characters.")
-            .When(x => x.RequiredTexts != null);
-
-        RuleFor(x => x.RecommendedTexts)
-            .Must(texts => texts == null || texts.All(t => !string.IsNullOrWhiteSpace(t)))
-            .WithMessage("Recommended texts cannot contain empty or whitespace-only values.")
-            .When(x => x.RecommendedTexts != null);
-
-        RuleForEach(x => x.RecommendedTexts)
-            .MaximumLength(1000)
-            .WithMessage("Each recommended text cannot exceed 1000 characters.")
-            .When(x => x.RecommendedTexts != null);
-
-        RuleFor(x => x.GradingPolicy)
-            .MaximumLength(1000)
-            .WithMessage("Grading policy cannot exceed 1000 characters.")
-            .When(x => !string.IsNullOrEmpty(x.GradingPolicy));
-
-        RuleFor(x => x.AttendancePolicy)
-            .MaximumLength(1000)
-            .WithMessage("Attendance policy cannot exceed 1000 characters.")
-            .When(x => !string.IsNullOrEmpty(x.AttendancePolicy));
+        // MODIFICATION START: Added validation for the new top-level ConstructiveQuestions property.
+        RuleForEach(x => x.ConstructiveQuestions)
+            .SetValidator(new ConstructiveQuestionValidator())
+            .When(x => x.ConstructiveQuestions != null);
+        // MODIFICATION END
     }
 }
 
-// MODIFIED: The class has been renamed from 'SyllabusWeekValidator' to 'SyllabusSessionValidator'
-// and now validates the 'SyllabusSessionDto' type.
 public class SyllabusSessionValidator : AbstractValidator<SyllabusSessionDto>
 {
     public SyllabusSessionValidator()
     {
-        // MODIFIED: The rule now validates 'SessionNumber' instead of 'WeekNumber'.
         RuleFor(x => x.SessionNumber)
             .GreaterThan(0)
             .WithMessage("Session number must be greater than 0.")
-            // MODIFIED: The upper limit is increased to accommodate more sessions than weeks.
             .LessThanOrEqualTo(100)
             .WithMessage("Session number cannot exceed 100.");
 
         RuleFor(x => x.Topic)
             .NotEmpty()
-            // MODIFIED: The error message is updated for clarity.
             .WithMessage("Session topic is required.")
             .MaximumLength(500)
             .WithMessage("Session topic cannot exceed 500 characters.");
@@ -131,34 +96,7 @@ public class SyllabusSessionValidator : AbstractValidator<SyllabusSessionDto>
             .WithMessage("Each reading material cannot exceed 300 characters.")
             .When(x => x.Readings != null);
 
-        // Per-session constructive questions
-        RuleForEach(x => x.ConstructiveQuestions)
-            .SetValidator(new ConstructiveQuestionValidator())
-            .When(x => x.ConstructiveQuestions != null);
-    }
-}
-
-public class AssessmentItemValidator : AbstractValidator<AssessmentItem>
-{
-    public AssessmentItemValidator()
-    {
-        RuleFor(x => x.Type)
-            .NotEmpty()
-            .WithMessage("Assessment type is required.")
-            .MaximumLength(50)
-            .WithMessage("Assessment type cannot exceed 50 characters.");
-
-        RuleFor(x => x.WeightPercentage)
-            .GreaterThan(0)
-            .WithMessage("Weight percentage must be greater than 0.")
-            .LessThanOrEqualTo(100)
-            .WithMessage("Weight percentage cannot exceed 100.")
-            .When(x => x.WeightPercentage.HasValue);
-
-        RuleFor(x => x.Description)
-            .MaximumLength(1000)
-            .WithMessage("Assessment description cannot exceed 1000 characters.")
-            .When(x => !string.IsNullOrEmpty(x.Description));
+    
     }
 }
 

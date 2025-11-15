@@ -1,11 +1,11 @@
-﻿// src/RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommandHandler.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommandHandler.cs
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Common;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;
-using RogueLearn.User.Application.Models; // MODIFICATION: Using the correct shared model namespace
+using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -16,8 +16,6 @@ using System.Security.Cryptography;
 using System.Text;
 
 namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
-
-// MODIFICATION: The local, redundant SyllabusImportData class has been COMPLETELY REMOVED to resolve the type conflict.
 
 public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubjectFromTextCommand, CreateSubjectResponse>
 {
@@ -79,7 +77,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             }
         }
 
-        // MODIFICATION: The type is now the correct, shared SyllabusData model.
         SyllabusData? syllabusData;
         try
         {
@@ -99,7 +96,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         if (!isCacheHit)
         {
-            // This call now works because 'syllabusData' is the correct type.
             await _storage.SaveSyllabusDataAsync(
                 syllabusData.SubjectCode,
                 syllabusData.VersionNumber,
@@ -115,39 +111,65 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             request.AuthUserId,
             cancellationToken);
 
+        // MODIFICATION START: The logic is now correctly bifurcated to handle updates and creations separately.
         if (existingSubject != null)
         {
             _logger.LogInformation("Found existing subject {SubjectId} within user's context. Updating content.", existingSubject.Id);
-            return await UpdateSubjectContent(existingSubject, extractedJson, syllabusData, cancellationToken);
+            return await UpdateExistingSubjectContent(existingSubject, extractedJson, syllabusData, cancellationToken);
         }
-
-        _logger.LogWarning("Subject with code {SubjectCode} not found within user's context. Creating a new subject shell and linking it to the user's program.", syllabusData.SubjectCode);
-
-        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
-            ?? throw new NotFoundException("UserProfile", request.AuthUserId);
-
-        if (userProfile.RouteId == null)
+        else
         {
-            throw new BadRequestException("Cannot create a new subject because the user has not selected a curriculum program (route).");
+            _logger.LogWarning("Subject with code {SubjectCode} not found within user's context. Creating a new subject shell and linking it to the user's program.", syllabusData.SubjectCode);
+
+            var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
+                ?? throw new NotFoundException("UserProfile", request.AuthUserId);
+
+            if (userProfile.RouteId == null)
+            {
+                throw new BadRequestException("Cannot create a new subject because the user has not selected a curriculum program (route).");
+            }
+
+            // Create a new Subject entity. Its ID will be Guid.Empty by default.
+            var newSubject = new Subject { SubjectCode = syllabusData.SubjectCode, Description = syllabusData.Description };
+
+            using (var jsonDoc = JsonDocument.Parse(extractedJson))
+            {
+                if (jsonDoc.RootElement.TryGetProperty("content", out var contentElement))
+                {
+                    var serializerOptions = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                        Converters = { new ObjectToInferredTypesConverter() }
+                    };
+                    newSubject.Content = JsonSerializer.Deserialize<Dictionary<string, object>>(contentElement.GetRawText(), serializerOptions);
+                }
+            }
+
+            newSubject.SubjectName = syllabusData.SubjectName;
+
+            if (syllabusData.ApprovedDate.HasValue)
+            {
+                newSubject.UpdatedAt = new DateTimeOffset(syllabusData.ApprovedDate.Value.ToDateTime(TimeOnly.MinValue));
+            }
+
+            // Call AddAsync for the new entity. This is the correct operation.
+            var createdSubjectEntity = await _subjectRepository.AddAsync(newSubject, cancellationToken);
+            _logger.LogInformation("Successfully created new subject {SubjectId} with syllabus content.", createdSubjectEntity.Id);
+
+            var programSubjectLink = new CurriculumProgramSubject
+            {
+                ProgramId = userProfile.RouteId.Value,
+                SubjectId = createdSubjectEntity.Id
+            };
+            await _programSubjectRepository.AddAsync(programSubjectLink, cancellationToken);
+            _logger.LogInformation("Linked new subject {SubjectId} to program {ProgramId}", createdSubjectEntity.Id, userProfile.RouteId.Value);
+
+            return _mapper.Map<CreateSubjectResponse>(createdSubjectEntity);
         }
-
-        var newSubject = new Subject { SubjectCode = syllabusData.SubjectCode };
-
-        var createdSubject = await UpdateSubjectContent(newSubject, extractedJson, syllabusData, cancellationToken);
-
-        var programSubjectLink = new CurriculumProgramSubject
-        {
-            ProgramId = userProfile.RouteId.Value,
-            SubjectId = createdSubject.Id
-        };
-        await _programSubjectRepository.AddAsync(programSubjectLink, cancellationToken);
-        _logger.LogInformation("Linked new subject {SubjectId} to program {ProgramId}", createdSubject.Id, userProfile.RouteId.Value);
-
-        return createdSubject;
+        // MODIFICATION END
     }
 
-    // MODIFICATION: The parameter 'syllabusData' is now the correct shared type.
-    private async Task<CreateSubjectResponse> UpdateSubjectContent(Subject subjectToUpdate, string extractedJson, SyllabusData syllabusData, CancellationToken cancellationToken)
+    private async Task<CreateSubjectResponse> UpdateExistingSubjectContent(Subject subjectToUpdate, string extractedJson, SyllabusData syllabusData, CancellationToken cancellationToken)
     {
         using (var jsonDoc = JsonDocument.Parse(extractedJson))
         {
@@ -163,6 +185,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         }
 
         subjectToUpdate.SubjectName = syllabusData.SubjectName;
+        // Also update the top-level description from the syllabus data.
+        subjectToUpdate.Description = syllabusData.Description;
 
         if (syllabusData.ApprovedDate.HasValue)
         {
@@ -173,11 +197,9 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             subjectToUpdate.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        var resultSubject = subjectToUpdate.Id == Guid.Empty
-            ? await _subjectRepository.AddAsync(subjectToUpdate, cancellationToken)
-            : await _subjectRepository.UpdateAsync(subjectToUpdate, cancellationToken);
+        var resultSubject = await _subjectRepository.UpdateAsync(subjectToUpdate, cancellationToken);
 
-        _logger.LogInformation("Successfully upserted subject {SubjectId} with new syllabus content.", resultSubject.Id);
+        _logger.LogInformation("Successfully updated subject {SubjectId} with new syllabus content.", resultSubject.Id);
 
         return _mapper.Map<CreateSubjectResponse>(resultSubject);
     }

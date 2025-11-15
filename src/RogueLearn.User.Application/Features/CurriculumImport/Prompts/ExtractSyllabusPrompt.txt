@@ -5,6 +5,7 @@ Your output MUST conform to this exact structure:
 {
   "subjectCode": "string",
   "subjectName": "string",
+  "description": "string (A concise summary of the course's overall objective and content)",
   "approvedDate": "string (YYYY-MM-DD format, from the 'effective date' or 'approved date' in the text)",
   "content": {
     "courseDescription": "string (A concise summary of the course)",
@@ -20,43 +21,33 @@ Your output MUST conform to this exact structure:
         "topic": "string (The main topic for the session)",
         "activities": ["string"],
         "readings": ["string"],
-        "constructiveQuestions": [
-          {
-            "question": "string",
-            "sessionNumber": integer (optional, map to the session number)
-          }
-        ],
         "mappedSkills": ["string"]
       }
     ],
-    "assessments": [
+    "constructiveQuestions": [
       {
-        "type": "string (e.g., 'Assignment')",
-        "weightPercentage": integer,
-        "description": "string"
+        "question": "string",
+        "sessionNumber": integer (optional, map to the session number if available)
       }
-    ],
-    "requiredTexts": ["string"],
-    "recommendedTexts": ["string"],
-    "gradingPolicy": "string",
-    "attendancePolicy": "string"
+    ]
   }
 }
 
 ## EXTRACTION RULES ##
 1.  **Subject Identification:** Extract the `subjectCode` and `subjectName`.
-2.  **Approved Date:** Find the 'effective date' or 'approved date' in the text and format it as `YYYY-MM-DD`. This is a critical field.
-3.  **Course Learning Outcomes (CLOs):** Populate the `courseLearningOutcomes` array with the ID and full text for each CLO found.
-4.  **Session Schedule:**
+2.  **Top-Level Description:** Create a concise summary of the course's main goal and content for the top-level `description` field. This should be a brief overview.
+3.  **Approved Date:** Find the 'effective date' or 'approved date' in the text and format it as `YYYY-MM-DD`. This is a critical field.
+4.  **Course Learning Outcomes (CLOs):** Populate the `courseLearningOutcomes` array with the ID and full text for each CLO found.
+5.  **Session Schedule:**
     *   For each session in the syllabus, create an object in the `sessionSchedule` array.
     *   Extract the `topic`, `activities`, and any assigned `readings`.
-5.  **CRITICAL - Constructive Questions Placement:**
-    *   First, extract ALL constructive questions from the entire document, noting which session number each question is for.
-    *   Then, iterate through your created `sessionSchedule` objects. For each session, find all the questions you extracted that are designated for that specific `sessionNumber` and place them inside that session's `constructiveQuestions` array.
-    *   **DO NOT** group questions from multiple sessions under a single session entry. Each question must go into the session object that matches its `sessionNumber`.
-6.  **CRITICAL - Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
-7.  **Assessments:** Populate the `assessments` array with the type, weight, and description of all graded components.
-8.  **Completeness:** Fill in all other fields (`courseDescription`, `requiredTexts`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
+6.  **CRITICAL - Constructive Questions Placement:**
+    *   Scan the entire document for all "Constructive Questions" or "CQ" sections.
+    *   Extract every question you find and place it into the single, top-level `content.constructiveQuestions` array.
+    *   If a question is associated with a specific session number, include that number in the JSON object for that question.
+    *   **Deduplication:** Ensure the final `constructiveQuestions` array does not contain duplicate question strings.
+7.  **CRITICAL - Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
+8.  **Completeness:** Fill in all other fields (`courseDescription`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
 9.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
 
 ## TEXT TO PROCESS ##
