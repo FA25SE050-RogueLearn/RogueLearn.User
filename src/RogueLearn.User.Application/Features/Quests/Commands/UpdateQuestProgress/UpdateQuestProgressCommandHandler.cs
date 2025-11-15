@@ -29,11 +29,32 @@ public class UpdateQuestProgressCommandHandler : IRequestHandler<UpdateQuestProg
 
         if (progress == null)
         {
-            _logger.LogWarning("User quest progress record not found for User {AuthUserId} and Quest {QuestId}",
+            // If no progress record exists, create one. This handles the case where a user
+            // updates progress on a quest for the first time.
+            _logger.LogInformation("No existing progress found. Creating new UserQuestProgress record for User {AuthUserId}, Quest {QuestId}",
                 request.AuthUserId, request.QuestId);
-            throw new NotFoundException("Quest progress not found for this user.");
+            progress = new Domain.Entities.UserQuestProgress
+            {
+                AuthUserId = request.AuthUserId,
+                QuestId = request.QuestId,
+                Status = request.Status, // Set to the requested status directly
+                LastUpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            if (request.Status == QuestStatus.Completed)
+            {
+                progress.CompletedAt = DateTimeOffset.UtcNow;
+            }
+
+            await _progressRepository.AddAsync(progress, cancellationToken);
+
+            _logger.LogInformation("Successfully created and set quest progress for User {AuthUserId}, Quest {QuestId} to status {Status}",
+                request.AuthUserId, request.QuestId, request.Status);
+
+            return; // End execution here as the record is now created with the correct status
         }
 
+        // If a record already exists, update it as before.
         progress.Status = request.Status;
         progress.LastUpdatedAt = DateTimeOffset.UtcNow;
 

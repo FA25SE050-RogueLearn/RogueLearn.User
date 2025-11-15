@@ -57,11 +57,9 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
                 Status = QuestAttemptStatus.InProgress,
                 StartedAt = DateTimeOffset.UtcNow
             };
-            // MODIFICATION START: The return value of AddAsync is now captured.
-            // This ensures we get the correct, database-generated ID for the new attempt,
-            // which is essential for the foreign key relationship to work correctly.
+            // This captures the returned entity, which now contains the
+            // database-generated ID, preventing foreign key violations.
             attempt = await _attemptRepository.AddAsync(attempt, cancellationToken);
-            // MODIFICATION END
         }
 
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
@@ -74,7 +72,7 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
             return;
         }
 
-        // --- MODIFICATION START: Transactional Logic with MediatR ---
+        // --- Transactional Logic with MediatR ---
         if (request.Status == StepCompletionStatus.Completed)
         {
             // First, attempt to dispatch the XP event. This will go through the validation pipeline.
@@ -154,7 +152,6 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
                 await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
             }
         }
-        // --- MODIFICATION END ---
 
         _logger.LogInformation("Successfully updated progress for Step:{StepId}", request.StepId);
     }
