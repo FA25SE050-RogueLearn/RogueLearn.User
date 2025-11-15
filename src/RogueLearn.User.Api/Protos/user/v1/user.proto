@@ -1,0 +1,256 @@
+syntax = "proto3";
+package user.v1;
+option csharp_namespace = "RogueLearn.User.Api.Grpc";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+message GetUserProfileByAuthIdRequest { string auth_user_id = 1; }
+
+message UserProfile {
+  string id = 1;
+  string auth_user_id = 2;
+  string username = 3;
+  string email = 4;
+  string first_name = 5;
+  string last_name = 6;
+  int32 level = 7;
+  int32 experience_points = 8;
+  bool onboarding_completed = 9;
+  google.protobuf.Timestamp created_at = 10;
+  string profile_image_url = 11;
+  string bio = 12;
+  string preferences_json = 13;
+  repeated string roles = 14;
+  string class_id = 15;
+  string route_id = 16;
+}
+
+service UserProfilesService {
+  rpc GetByAuthId(GetUserProfileByAuthIdRequest) returns (UserProfile);
+  rpc UpdateMyProfile(UpdateMyProfileRequest) returns (UserProfile);
+  rpc LogNewUser(LogNewUserRequest) returns (google.protobuf.Empty);
+  rpc GetAll(GetAllUserProfilesRequest) returns (UserProfileList);
+}
+
+message UpdateMyProfileRequest {
+  string auth_user_id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string profile_image_url = 4;
+  string bio = 5;
+  string preferences_json = 6;
+}
+
+message LogNewUserRequest {
+  string auth_user_id = 1;
+  string email = 2;
+  string username = 3;
+}
+
+message GetAllUserProfilesRequest {}
+
+message UserProfileList { repeated UserProfile items = 1; }
+
+message GetUserContextByAuthIdRequest { string auth_user_id = 1; }
+
+message ClassSummary {
+  string id = 1;
+  string name = 2;
+  string roadmap_url = 3;
+  int32 difficulty_level = 4;
+  repeated string skill_focus_areas = 5;
+}
+
+message CurriculumEnrollment {
+  string version_id = 1;
+  string version_code = 2;
+  int32 effective_year = 3;
+  string status = 4;
+  string enrollment_date = 5;
+  string expected_graduation_date = 6;
+}
+
+message UserSkill {
+  string skill_name = 1;
+  int32 level = 2;
+  int32 experience_points = 3;
+  google.protobuf.Timestamp last_updated_at = 4;
+}
+
+message SkillSummary {
+  int32 total_skills = 1;
+  int32 total_experience_points = 2;
+  int32 highest_level = 3;
+  double average_level = 4;
+  repeated UserSkill top_skills = 5;
+}
+
+message UserContext {
+  string auth_user_id = 1;
+  string username = 2;
+  string email = 3;
+  string display_name = 4;
+  string profile_image_url = 5;
+  string bio = 6;
+  string preferences_json = 7;
+  repeated string roles = 8;
+  ClassSummary class = 9;
+  CurriculumEnrollment enrollment = 10;
+  SkillSummary skills = 11;
+  int32 achievements_count = 12;
+}
+
+service UserContextService {
+  rpc GetByAuthId(GetUserContextByAuthIdRequest) returns (UserContext);
+}
+
+message GetAllRequest {}
+
+message Achievement {
+  string id = 1;
+  string key = 2;
+  string name = 3;
+  string description = 4;
+  string rule_type = 5;
+  string rule_config = 6;
+  string category = 7;
+  string icon = 8;
+  string icon_url = 9;
+  int32 version = 10;
+  bool is_active = 11;
+  string source_service = 12;
+}
+
+message AchievementList {
+  repeated Achievement achievements = 1;
+}
+
+service AchievementsService {
+  rpc GetAll(GetAllRequest) returns (AchievementList);
+  rpc Create(CreateAchievementRequest) returns (Achievement);
+  rpc Update(UpdateAchievementRequest) returns (Achievement);
+  rpc Delete(DeleteAchievementRequest) returns (google.protobuf.Empty);
+  rpc AwardToUser(AwardAchievementToUserRequest) returns (google.protobuf.Empty);
+  rpc RevokeFromUser(RevokeAchievementFromUserRequest) returns (google.protobuf.Empty);
+  rpc GetByAuthUserId(GetUserAchievementsByAuthUserIdRequest) returns (UserAchievementList);
+}
+
+message CreateAchievementRequest {
+  string key = 1;
+  string name = 2;
+  string description = 3;
+  string rule_type = 4;
+  string rule_config = 5;
+  string category = 6;
+  string icon = 7;
+  string icon_url = 8;
+  int32 version = 9;
+  bool is_active = 10;
+  string source_service = 11;
+}
+
+message UpdateAchievementRequest {
+  string id = 1;
+  string key = 2;
+  string name = 3;
+  string description = 4;
+  string rule_type = 5;
+  string rule_config = 6;
+  string category = 7;
+  string icon = 8;
+  string icon_url = 9;
+  int32 version = 10;
+  bool is_active = 11;
+  string source_service = 12;
+}
+
+message DeleteAchievementRequest { string id = 1; }
+
+message AwardAchievementToUserRequest {
+  string user_id = 1;
+  string achievement_id = 2;
+  string context = 3;
+}
+
+message RevokeAchievementFromUserRequest {
+  string user_id = 1;
+  string achievement_id = 2;
+}
+
+message GetUserAchievementsByAuthUserIdRequest { string auth_user_id = 1; }
+
+message UserAchievement {
+  string achievement_id = 1;
+  string key = 2;
+  string name = 3;
+  string description = 4;
+  string icon_url = 5;
+  string source_service = 6;
+  google.protobuf.Timestamp earned_at = 7;
+  string context = 8;
+}
+
+message UserAchievementList { repeated UserAchievement achievements = 1; }
+
+message GetGuildByIdRequest { string guild_id = 1; }
+
+message Guild {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool is_public = 4;
+  int32 max_members = 5;
+  string created_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+  int32 member_count = 8;
+}
+
+service GuildsService {
+  rpc GetGuildById(GetGuildByIdRequest) returns (Guild);
+  rpc GetAllGuilds(GetAllGuildsRequest) returns (GuildList);
+  rpc GetInvitations(GetGuildInvitationsRequest) returns (GuildInvitationList);
+  rpc GetJoinRequests(GetGuildJoinRequestsRequest) returns (GuildJoinRequestList);
+  rpc GetMemberRoles(GetGuildMemberRolesRequest) returns (GuildMemberRoleList);
+  rpc GetMyGuild(GetMyGuildRequest) returns (Guild);
+  rpc GetMyJoinRequests(GetMyJoinRequestsRequest) returns (GuildJoinRequestList);
+}
+
+message GetAllGuildsRequest { bool include_private = 1; }
+message GuildList { repeated Guild items = 1; }
+
+message GetGuildInvitationsRequest { string guild_id = 1; }
+message GuildInvitation {
+  string id = 1;
+  string guild_id = 2;
+  string invitee_id = 3;
+  string message = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  string invitation_id = 6;
+  string inviter_auth_user_id = 7;
+  string target_user_id = 8;
+  string target_email = 9;
+  string status = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp responded_at = 12;
+}
+message GuildInvitationList { repeated GuildInvitation items = 1; }
+
+message GetGuildJoinRequestsRequest { string guild_id = 1; bool pending_only = 2; }
+message GuildJoinRequest {
+  string id = 1;
+  string guild_id = 2;
+  string requester_id = 3;
+  string status = 4;
+  string message = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp responded_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+}
+message GuildJoinRequestList { repeated GuildJoinRequest items = 1; }
+
+message GetGuildMemberRolesRequest { string guild_id = 1; string member_auth_user_id = 2; }
+message GuildMemberRoleList { repeated string roles = 1; }
+
+message GetMyGuildRequest { string auth_user_id = 1; }
+
+message GetMyJoinRequestsRequest { string auth_user_id = 1; bool pending_only = 2; }
