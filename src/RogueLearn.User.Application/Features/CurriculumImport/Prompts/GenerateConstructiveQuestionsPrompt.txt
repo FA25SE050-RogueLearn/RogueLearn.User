@@ -1,0 +1,26 @@
+You are an expert educator and curriculum designer. Your task is to generate insightful "Constructive Questions" for each session in the provided syllabus schedule.
+
+## CONTEXT ##
+The following JSON represents the session schedule for a university-level subject. Each session has a topic, readings, and activities.
+
+```json
+{{SESSION_SCHEDULE_JSON}}
+```
+
+## TASK ##
+For EACH session in the schedule, generate 2 to 3 thought-provoking questions that test a student's understanding of the session's topic and activities.
+
+## OUTPUT SCHEMA ##
+Your response MUST be a single, valid JSON array of objects. Each object must conform to this exact schema:
+[
+  {
+    "question": "string (The generated question)",
+    "sessionNumber": integer (The session number this question applies to)
+  }
+]
+
+## CRITICAL RULES ##
+1.  **Generate for Every Session:** You must generate at least two questions for every single session provided in the input JSON.
+2.  **Match Session Numbers:** The `sessionNumber` in your output MUST correctly correspond to the session the question was generated for.
+3.  **High-Quality Questions:** The questions should encourage critical thinking, not just simple fact recall. They should relate directly to the `topic`, `readings`, and `activities` of the session.
+4.  **JSON ONLY:** Your entire output must be a single, raw JSON array. Do NOT include any commentary, explanations, or markdown fences like ```json.

@@ -20,6 +20,7 @@ namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFr
 public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubjectFromTextCommand, CreateSubjectResponse>
 {
     private readonly ISyllabusExtractionPlugin _syllabusExtractionPlugin;
+    private readonly IConstructiveQuestionGenerationPlugin _questionGenerationPlugin; // MODIFICATION: Added new plugin
     private readonly ISubjectRepository _subjectRepository;
     private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
     private readonly IMapper _mapper;
@@ -30,6 +31,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
     public ImportSubjectFromTextCommandHandler(
         ISyllabusExtractionPlugin syllabusExtractionPlugin,
+        IConstructiveQuestionGenerationPlugin questionGenerationPlugin, // MODIFICATION: Added new plugin
         ISubjectRepository subjectRepository,
         ICurriculumProgramSubjectRepository programSubjectRepository,
         IMapper mapper,
@@ -39,6 +41,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         ICurriculumImportStorage storage)
     {
         _syllabusExtractionPlugin = syllabusExtractionPlugin;
+        _questionGenerationPlugin = questionGenerationPlugin; // MODIFICATION: Added new plugin
         _subjectRepository = subjectRepository;
         _programSubjectRepository = programSubjectRepository;
         _mapper = mapper;
@@ -94,13 +97,36 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             throw new BadRequestException("Extracted syllabus data is missing a valid SubjectCode.");
         }
 
+        // MODIFICATION START: Conditional generation of constructive questions.
+        if (syllabusData.Content?.ConstructiveQuestions == null || !syllabusData.Content.ConstructiveQuestions.Any())
+        {
+            _logger.LogInformation("No constructive questions found in extracted syllabus. Attempting to generate them with AI.");
+            if (syllabusData.Content?.SessionSchedule != null && syllabusData.Content.SessionSchedule.Any())
+            {
+                var generatedQuestions = await _questionGenerationPlugin.GenerateQuestionsAsync(syllabusData.Content.SessionSchedule, cancellationToken);
+                if (generatedQuestions.Any())
+                {
+                    syllabusData.Content.ConstructiveQuestions = generatedQuestions;
+                    _logger.LogInformation("Successfully generated {Count} constructive questions for the syllabus.", generatedQuestions.Count);
+
+                    // Re-serialize the updated JSON to ensure the generated questions are cached correctly.
+                    extractedJson = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } });
+                }
+                else
+                {
+                    _logger.LogWarning("AI question generation did not produce any questions.");
+                }
+            }
+        }
+        // MODIFICATION END
+
         if (!isCacheHit)
         {
             await _storage.SaveSyllabusDataAsync(
                 syllabusData.SubjectCode,
                 syllabusData.VersionNumber,
                 syllabusData,
-                extractedJson,
+                extractedJson, // This now contains the generated questions if they were created.
                 rawTextHash,
                 cancellationToken);
             _logger.LogInformation("Cache WRITE for syllabus hash {Hash}.", rawTextHash);
@@ -111,7 +137,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             request.AuthUserId,
             cancellationToken);
 
-        // MODIFICATION START: The logic is now correctly bifurcated to handle updates and creations separately.
         if (existingSubject != null)
         {
             _logger.LogInformation("Found existing subject {SubjectId} within user's context. Updating content.", existingSubject.Id);
@@ -129,7 +154,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 throw new BadRequestException("Cannot create a new subject because the user has not selected a curriculum program (route).");
             }
 
-            // Create a new Subject entity. Its ID will be Guid.Empty by default.
             var newSubject = new Subject { SubjectCode = syllabusData.SubjectCode, Description = syllabusData.Description };
 
             using (var jsonDoc = JsonDocument.Parse(extractedJson))
@@ -152,7 +176,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 newSubject.UpdatedAt = new DateTimeOffset(syllabusData.ApprovedDate.Value.ToDateTime(TimeOnly.MinValue));
             }
 
-            // Call AddAsync for the new entity. This is the correct operation.
             var createdSubjectEntity = await _subjectRepository.AddAsync(newSubject, cancellationToken);
             _logger.LogInformation("Successfully created new subject {SubjectId} with syllabus content.", createdSubjectEntity.Id);
 
@@ -166,7 +189,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
             return _mapper.Map<CreateSubjectResponse>(createdSubjectEntity);
         }
-        // MODIFICATION END
     }
 
     private async Task<CreateSubjectResponse> UpdateExistingSubjectContent(Subject subjectToUpdate, string extractedJson, SyllabusData syllabusData, CancellationToken cancellationToken)
@@ -185,7 +207,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         }
 
         subjectToUpdate.SubjectName = syllabusData.SubjectName;
-        // Also update the top-level description from the syllabus data.
         subjectToUpdate.Description = syllabusData.Description;
 
         if (syllabusData.ApprovedDate.HasValue)

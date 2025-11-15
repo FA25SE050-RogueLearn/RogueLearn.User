@@ -57,6 +57,9 @@ public static class ServiceCollectionExtensions
         // ADDED: Register the new plugin for quest step generation.
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
         services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
+        // MODIFICATION START: Register the new plugin for constructive question generation.
+        services.AddScoped<IConstructiveQuestionGenerationPlugin, ConstructiveQuestionGenerationPlugin>();
+        // MODIFICATION END
 
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
