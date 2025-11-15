@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Prompts/ExtractSyllabusPrompt.txt
 Extract syllabus information from the following text and return it as a single JSON object.
 
 ## TARGET JSON SCHEMA ##
@@ -51,11 +50,14 @@ Your output MUST conform to this exact structure:
 4.  **Session Schedule:**
     *   For each session in the syllabus, create an object in the `sessionSchedule` array.
     *   Extract the `topic`, `activities`, and any assigned `readings`.
-    *   If the syllabus contains "constructive questions" or similar review questions, place them inside the `constructiveQuestions` array for the corresponding session.
-5.  **CRITICAL - Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
-6.  **Assessments:** Populate the `assessments` array with the type, weight, and description of all graded components.
-7.  **Completeness:** Fill in all other fields (`courseDescription`, `requiredTexts`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
-8.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
+5.  **CRITICAL - Constructive Questions Placement:**
+    *   First, extract ALL constructive questions from the entire document, noting which session number each question is for.
+    *   Then, iterate through your created `sessionSchedule` objects. For each session, find all the questions you extracted that are designated for that specific `sessionNumber` and place them inside that session's `constructiveQuestions` array.
+    *   **DO NOT** group questions from multiple sessions under a single session entry. Each question must go into the session object that matches its `sessionNumber`.
+6.  **CRITICAL - Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities`. Based on this context, list the core skills being taught. The `mappedSkills` array should contain 2-4 concise, noun-based skill names (e.g., "Asynchronous Programming", "Dependency Injection", "MVC Architecture"). These will be used later to link to the master skills table.
+7.  **Assessments:** Populate the `assessments` array with the type, weight, and description of all graded components.
+8.  **Completeness:** Fill in all other fields (`courseDescription`, `requiredTexts`, etc.) if the information is present. If not, use `null` or empty arrays `[]`.
+9.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
 
 ## TEXT TO PROCESS ##
 {{RAW_TEXT}}
