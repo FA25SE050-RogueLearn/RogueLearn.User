@@ -23,8 +23,7 @@ Your output MUST conform to this exact structure:
         "sessionNumber": integer,
         "topic": "string (The main topic for the session)",
         "activities": ["string"],
-        "readings": ["string"],
-        "mappedSkills": ["string"]
+        "readings": ["string"]
       }
     ],
     "constructiveQuestions": [
@@ -45,7 +44,7 @@ Your output MUST conform to this exact structure:
     *   Extract every question you find and place it into the single, top-level `content.constructiveQuestions` array.
     *   If a question is associated with a specific session number, include that number.
     *   **Deduplication:** Ensure the final `constructiveQuestions` array does not contain duplicate question strings.
-4.  **Mapped Skills:** For each session in the `sessionSchedule`, analyze the `topic` and `activities` to list 2-4 concise, noun-based skill names in the `mappedSkills` array.
+4.  **No Mapped Skills:** Do NOT generate a "mappedSkills" array. This field has been deprecated.
 
 ## OTHER EXTRACTION RULES ##
 1.  **Subject Identification:** Extract the `subjectCode` and `subjectName`.

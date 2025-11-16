@@ -179,7 +179,6 @@ public class SyllabusSessionDto
     public string Topic { get; set; } = string.Empty;
     public List<string> Activities { get; set; } = new();
     public List<string> Readings { get; set; } = new();
-    public List<string> MappedSkills { get; set; } = new();
 }
 
 public class AssessmentItem

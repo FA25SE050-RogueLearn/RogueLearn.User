@@ -9,6 +9,7 @@ using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using AutoMapper;
 using System.Text.Json.Serialization;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 
@@ -32,9 +33,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IClassRepository _classRepository;
     private readonly ISkillRepository _skillRepository;
-    // The mapping repository is used to fetch the pre-approved skills for a subject.
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IPromptBuilder _promptBuilder;
+    private readonly IUserSkillRepository _userSkillRepository;
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
@@ -47,7 +48,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         IClassRepository classRepository,
         ISkillRepository skillRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
-        IPromptBuilder promptBuilder)
+        IPromptBuilder promptBuilder,
+        IUserSkillRepository userSkillRepository)
     {
         _questRepository = questRepository;
         _questStepRepository = questStepRepository;
@@ -60,6 +62,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _skillRepository = skillRepository;
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _promptBuilder = promptBuilder;
+        _userSkillRepository = userSkillRepository;
     }
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
@@ -113,6 +116,33 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         }
         var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => relevantSkillIds.Contains(s.Id)).ToList();
 
+        // When a user starts a quest, unlock all related skills by creating user_skills records if they don't exist.
+        // This makes the skills visible in the user's profile immediately with 0 XP.
+        var existingUserSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
+        var existingSkillIds = existingUserSkills.Select(us => us.SkillId).ToHashSet();
+
+        int unlockedCount = 0;
+        foreach (var skill in relevantSkills)
+        {
+            if (!existingSkillIds.Contains(skill.Id))
+            {
+                var newUserSkill = new UserSkill
+                {
+                    AuthUserId = request.AuthUserId,
+                    SkillId = skill.Id,
+                    SkillName = skill.Name,
+                    ExperiencePoints = 0,
+                    Level = 1
+                };
+                await _userSkillRepository.AddAsync(newUserSkill, cancellationToken);
+                unlockedCount++;
+            }
+        }
+
+        if (unlockedCount > 0)
+        {
+            _logger.LogInformation("Unlocked {Count} new skills for User {AuthUserId} upon starting Quest {QuestId}", unlockedCount, request.AuthUserId, request.QuestId);
+        }
 
         // Generate user context using the prompt builder (includes GPAs, subject status, class info, etc.)
         var userContext = await _promptBuilder.GenerateAsync(userProfile, userClass, cancellationToken);
