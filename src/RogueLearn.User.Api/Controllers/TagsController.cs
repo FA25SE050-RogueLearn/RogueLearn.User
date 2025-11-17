@@ -8,6 +8,7 @@ using RogueLearn.User.Application.Features.Tags.Commands.RemoveTagFromNote;
 using RogueLearn.User.Application.Features.Tags.Commands.CreateTagAndAttachToNote;
 using RogueLearn.User.Application.Features.Tags.Queries.GetMyTags;
 using RogueLearn.User.Application.Features.Tags.Queries.GetTagsForNote;
+using RogueLearn.User.Application.Features.Tags.Commands.UpdateTag;
 using BuildingBlocks.Shared.Authentication;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -122,5 +123,18 @@ public class TagsController : ControllerBase
     var authUserId = User.GetAuthUserId();
     await _mediator.Send(new RemoveTagFromNoteCommand { NoteId = noteId, TagId = tagId, AuthUserId = authUserId }, cancellationToken);
     return NoContent();
+  }
+
+  [HttpPut("{id:guid}")]
+  [ProducesResponseType(typeof(UpdateTagResponse), StatusCodes.Status200OK)]
+  [ProducesResponseType(StatusCodes.Status400BadRequest)]
+  [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+  public async Task<ActionResult<UpdateTagResponse>> UpdateTag(Guid id, [FromBody] UpdateTagCommand command, CancellationToken cancellationToken)
+  {
+    var authUserId = User.GetAuthUserId();
+    command.TagId = id;
+    command.AuthUserId = authUserId;
+    var result = await _mediator.Send(command, cancellationToken);
+    return Ok(result);
   }
 }
