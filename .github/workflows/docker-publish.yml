@@ -4,14 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'src/RogueLearn.User.Api/**'
-      - 'building_blocks/**'
-      - 'src/**'
-      - '.github/workflows/docker-publish.yml'
 
 concurrency:
   group: docker-publish-${{ github.ref }}
