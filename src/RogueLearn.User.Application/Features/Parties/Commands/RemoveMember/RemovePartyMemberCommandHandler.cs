@@ -28,9 +28,7 @@ public class RemovePartyMemberCommandHandler : IRequestHandler<RemovePartyMember
             throw new Exceptions.BadRequestException("Cannot remove Leader. Transfer leadership first.");
         }
 
-        member.Status = MemberStatus.Inactive;
-        member.LeftAt = DateTimeOffset.UtcNow;
-        await _memberRepository.UpdateAsync(member, cancellationToken);
+        await _memberRepository.DeleteAsync(member.Id, cancellationToken);
 
         return Unit.Value;
     }
