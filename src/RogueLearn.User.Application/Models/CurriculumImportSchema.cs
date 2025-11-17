@@ -179,6 +179,11 @@ public class SyllabusSessionDto
     public string Topic { get; set; } = string.Empty;
     public List<string> Activities { get; set; } = new();
     public List<string> Readings { get; set; } = new();
+
+    // This property will be populated by our new service before sending to the AI.
+    // It is not part of the AI's extraction output.
+    [JsonPropertyName("suggestedUrl")]
+    public string? SuggestedUrl { get; set; }
 }
 
 public class AssessmentItem

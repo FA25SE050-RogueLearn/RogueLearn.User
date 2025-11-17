@@ -16,16 +16,78 @@ public class QuestStepsPromptBuilder
     /// <param name="syllabusJson">The syllabus content in JSON format.</param>
     /// <param name="userContext">User performance and context information.</param>
     /// <param name="relevantSkills">Pre-approved skills that can be used for quest steps.</param>
+    /// <param name="subjectName">The name of the subject (e.g., "Mobile Programming with Android")</param>
+    /// <param name="courseDescription">Brief description of the course content</param>
     /// <returns>A structured prompt optimized for LLM consumption.</returns>
-    public string BuildPrompt(string syllabusJson, string userContext, List<Skill> relevantSkills)
+    public string BuildPrompt(
+        string syllabusJson,
+        string userContext,
+        List<Skill> relevantSkills,
+        string subjectName,
+        string courseDescription)
     {
         var prompt = new StringBuilder();
 
-        // ... (Header, User Context, Skills, and Syllabus sections remain unchanged) ...
+        // ===== CRITICAL HEADER: SUBJECT FOCUS =====
+        prompt.AppendLine("╔═══════════════════════════════════════════════════════════════╗");
+        prompt.AppendLine("║          QUEST STEP GENERATION - SUBJECT VALIDATION           ║");
+        prompt.AppendLine("╚═══════════════════════════════════════════════════════════════╝");
+        prompt.AppendLine();
+        prompt.AppendLine($"## SUBJECT: {subjectName}");
+        prompt.AppendLine();
+        prompt.AppendLine("⚠️  CRITICAL REQUIREMENT: STAY ON TOPIC ⚠️");
+        prompt.AppendLine();
+        prompt.AppendLine($"You are creating quest steps EXCLUSIVELY for: **{subjectName}**");
+        prompt.AppendLine($"Course Focus: {courseDescription}");
+        prompt.AppendLine();
+        prompt.AppendLine("### ABSOLUTE RULES (VIOLATION = STEP REJECTION):");
+        prompt.AppendLine();
+        prompt.AppendLine($"1. ✓ ONLY create content about **{subjectName}**");
+        prompt.AppendLine("2. ✗ NEVER generate content about different technologies or subjects");
+        prompt.AppendLine("3. ✓ Every Reading step MUST use topics from the provided syllabus SessionSchedule");
+        prompt.AppendLine("4. ✓ Reading step titles MUST align with session Topics from the syllabus");
+        prompt.AppendLine("5. ✓ Use URLs from syllabus (Readings or SuggestedUrl) when available");
+        prompt.AppendLine($"6. ✓ Stay within the subject domain: {subjectName}");
+        prompt.AppendLine();
+        prompt.AppendLine("### VALIDATION CHECKPOINT:");
+        prompt.AppendLine($"Before generating EACH step, ask: \"Is this about {subjectName} from the syllabus?\"");
+        prompt.AppendLine("If the answer is NO → DO NOT generate that step");
+        prompt.AppendLine();
+        prompt.AppendLine("### EXAMPLES OF CORRECT vs INCORRECT:");
+        prompt.AppendLine();
+
+        // Add specific examples based on subject keywords
+        if (subjectName.Contains("Android", StringComparison.OrdinalIgnoreCase) ||
+            subjectName.Contains("Mobile", StringComparison.OrdinalIgnoreCase))
+        {
+            prompt.AppendLine("✓ CORRECT: \"Understanding Android Activities and Lifecycle\"");
+            prompt.AppendLine("✓ CORRECT: \"Building UI with ConstraintLayout in Android\"");
+            prompt.AppendLine("✗ WRONG: \"Introduction to ASP.NET Core MVC\" (Wrong technology!)");
+            prompt.AppendLine("✗ WRONG: \"React Component Lifecycle\" (Wrong framework!)");
+        }
+        else if (subjectName.Contains("ASP.NET", StringComparison.OrdinalIgnoreCase) ||
+                 subjectName.Contains("C#", StringComparison.OrdinalIgnoreCase))
+        {
+            prompt.AppendLine("✓ CORRECT: \"Introduction to ASP.NET Core MVC\"");
+            prompt.AppendLine("✓ CORRECT: \"Dependency Injection in ASP.NET Core\"");
+            prompt.AppendLine("✗ WRONG: \"Android Activities and Intents\" (Wrong platform!)");
+            prompt.AppendLine("✗ WRONG: \"iOS View Controllers\" (Wrong platform!)");
+        }
+        else
+        {
+            prompt.AppendLine($"✓ CORRECT: Topics that directly relate to {subjectName}");
+            prompt.AppendLine($"✗ WRONG: Topics about technologies NOT mentioned in {subjectName}");
+        }
+
+        prompt.AppendLine();
+        prompt.AppendLine("---");
+        prompt.AppendLine();
+
+        // ===== ORIGINAL SECTIONS =====
         prompt.AppendLine("# Quest Step Generation Task");
         prompt.AppendLine();
         prompt.AppendLine("You are an expert educational content designer creating gamified learning experiences.");
-        prompt.AppendLine("Your task is to analyze syllabus content and generate engaging, progressive quest steps.");
+        prompt.AppendLine($"Your task is to analyze the {subjectName} syllabus and generate engaging, progressive quest steps.");
         prompt.AppendLine();
 
         prompt.AppendLine("---");
@@ -74,9 +136,15 @@ public class QuestStepsPromptBuilder
 
         prompt.AppendLine("---");
         prompt.AppendLine();
-        prompt.AppendLine("## Syllabus Content");
+        prompt.AppendLine($"## Syllabus Content for {subjectName}");
+        prompt.AppendLine();
+        prompt.AppendLine($"⚠️  THIS IS YOUR ONLY SOURCE OF TRUTH FOR {subjectName} CONTENT ⚠️");
         prompt.AppendLine();
         prompt.AppendLine("Use this syllabus content as the foundation for creating quest steps:");
+        prompt.AppendLine("- Each session represents a week of learning");
+        prompt.AppendLine("- The 'Topic' field tells you exactly what to cover");
+        prompt.AppendLine("- The 'SuggestedUrl' field (if present) MUST be used for Reading steps");
+        prompt.AppendLine("- The 'Readings' array may contain additional reference materials");
         prompt.AppendLine();
         prompt.AppendLine("```json");
         prompt.AppendLine(syllabusJson);
@@ -89,11 +157,12 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine();
         prompt.AppendLine("### Requirements");
         prompt.AppendLine();
-        prompt.AppendLine("1. **Quantity:** Generate 10 steps, each step represents 1 week.");
+        prompt.AppendLine("1. **Quantity:** Generate 10 steps, each step represents 1 week");
         prompt.AppendLine("2. **Progression:** Steps should follow a logical learning progression (easy to hard)");
         prompt.AppendLine("3. **Variety:** Use diverse step types to maintain engagement");
         prompt.AppendLine("4. **Personalization:** Consider the student's context, level, and class information");
         prompt.AppendLine("5. **Skill Mapping:** Each step must target exactly ONE skill from the pre-approved list");
+        prompt.AppendLine($"6. **Topic Alignment:** Every step MUST be about {subjectName} from the syllabus");
         prompt.AppendLine();
 
         prompt.AppendLine("### Step Types and Content Schemas");
@@ -103,6 +172,13 @@ public class QuestStepsPromptBuilder
 
         prompt.AppendLine("#### 1. Reading");
         prompt.AppendLine("Used for: Foundational knowledge, articles, documentation");
+        prompt.AppendLine();
+        prompt.AppendLine("**CRITICAL for Reading steps:**");
+        prompt.AppendLine("- articleTitle MUST come from the session's 'Topic' field in the syllabus");
+        prompt.AppendLine("- summary MUST reference the 'Readings' from that session");
+        prompt.AppendLine("- url MUST use the 'SuggestedUrl' if available, or a URL from 'Readings' if it exists");
+        prompt.AppendLine("- If no URL is available, use an empty string \"\"");
+        prompt.AppendLine();
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"stepNumber\": 1,");
@@ -112,9 +188,9 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"experiencePoints\": 15,");
         prompt.AppendLine("  \"content\": {");
         prompt.AppendLine("    \"skillId\": \"<guid-from-approved-list>\",");
-        prompt.AppendLine("    \"articleTitle\": \"Title of the reading material\",");
-        prompt.AppendLine("    \"summary\": \"Brief overview of what will be learned\",");
-        prompt.AppendLine("    \"url\": \"https://example.com/resource\"");
+        prompt.AppendLine("    \"articleTitle\": \"<MUST match session Topic from syllabus>\",");
+        prompt.AppendLine("    \"summary\": \"<reference session Readings from syllabus>\",");
+        prompt.AppendLine("    \"url\": \"<use SuggestedUrl or URL from Readings or empty string>\"");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
@@ -168,21 +244,20 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("```");
         prompt.AppendLine();
 
-        // MODIFICATION: The 'Coding' step's content schema is now the metadata payload.
         prompt.AppendLine("#### 4. Coding");
-        prompt.AppendLine("Used for: Generating a request for a practical programming problem.");
+        prompt.AppendLine("Used for: Generating a request for a practical programming problem");
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"stepNumber\": 4,");
-        prompt.AppendLine("  \"title\": \"Coding Challenge: Dependency Injection\",");
-        prompt.AppendLine("  \"description\": \"Prepare to implement the solution\",");
+        prompt.AppendLine("  \"title\": \"Coding Challenge: [Topic]\",");
+        prompt.AppendLine("  \"description\": \"Implement a solution to practice the concept\",");
         prompt.AppendLine("  \"stepType\": \"Coding\",");
         prompt.AppendLine("  \"experiencePoints\": 40,");
         prompt.AppendLine("  \"content\": {");
         prompt.AppendLine("    \"skillId\": \"<guid-from-approved-list>\",");
-        prompt.AppendLine("    \"language\": \"CSharp\",");
-        prompt.AppendLine("    \"difficulty\": \"Intermediate\",");
-        prompt.AppendLine("    \"topic\": \"Dependency Injection in ASP.NET Core\"");
+        prompt.AppendLine("    \"language\": \"[appropriate language for this subject]\",");
+        prompt.AppendLine("    \"difficulty\": \"Beginner|Intermediate|Advanced\",");
+        prompt.AppendLine($"    \"topic\": \"[topic from {subjectName} syllabus]\"");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
@@ -191,6 +266,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("### Critical Rules");
         prompt.AppendLine();
         prompt.AppendLine("- **MUST** use only skillIds from the Pre-Approved Skills list");
+        prompt.AppendLine("- For any 'Reading' step, you **MUST** use the `SuggestedUrl` provided for that session in the syllabus content. Do NOT use placeholder URLs or URLs from other technologies.");
         prompt.AppendLine("- **MUST** use exact stepType values: `Reading`, `Interactive`, `Quiz`, `Coding`");
         prompt.AppendLine("- **MUST** include all required fields for each content schema");
         prompt.AppendLine("- **MUST** set experiencePoints between 10-50 based on difficulty");
@@ -198,6 +274,8 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- **NEVER** invent new skillIds or use IDs not in the approved list");
         prompt.AppendLine("- **NEVER** create custom stepTypes");
         prompt.AppendLine("- **NEVER** omit the skillId field from content objects");
+        prompt.AppendLine($"- **NEVER** generate content about technologies not mentioned in {subjectName}");
+        prompt.AppendLine("- **NEVER** reference documentation or resources from different technology stacks");
         prompt.AppendLine();
 
         prompt.AppendLine("### Best Practices");
@@ -208,6 +286,51 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- Vary difficulty progressively (easy → medium → hard)");
         prompt.AppendLine("- Keep titles concise and engaging (3-6 words)");
         prompt.AppendLine("- Make descriptions clear and motivating (10-20 words)");
+        prompt.AppendLine($"- Ensure every step clearly relates to {subjectName}");
+        prompt.AppendLine();
+
+        prompt.AppendLine("---");
+        prompt.AppendLine();
+        prompt.AppendLine("## CONCRETE EXAMPLE");
+        prompt.AppendLine();
+        prompt.AppendLine("Given this syllabus session:");
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"SessionNumber\": 7,");
+        prompt.AppendLine("  \"Topic\": \"Layout manager (LinearLayout, ConstraintLayout)\",");
+        prompt.AppendLine("  \"Readings\": [\"eBook: Lesson 1, part 1.2\"],");
+        prompt.AppendLine("  \"SuggestedUrl\": \"https://developer.android.com/guide/topics/ui/declaring-layout\",");
+        prompt.AppendLine("  \"Activities\": [\"eBook, slides\"]");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
+        prompt.AppendLine();
+        prompt.AppendLine("✓ CORRECT Generated Step:");
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"stepNumber\": 7,");
+        prompt.AppendLine("  \"title\": \"Understanding Android Layout Managers\",");
+        prompt.AppendLine("  \"description\": \"Learn about LinearLayout and ConstraintLayout for Android UIs\",");
+        prompt.AppendLine("  \"stepType\": \"Reading\",");
+        prompt.AppendLine("  \"experiencePoints\": 15,");
+        prompt.AppendLine("  \"content\": {");
+        prompt.AppendLine("    \"skillId\": \"5c958045-b8e2-40ab-bb9a-809ad95c94fd\",");
+        prompt.AppendLine("    \"articleTitle\": \"Layout manager (LinearLayout, ConstraintLayout)\",");
+        prompt.AppendLine("    \"summary\": \"eBook: Lesson 1, part 1.2\",");
+        prompt.AppendLine("    \"url\": \"https://developer.android.com/guide/topics/ui/declaring-layout\"");
+        prompt.AppendLine("  }");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
+        prompt.AppendLine();
+        prompt.AppendLine("✗ WRONG (DO NOT DO THIS):");
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"title\": \"Introduction to ASP.NET Core MVC\",  // WRONG - Different technology!");
+        prompt.AppendLine("  \"content\": {");
+        prompt.AppendLine("    \"articleTitle\": \"ASP.NET Core Overview\",  // WRONG - Not from syllabus!");
+        prompt.AppendLine("    \"url\": \"https://docs.microsoft.com/aspnet\"  // WRONG - Wrong documentation!");
+        prompt.AppendLine("  }");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
         prompt.AppendLine();
 
         prompt.AppendLine("---");
@@ -229,7 +352,23 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("]");
         prompt.AppendLine("```");
         prompt.AppendLine();
+        prompt.AppendLine("---");
+        prompt.AppendLine();
+        prompt.AppendLine("## FINAL VALIDATION CHECKLIST");
+        prompt.AppendLine();
+        prompt.AppendLine("Before submitting your output, verify EVERY step against this checklist:");
+        prompt.AppendLine();
+        prompt.AppendLine($"☑ Every step is about {subjectName} (not other technologies)");
+        prompt.AppendLine("☑ Every Reading step uses a Topic from the syllabus SessionSchedule");
+        prompt.AppendLine("☑ Every Reading step uses SuggestedUrl or a URL from Readings");
+        prompt.AppendLine("☑ No steps mention technologies outside the syllabus");
+        prompt.AppendLine("☑ All skillId values are from the provided Pre-Approved Skills list");
+        prompt.AppendLine("☑ All stepType values are exactly: Reading, Interactive, Quiz, or Coding");
+        prompt.AppendLine("☑ Output is a valid JSON array only (no markdown fences, no explanations)");
+        prompt.AppendLine();
         prompt.AppendLine("**IMPORTANT:** Return ONLY the JSON array. Do not include markdown code fences, explanations, or any other text.");
+        prompt.AppendLine();
+        prompt.AppendLine($"Generate the quest steps for {subjectName} now:");
 
         return prompt.ToString();
     }

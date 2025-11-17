@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/WebSearchController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Interfaces;
@@ -10,16 +11,47 @@ namespace RogueLearn.User.Api.Controllers
     {
         private readonly Kernel _kernel;
         private readonly IWebSearchService? _webSearchService;
+        private readonly IReadingUrlService _readingUrlService;
 
-        public WebSearchController(Kernel kernel, IServiceProvider serviceProvider)
+        public WebSearchController(Kernel kernel, IServiceProvider serviceProvider, IReadingUrlService readingUrlService)
         {
             _kernel = kernel;
             _webSearchService = serviceProvider.GetService<IWebSearchService>();
+            _readingUrlService = readingUrlService;
         }
 
         /// <summary>
-        /// Test endpoint that performs a web search around a topic and returns an AI-crafted answer
-        /// based solely on the search results.
+        /// NEW Endpoint: Finds the single best, validated URL for a topic.
+        /// This demonstrates the robust URL sourcing logic by prioritizing existing links and falling back to a validated web search.
+        /// </summary>
+        /// <param name="topic">The topic to find a URL for.</param>
+        /// <returns>A single, validated URL or a 404 Not Found if no live URL could be sourced.</returns>
+        [HttpGet("find-and-validate")]
+        [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> FindAndValidate([FromQuery] string topic, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(topic))
+            {
+                return BadRequest("Query parameter 'topic' is required.");
+            }
+
+            // Use the robust ReadingUrlService. Pass an empty list for readings to force the web search fallback.
+            var validUrl = await _readingUrlService.GetValidUrlForTopicAsync(topic, Enumerable.Empty<string>(), cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(validUrl))
+            {
+                return NotFound($"Could not find a valid, live URL for the topic: '{topic}'");
+            }
+
+            return Ok(new { topic = topic, validatedUrl = validUrl });
+        }
+
+
+        /// <summary>
+        /// (Legacy Test) Performs a web search and returns an AI-crafted quiz.
+        /// Note: This endpoint may still reference dead links if all search results are invalid.
+        /// Use the 'find-and-validate' endpoint for a more reliable demonstration of URL sourcing.
         /// </summary>
         /// <param name="topic">The topic to research on the web.</param>
         /// <returns>Answer generated from web search results.</returns>

@@ -20,22 +20,31 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         _promptBuilder = promptBuilder;
     }
 
-    // MODIFICATION: The method now accepts a list of Skill entities to ensure AI only uses valid, admin-approved skills.
-    public async Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default)
+    public async Task<string?> GenerateQuestStepsJsonAsync(
+        string syllabusJson,
+        string userContext,
+        List<Skill> relevantSkills,
+        string subjectName,
+        string courseDescription,
+        CancellationToken cancellationToken = default)
     {
-        // Build a comprehensive, LLM-friendly prompt using the dedicated prompt builder
-        var prompt = _promptBuilder.BuildPrompt(syllabusJson, userContext, relevantSkills);
+        // Build a comprehensive, LLM-friendly prompt with subject context
+        var prompt = _promptBuilder.BuildPrompt(syllabusJson, userContext, relevantSkills, subjectName, courseDescription);
 
         try
         {
+            _logger.LogInformation("Generating quest steps for subject: {SubjectName}", subjectName);
+
             var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
             var rawResponse = result.GetValue<string>() ?? string.Empty;
+
             _logger.LogInformation("Quest Step Generation raw AI response: {RawResponse}", rawResponse);
+
             return CleanToJson(rawResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to generate quest steps using AI.");
+            _logger.LogError(ex, "Failed to generate quest steps using AI for subject {SubjectName}.", subjectName);
             return null;
         }
     }
@@ -43,6 +52,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     private static string CleanToJson(string rawResponse)
     {
         var cleanedResponse = rawResponse.Trim();
+
         if (cleanedResponse.StartsWith("```"))
         {
             var firstNewline = cleanedResponse.IndexOf('\n');
@@ -51,6 +61,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
                 cleanedResponse = cleanedResponse[(firstNewline + 1)..];
             }
         }
+
         if (cleanedResponse.EndsWith("```") && cleanedResponse.Length >= 3)
         {
             var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
@@ -59,12 +70,14 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
                 cleanedResponse = cleanedResponse[..lastFenceIndex];
             }
         }
+
         var startIdx = cleanedResponse.IndexOf('[');
         var endIdx = cleanedResponse.LastIndexOf(']');
         if (startIdx >= 0 && endIdx > startIdx)
         {
             cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
         }
+
         return cleanedResponse.Trim();
     }
 }
