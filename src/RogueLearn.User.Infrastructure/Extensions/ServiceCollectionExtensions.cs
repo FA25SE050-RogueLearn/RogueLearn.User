@@ -5,9 +5,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Infrastructure.Persistence;
 using RogueLearn.User.Infrastructure.Messaging;
+using RogueLearn.User.Infrastructure.Persistence;
 using RogueLearn.User.Infrastructure.Services;
 using Supabase;
 
@@ -17,6 +18,9 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
+        // Add HttpClientFactory for making HTTP requests reliably.
+        services.AddHttpClient();
+
         // Register Supabase client as SCOPED with proper JWT handling per request.
         // This is the correct, stable, and performant approach.
         services.AddScoped<Client>(sp =>
@@ -159,6 +163,12 @@ public static class ServiceCollectionExtensions
 
         // Party notification service
         services.AddScoped<IPartyNotificationService, PartyNotificationService>();
+
+        // Add the new ReadingUrlService for sourcing article URLs
+        services.AddScoped<IReadingUrlService, ReadingUrlService>();
+
+        // Add the new UrlValidationService for checking live links
+        services.AddScoped<IUrlValidationService, UrlValidationService>();
 
         return services;
     }

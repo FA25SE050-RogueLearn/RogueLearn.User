@@ -28,6 +28,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
     private readonly IHtmlCleaningService _htmlCleaningService;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly ICurriculumImportStorage _storage;
+    // ADDED: Inject the ReadingUrlService to perform URL enrichment.
+    private readonly IReadingUrlService _readingUrlService;
 
     public ImportSubjectFromTextCommandHandler(
         ISyllabusExtractionPlugin syllabusExtractionPlugin,
@@ -38,7 +40,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         ILogger<ImportSubjectFromTextCommandHandler> logger,
         IHtmlCleaningService htmlCleaningService,
         IUserProfileRepository userProfileRepository,
-        ICurriculumImportStorage storage)
+        ICurriculumImportStorage storage,
+        IReadingUrlService readingUrlService) // ADDED: Constructor parameter
     {
         _syllabusExtractionPlugin = syllabusExtractionPlugin;
         _questionGenerationPlugin = questionGenerationPlugin;
@@ -49,6 +52,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         _htmlCleaningService = htmlCleaningService;
         _userProfileRepository = userProfileRepository;
         _storage = storage;
+        _readingUrlService = readingUrlService; // ADDED: Assign to field
     }
 
     public async Task<CreateSubjectResponse> Handle(ImportSubjectFromTextCommand request, CancellationToken cancellationToken)
@@ -114,6 +118,23 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 }
             }
         }
+
+        // ADDED: Perform URL enrichment for each session before saving.
+        if (syllabusData.Content?.SessionSchedule != null)
+        {
+            _logger.LogInformation("Enriching syllabus with validated URLs for {Count} sessions.", syllabusData.Content.SessionSchedule.Count);
+            foreach (var session in syllabusData.Content.SessionSchedule)
+            {
+                var foundUrl = await _readingUrlService.GetValidUrlForTopicAsync(session.Topic, session.Readings ?? new List<string>(), cancellationToken);
+                // Ensure SuggestedUrl is never null in the final JSON, which simplifies downstream consumers.
+                session.SuggestedUrl = foundUrl ?? string.Empty;
+                if (!string.IsNullOrEmpty(foundUrl))
+                {
+                    _logger.LogInformation("Enriched session {SessionNumber} with URL: {Url}", session.SessionNumber, foundUrl);
+                }
+            }
+        }
+
 
         var finalJsonToCache = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } });
 

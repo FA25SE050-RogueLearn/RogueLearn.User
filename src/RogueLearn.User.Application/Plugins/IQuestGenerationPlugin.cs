@@ -17,5 +17,11 @@ public interface IQuestGenerationPlugin
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A JSON string representing an array of quest steps, or null if generation fails.</returns>
     // MODIFICATION: Return type is nullable to handle potential AI generation failures gracefully.
-    Task<string?> GenerateQuestStepsJsonAsync(string syllabusJson, string userContext, List<Skill> relevantSkills, CancellationToken cancellationToken = default);
+    Task<string> GenerateQuestStepsJsonAsync(
+         string syllabusJson,
+         string userContext,
+         List<Skill> skills,
+         string subjectName,
+         string courseDescription,
+         CancellationToken cancellationToken = default);
 }
