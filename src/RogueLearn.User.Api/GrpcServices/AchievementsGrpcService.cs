@@ -159,6 +159,28 @@ public class AchievementsGrpcService : AchievementsService.AchievementsServiceBa
         return new Google.Protobuf.WellKnownTypes.Empty();
     }
 
+    public override async Task<GrantAchievementsResponse> GrantAchievements(GrantAchievementsRequest request, ServerCallContext context)
+    {
+        var cmd = new Application.Features.Achievements.Commands.GrantAchievements.GrantAchievementsCommand
+        {
+            Entries = request.UserAchievements
+                .Select(x => new Application.Features.Achievements.Commands.GrantAchievements.GrantAchievementEntry
+                {
+                    UserId = x.UserId,
+                    AchievementKey = x.AchievementKey
+                })
+                .ToList()
+        };
+
+        var res = await _mediator.Send(cmd, context.CancellationToken);
+        var reply = new GrantAchievementsResponse
+        {
+            GrantedCount = res.GrantedCount
+        };
+        reply.Errors.AddRange(res.Errors);
+        return reply;
+    }
+
     public override async Task<UserAchievementList> GetByAuthUserId(GetUserAchievementsByAuthUserIdRequest request, ServerCallContext context)
     {
         if (!Guid.TryParse(request.AuthUserId, out var authUserId))

@@ -25,14 +25,12 @@ public class RemoveGuildMemberCommandHandler : IRequestHandler<RemoveGuildMember
             throw new Exceptions.BadRequestException("Member does not belong to target guild.");
         }
 
-        if (member.Role == RogueLearn.User.Domain.Enums.GuildRole.GuildMaster)
+        if (member.Role == GuildRole.GuildMaster)
         {
             throw new Exceptions.BadRequestException("Cannot remove GuildMaster. Transfer leadership first.");
         }
 
-        member.Status = MemberStatus.Inactive;
-        member.LeftAt = DateTimeOffset.UtcNow;
-        await _memberRepository.UpdateAsync(member, cancellationToken);
+        await _memberRepository.DeleteAsync(member.Id, cancellationToken);
 
         // Decrement guild current member count after removal
         var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)
