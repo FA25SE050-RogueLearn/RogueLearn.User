@@ -12,12 +12,29 @@ using System.Text.Json.Serialization;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 
+/// <summary>
+/// Handler for generating AI-driven quest steps with URL enrichment and validation.
+/// This class orchestrates the entire quest step generation lifecycle:
+/// 1. Validates prerequisites (user, quest, subject, skills)
+/// 2. Unlocks relevant skills for the user
+/// 3. Calls AI to generate quest steps
+/// 4. Enriches Reading steps with URLs from syllabus
+/// 5. Validates generated content
+/// 6. Persists valid steps to database
+/// </summary>
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
-    // This private record defines the expected structure of each step from the AI's JSON output.
+    #region Private Types
+
+    /// <summary>
+    /// This private record defines the expected structure of each step from the AI's JSON output.
+    /// Matches the JSON schema returned by the AI generation plugin.
+    /// </summary>
     private record AiQuestStep(
         [property: JsonPropertyName("stepNumber")] int StepNumber,
         [property: JsonPropertyName("title")] string Title,
@@ -26,6 +43,10 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         [property: JsonPropertyName("experiencePoints")] int ExperiencePoints,
         [property: JsonPropertyName("content")] JsonElement Content
     );
+
+    #endregion
+
+    #region Dependencies
 
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _questStepRepository;
@@ -39,8 +60,11 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IPromptBuilder _promptBuilder;
     private readonly IUserSkillRepository _userSkillRepository;
-    private readonly IReadingUrlService _readingUrlService;
     private readonly IUrlValidationService _urlValidationService;
+
+    #endregion
+
+    #region Constructor
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
@@ -55,7 +79,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IPromptBuilder promptBuilder,
         IUserSkillRepository userSkillRepository,
-        IReadingUrlService readingUrlService,
         IUrlValidationService urlValidationService)
     {
         _questRepository = questRepository;
@@ -70,13 +93,24 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _promptBuilder = promptBuilder;
         _userSkillRepository = userSkillRepository;
-        _readingUrlService = readingUrlService;
         _urlValidationService = urlValidationService;
     }
 
+    #endregion
+
+    #region Main Handler
+
+    /// <summary>
+    /// Main entry point for quest step generation.
+    /// Orchestrates the entire workflow from validation to AI generation to persistence.
+    /// </summary>
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        // 1. PRE-CONDITION CHECKS: Ensure the request is valid and necessary.
+        // ==================================================================================
+        // SECTION 1: PRE-CONDITION CHECKS
+        // Validate that the request is valid and necessary before proceeding.
+        // ==================================================================================
+
         var questHasSteps = await _questStepRepository.QuestContainsSteps(request.QuestId, cancellationToken);
         if (questHasSteps)
         {
@@ -110,8 +144,12 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new BadRequestException("No syllabus content available for this quest's subject.");
         }
 
-        // 2. SKILL UNLOCKING LOGIC: Determine which skills this quest teaches and unlock them for the user.
-        // This is the source of truth for skills, based on admin-curated data.
+        // ==================================================================================
+        // SECTION 2: SKILL UNLOCKING LOGIC
+        // Determine which skills this quest teaches and unlock them for the user.
+        // This ensures users can progress in skill trees as they complete quests.
+        // ==================================================================================
+
         var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
         var relevantSkillIds = skillMappings.Select(m => m.SkillId).ToHashSet();
         if (!relevantSkillIds.Any())
@@ -119,13 +157,15 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             _logger.LogWarning("No skills are mapped to Subject {SubjectId}. Cannot generate quest steps with skill context.", quest.SubjectId.Value);
             throw new BadRequestException("No skills are linked to this subject. Skill mapping may be incomplete.");
         }
-        var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => relevantSkillIds.Contains(s.Id)).ToList();
 
-        // Check which of these skills the user already has.
+        var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken))
+            .Where(s => relevantSkillIds.Contains(s.Id))
+            .ToList();
+
+        // Unlock skills for the user if they don't already have them
         var existingUserSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
         var existingSkillIds = existingUserSkills.Select(us => us.SkillId).ToHashSet();
 
-        // For any skill linked to the subject that the user doesn't have, create a new record.
         int unlockedCount = 0;
         foreach (var skill in relevantSkills)
         {
@@ -146,59 +186,130 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         if (unlockedCount > 0)
         {
-            _logger.LogInformation("Unlocked {Count} new skills for User {AuthUserId} upon starting Quest {QuestId}", unlockedCount, request.AuthUserId, request.QuestId);
+            _logger.LogInformation("Unlocked {Count} new skills for User {AuthUserId} upon starting Quest {QuestId}",
+                unlockedCount, request.AuthUserId, request.QuestId);
         }
 
-        // 3. DATA ENRICHMENT: Pre-process the syllabus to add live, validated URLs before sending it to the AI.
+        // ==================================================================================
+        // SECTION 3: DATA PREPARATION
+        // Load user context and prepare syllabus data for AI consumption.
+        // CRITICAL: Use Newtonsoft.Json to serialize subject.Content since it contains JArray objects.
+        // ==================================================================================
+
         var userContext = await _promptBuilder.GenerateAsync(userProfile, userClass, cancellationToken);
-        var syllabusData = JsonSerializer.Deserialize<SyllabusData>(JsonSerializer.Serialize(subject.Content), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        int urlsEnrichedCount = 0;
-        int urlsNotFoundCount = 0;
-
-        if (syllabusData?.Content?.SessionSchedule != null)
-        {
-            _logger.LogInformation("Enriching syllabus with validated URLs for {Count} sessions.", syllabusData.Content.SessionSchedule.Count);
-
-            foreach (var session in syllabusData.Content.SessionSchedule)
+        // Serialize using Newtonsoft.Json to properly handle JArray
+        var syllabusJson = Newtonsoft.Json.JsonConvert.SerializeObject(
+            subject.Content,
+            Newtonsoft.Json.Formatting.Indented,
+            new Newtonsoft.Json.JsonSerializerSettings
             {
-                _logger.LogInformation("Attempting to find URL for session {SessionNumber}: '{Topic}'", session.SessionNumber, session.Topic);
+                NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore
+            }
+        );
 
-                // This service checks for existing valid URLs first, validates them, then falls back to a web search.
-                var foundUrl = await _readingUrlService.GetValidUrlForTopicAsync(session.Topic, session.Readings ?? new List<string>(), cancellationToken);
+        // CRITICAL FIX: Deserialize using Newtonsoft.Json to match serialization
+        SyllabusData? syllabusDataForDesc = null;
+        try
+        {
+            syllabusDataForDesc = Newtonsoft.Json.JsonConvert.DeserializeObject<SyllabusData>(syllabusJson);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deserialize syllabus data for enrichment. URL enrichment may be limited.");
+        }
 
-                if (!string.IsNullOrWhiteSpace(foundUrl))
+        // ==================================================================================
+        // SECTION 3.5: DIAGNOSTIC LOGGING (COMPLETE VERSION)
+        // Log syllabus content to verify URL presence before AI processing.
+        // This helps debug issues with URL extraction and enrichment.
+        // ==================================================================================
+
+        _logger.LogWarning("=== DIAGNOSTIC: Checking syllabus content for URLs ===");
+        _logger.LogWarning("Subject ID: {SubjectId}, Subject Name: {SubjectName}", subject.Id, subject.SubjectName);
+
+        if (subject.Content != null && subject.Content.TryGetValue("SessionSchedule", out var sessionScheduleObj))
+        {
+            try
+            {
+                // The sessionScheduleObj is likely a JArray from Newtonsoft.Json
+                string sessionScheduleJson;
+
+                if (sessionScheduleObj is Newtonsoft.Json.Linq.JArray jArray)
                 {
-                    session.SuggestedUrl = foundUrl;
-                    urlsEnrichedCount++;
-                    _logger.LogInformation("✓ Found valid URL for session {SessionNumber} '{Topic}': {Url}",
-                        session.SessionNumber, session.Topic, foundUrl);
+                    // Use Newtonsoft.Json serializer for JArray
+                    _logger.LogInformation("✓ Detected Newtonsoft.Json JArray - using correct serializer");
+                    sessionScheduleJson = Newtonsoft.Json.JsonConvert.SerializeObject(jArray, Newtonsoft.Json.Formatting.Indented);
                 }
                 else
                 {
-                    urlsNotFoundCount++;
-                    _logger.LogWarning("✗ Could not find a valid URL for session {SessionNumber} '{Topic}'. AI will generate steps without URLs.",
-                        session.SessionNumber, session.Topic);
+                    // Fallback to System.Text.Json for other types
+                    sessionScheduleJson = JsonSerializer.Serialize(sessionScheduleObj, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                        WriteIndented = true
+                    });
+                }
+
+                _logger.LogWarning("SessionSchedule raw JSON (first 500 chars): {Json}",
+                    sessionScheduleJson.Length > 500 ? sessionScheduleJson.Substring(0, 500) : sessionScheduleJson);
+
+                // Deserialize to typed structure for validation
+                var sessions = JsonSerializer.Deserialize<List<SyllabusSessionDto>>(
+                    sessionScheduleJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+
+                if (sessions != null && sessions.Any())
+                {
+                    _logger.LogWarning("✅ Successfully deserialized {Count} sessions", sessions.Count);
+
+                    // Log first 3 sessions with detailed URL information
+                    foreach (var session in sessions.Take(3))
+                    {
+                        _logger.LogWarning(
+                            "Session {Num}: Topic='{Topic}', SuggestedUrl='{Url}', HasUrl={HasUrl}",
+                            session.SessionNumber,
+                            session.Topic ?? "NULL",
+                            session.SuggestedUrl ?? "NULL",
+                            !string.IsNullOrWhiteSpace(session.SuggestedUrl)
+                        );
+                    }
+                }
+                else
+                {
+                    _logger.LogError("❌ Deserialized sessions list is null or empty");
                 }
             }
-
-            _logger.LogInformation("URL enrichment complete: {SuccessCount} URLs found, {FailCount} not found",
-                urlsEnrichedCount, urlsNotFoundCount);
+            catch (JsonException jsonEx)
+            {
+                _logger.LogError(jsonEx, "❌ JSON deserialization failed. Schema mismatch detected.");
+                _logger.LogError("This likely means SessionSchedule structure doesn't match SyllabusSessionDto class definition.");
+            }
         }
         else
         {
-            _logger.LogWarning("No SessionSchedule found in syllabus data for Quest {QuestId}", request.QuestId);
+            _logger.LogError("❌ subject.Content is null or has no SessionSchedule key!");
         }
 
-        // 4. AI PROMPT AND INVOCATION: Generate the detailed prompt and call the AI.
-        var enrichedSyllabusJson = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+        // Log what's actually being sent to AI
+        _logger.LogWarning("=== Syllabus JSON being sent to AI (first 1000 chars) ===");
+        _logger.LogWarning(syllabusJson.Length > 1000 ? syllabusJson.Substring(0, 1000) : syllabusJson);
+        _logger.LogWarning("=== End diagnostic ===");
 
-        // Extract subject/course name to guide AI
-        var subjectName = subject.SubjectName ?? syllabusData?.SubjectName ?? "Unknown Subject";
-        var courseDescription = syllabusData?.Content?.CourseDescription ?? syllabusData?.Description ?? "";
+        // ==================================================================================
+        // SECTION 4: AI PROMPT AND INVOCATION
+        // Generate the detailed prompt and call the AI plugin to create quest steps.
+        // ==================================================================================
+
+        var subjectName = subject.SubjectName;
+        var courseDescription = syllabusDataForDesc?.Content?.CourseDescription
+            ?? syllabusDataForDesc?.Description
+            ?? subject.Description
+            ?? "";
 
         var generatedStepsJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(
-            enrichedSyllabusJson,
+            syllabusJson,
             userContext,
             relevantSkills,
             subjectName,
@@ -211,9 +322,20 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new InvalidOperationException("AI failed to generate valid quest steps.");
         }
 
-        // 5. DESERIALIZE AND VALIDATE AI OUTPUT: Treat the AI's response as untrusted data.
-        _logger.LogInformation("Attempting to deserialize AI-generated JSON for Quest {QuestId}: {JsonContent}", request.QuestId, generatedStepsJson);
-        var serializerOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) } };
+        // ==================================================================================
+        // SECTION 5: DESERIALIZE AND VALIDATE AI OUTPUT
+        // Treat the AI's response as untrusted data and validate its structure.
+        // ==================================================================================
+
+        _logger.LogInformation("Attempting to deserialize AI-generated JSON for Quest {QuestId}: {JsonContent}",
+            request.QuestId, generatedStepsJson);
+
+        var serializerOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        };
+
         List<AiQuestStep>? aiGeneratedSteps;
         try
         {
@@ -221,7 +343,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         }
         catch (JsonException jsonEx)
         {
-            _logger.LogError(jsonEx, "JSON deserialization failed for Quest {QuestId}. Raw response was: {JsonContent}", request.QuestId, generatedStepsJson);
+            _logger.LogError(jsonEx, "JSON deserialization failed for Quest {QuestId}. Raw response was: {JsonContent}",
+                request.QuestId, generatedStepsJson);
             throw new InvalidOperationException("AI failed to generate valid quest steps. The response was not in the correct format.", jsonEx);
         }
 
@@ -231,40 +354,59 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new InvalidOperationException("AI failed to generate valid quest steps.");
         }
 
-        // 6. PERSIST VALIDATED STEPS: Iterate through the AI's suggestions, validate each one, and only save the valid steps.
-        var generatedSteps = new List<QuestStep>();
+        // ==================================================================================
+        // SECTION 5.5: ENRICH READING STEPS WITH URLS
+        // Post-process AI output to add missing URLs from syllabus using fuzzy matching.
+        // This compensates for cases where the AI fails to extract URLs from the syllabus.
+        // ==================================================================================
 
-        // Extract key terms from subject/course to validate topic consistency
+        if (syllabusDataForDesc != null)
+        {
+            EnrichReadingStepsWithUrls(aiGeneratedSteps, syllabusDataForDesc, request.QuestId);
+        }
+
+        // ==================================================================================
+        // SECTION 6: PERSIST VALIDATED STEPS
+        // Iterate through AI-generated steps, validate each one against business rules,
+        // and only save the valid steps to the database.
+        // ==================================================================================
+
+        var generatedSteps = new List<QuestStep>();
         var subjectKeywords = ExtractKeywords(subjectName, courseDescription);
-        _logger.LogInformation("Validating steps against subject keywords: {Keywords}", string.Join(", ", subjectKeywords));
+
+        _logger.LogInformation("Validating steps against subject keywords: {Keywords}",
+            string.Join(", ", subjectKeywords));
 
         foreach (var aiStep in aiGeneratedSteps)
         {
+            // Validate step type
             if (!Enum.TryParse<StepType>(aiStep.StepType, true, out var stepType))
             {
                 _logger.LogWarning("AI generated a step with an unknown StepType '{StepType}'. Skipping step.", aiStep.StepType);
                 continue;
             }
 
-            // VALIDATION A: Check if the skillId is valid and from our pre-approved list.
+            // Validate skill ID
             if (!aiStep.Content.TryGetProperty("skillId", out var skillIdElement) ||
                 !Guid.TryParse(skillIdElement.GetString(), out var skillId) ||
                 !relevantSkillIds.Contains(skillId))
             {
-                _logger.LogWarning("AI generated a step with an invalid or missing skillId for Quest {QuestId}. Skipping step.", request.QuestId);
-                continue; // Discard this invalid step.
+                _logger.LogWarning("AI generated a step with an invalid or missing skillId for Quest {QuestId}. Skipping step.",
+                    request.QuestId);
+                continue;
             }
 
-            // VALIDATION B: If it's a Reading step, validate topic consistency and URL if provided
+            // Special validation for Reading steps
             if (stepType == StepType.Reading)
             {
-                // Topic consistency check: Only validate for tech subjects to avoid cross-technology contamination
+                // Check if this is a technical subject
                 var isTechSubject = subjectKeywords.Any(k => new[]
                 {
-                    "Android", "iOS", "ASP.NET", "React", "Vue", "Angular", "Java", "Kotlin",
-                    "Python", "C#", ".NET", "JavaScript", "TypeScript", "Swift", "Mobile", "Web"
-                }.Contains(k, StringComparer.OrdinalIgnoreCase));
+        "Android", "iOS", "ASP.NET", "React", "Vue", "Angular", "Java", "Kotlin",
+        "Python", "C#", ".NET", "JavaScript", "TypeScript", "Swift", "Mobile", "Web"
+    }.Contains(k, StringComparer.OrdinalIgnoreCase));
 
+                // For tech subjects, validate topic relevance
                 if (isTechSubject)
                 {
                     var articleTitle = "";
@@ -273,62 +415,78 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                         articleTitle = titleElement.GetString() ?? "";
                     }
 
+                    // CRITICAL FIX: Include articleTitle + description for broader matching
                     var stepText = $"{aiStep.Title} {aiStep.Description} {articleTitle}".ToLowerInvariant();
 
-                    // Check if step contains at least one relevant keyword
+                    // CRITICAL FIX: Use more lenient matching - accept if ANY keyword appears OR if it's a common UI/tech term
+                    var commonTechTerms = new[]
+                    {
+            "ui", "layout", "widget", "component", "view", "activity", "fragment",
+            "theme", "style", "design", "interface", "app", "application", "build",
+            "studio", "development", "programming", "constraint", "linear", "responsive"
+        };
+
                     var hasRelevantKeyword = subjectKeywords.Any(keyword =>
                         stepText.Contains(keyword.ToLowerInvariant()));
 
-                    if (!hasRelevantKeyword)
+                    var hasTechTerm = commonTechTerms.Any(term =>
+                        stepText.Contains(term));
+
+                    // Accept if it has either a subject keyword OR common tech term
+                    if (!hasRelevantKeyword && !hasTechTerm)
                     {
-                        _logger.LogWarning("AI generated off-topic Reading step '{Title}' for tech subject '{SubjectName}'. Expected keywords: {Keywords}. Skipping step.",
+                        _logger.LogWarning(
+                            "AI generated off-topic Reading step '{Title}' for tech subject '{SubjectName}'. Expected keywords: {Keywords} or tech terms. Skipping step.",
                             aiStep.Title, subjectName, string.Join(", ", subjectKeywords));
                         continue;
                     }
                 }
-                // For non-tech subjects (History, Philosophy, etc.), skip topic validation
-                // The AI prompt is sufficient to keep content on-topic
 
-                // Check if URL exists and is not empty
+                // Validate URL if present
                 if (aiStep.Content.TryGetProperty("url", out var urlElement) &&
                     urlElement.ValueKind == JsonValueKind.String)
                 {
                     var url = urlElement.GetString() ?? "";
 
-                    // If URL is provided and not empty, validate it
                     if (!string.IsNullOrWhiteSpace(url))
                     {
-                        // Check if it's a well-formed absolute URI
+                        // Check URL format
                         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
                             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                         {
-                            _logger.LogWarning("AI generated a Reading step with malformed URL '{Url}' for Quest {QuestId}. Skipping step.", url, request.QuestId);
+                            _logger.LogWarning(
+                                "AI generated a Reading step with malformed URL '{Url}' for Quest {QuestId}. Skipping step.",
+                                url, request.QuestId);
                             continue;
                         }
 
-                        // CRITICAL: Validate the URL is actually accessible and not a soft 404
+                        // Check URL accessibility
                         if (!await _urlValidationService.IsUrlAccessibleAsync(url, cancellationToken))
                         {
-                            _logger.LogWarning("AI generated a Reading step with inaccessible URL '{Url}' (404/error/soft 404) for Quest {QuestId}. Skipping step.", url, request.QuestId);
+                            _logger.LogWarning(
+                                "AI generated a Reading step with inaccessible URL '{Url}' (404/error/soft 404) for Quest {QuestId}. Skipping step.",
+                                url, request.QuestId);
                             continue;
                         }
 
-                        _logger.LogInformation("Validated Reading step URL '{Url}' for Quest {QuestId}.", url, request.QuestId);
+                        _logger.LogInformation("Validated Reading step URL '{Url}' for Quest {QuestId}.",
+                            url, request.QuestId);
                     }
                     else
                     {
-                        // Empty URL - this is acceptable if no valid URL could be found during enrichment
-                        _logger.LogInformation("Reading step '{Title}' has no URL (none found during enrichment). Step will be saved without URL.", aiStep.Title);
+                        _logger.LogInformation(
+                            "Reading step '{Title}' has no URL (none found during enrichment). Step will be saved without URL.",
+                            aiStep.Title);
                     }
                 }
                 else
                 {
-                    // No URL property at all - acceptable if enrichment couldn't find any
-                    _logger.LogInformation("Reading step '{Title}' has no URL property. Step will be saved without URL.", aiStep.Title);
+                    _logger.LogInformation("Reading step '{Title}' has no URL property. Step will be saved without URL.",
+                        aiStep.Title);
                 }
             }
 
-            // If all validations pass, create the entity to be saved.
+            // Create and save valid step
             var newStep = new QuestStep
             {
                 QuestId = request.QuestId,
@@ -340,27 +498,44 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 ExperiencePoints = aiStep.ExperiencePoints,
                 Content = aiStep.Content.GetRawText()
             };
+
             generatedSteps.Add(newStep);
             await _questStepRepository.AddAsync(newStep, cancellationToken);
         }
 
+        // Ensure at least some steps were valid
         if (!generatedSteps.Any())
         {
-            _logger.LogError("No valid quest steps were generated after validation for Quest {QuestId}. All AI-generated steps were rejected.", request.QuestId);
+            _logger.LogError(
+                "No valid quest steps were generated after validation for Quest {QuestId}. All AI-generated steps were rejected.",
+                request.QuestId);
             throw new InvalidOperationException("AI failed to generate any valid quest steps after validation.");
         }
 
-        _logger.LogInformation("Successfully generated and saved {StepCount} valid steps (out of {TotalSteps} AI-generated) for Quest {QuestId}",
+        _logger.LogInformation(
+            "Successfully generated and saved {StepCount} valid steps (out of {TotalSteps} AI-generated) for Quest {QuestId}",
             generatedSteps.Count, aiGeneratedSteps.Count, request.QuestId);
 
         return _mapper.Map<List<GeneratedQuestStepDto>>(generatedSteps);
     }
 
+    #endregion
+
+    #region Helper Methods - Keyword Extraction
+
+    /// <summary>
+    /// Extracts relevant keywords from subject name and description.
+    /// Used for validating topic relevance of AI-generated steps.
+    /// Prioritizes technical keywords for tech subjects.
+    /// </summary>
+    /// <param name="subjectName">Name of the subject</param>
+    /// <param name="courseDescription">Description of the course</param>
+    /// <returns>List of extracted keywords for validation</returns>
     private List<string> ExtractKeywords(string subjectName, string courseDescription)
     {
         var keywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Common technology keywords
+        // Predefined technical keywords to look for
         var techKeywords = new[]
         {
             "Android", "iOS", "Swift", "Kotlin", "Java", "Flutter", "React Native",
@@ -373,7 +548,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         var textToScan = $"{subjectName} {courseDescription}".ToLowerInvariant();
 
-        // Extract technology keywords
+        // Extract matching tech keywords
         foreach (var keyword in techKeywords)
         {
             if (textToScan.Contains(keyword.ToLowerInvariant()))
@@ -382,7 +557,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             }
         }
 
-        // Extract meaningful words from subject name (length > 3 to skip articles/prepositions)
+        // Extract significant words from subject name
         var subjectWords = subjectName
             .Split(new[] { ' ', '-', '_', '(', ')', '[', ']', ',', '.' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(word => word.Length > 3 && !IsCommonStopWord(word))
@@ -393,23 +568,25 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             keywords.Add(word);
         }
 
-        // If we found tech keywords, return only those (more precise for tech subjects)
+        // Prioritize technical keywords if found
         if (keywords.Any(k => techKeywords.Contains(k, StringComparer.OrdinalIgnoreCase)))
         {
             return keywords.Where(k => techKeywords.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
         }
 
-        // For non-tech subjects (History, Philosophy, etc.), return all meaningful words
-        // But if we still don't have any keywords, just return a very permissive list
+        // Fallback to generic keywords if no technical matches
         if (!keywords.Any())
         {
-            // Very permissive - accept anything
             return new List<string> { "education", "learning", "knowledge" };
         }
 
         return keywords.ToList();
     }
 
+    /// <summary>
+    /// Checks if a word is a common stop word that should be excluded from keywords.
+    /// Stop words are common words that don't carry significant meaning for matching.
+    /// </summary>
     private bool IsCommonStopWord(string word)
     {
         var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -419,4 +596,248 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         };
         return stopWords.Contains(word);
     }
+
+    #endregion
+
+    #region Helper Methods - URL Enrichment
+
+    /// <summary>
+    /// Enriches Reading steps with URLs from the syllabus after AI generation.
+    /// This ensures URLs are correctly populated even if the AI fails to extract them.
+    /// Uses fuzzy matching to find the best matching session for each reading step.
+    /// 
+    /// Process:
+    /// 1. Identify Reading steps with empty URLs
+    /// 2. Extract article title from step content
+    /// 3. Find best matching session from syllabus using fuzzy matching
+    /// 4. Update step content with URL from matching session
+    /// </summary>
+    /// <param name="aiGeneratedSteps">List of AI-generated steps to enrich</param>
+    /// <param name="syllabusData">Syllabus data containing session schedule with URLs</param>
+    /// <param name="questId">ID of the quest for logging purposes</param>
+    private void EnrichReadingStepsWithUrls(
+        List<AiQuestStep> aiGeneratedSteps,
+        SyllabusData syllabusData,
+        Guid questId)
+    {
+        if (syllabusData?.Content?.SessionSchedule == null)
+        {
+            _logger.LogWarning("Cannot enrich URLs: syllabusData or SessionSchedule is null for Quest {QuestId}", questId);
+            return;
+        }
+
+        var sessionSchedule = syllabusData.Content.SessionSchedule;
+
+        _logger.LogInformation("Starting URL enrichment for {StepCount} steps using {SessionCount} syllabus sessions",
+            aiGeneratedSteps.Count, sessionSchedule.Count);
+
+        for (int i = 0; i < aiGeneratedSteps.Count; i++)
+        {
+            var step = aiGeneratedSteps[i];
+
+            // Only process Reading steps
+            if (!step.StepType.Equals("Reading", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Only enrich if the URL is currently empty
+            if (step.Content.TryGetProperty("url", out var urlElement) &&
+                !string.IsNullOrWhiteSpace(urlElement.GetString()))
+            {
+                _logger.LogInformation("Step '{Title}' already has a URL, skipping enrichment", step.Title);
+                continue;
+            }
+
+            // Extract article title for matching
+            if (!step.Content.TryGetProperty("articleTitle", out var articleTitleElement))
+            {
+                _logger.LogWarning("Reading step '{Title}' has no articleTitle property, cannot enrich", step.Title);
+                continue;
+            }
+
+            var articleTitle = articleTitleElement.GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(articleTitle))
+            {
+                _logger.LogWarning("Reading step '{Title}' has empty articleTitle, cannot enrich", step.Title);
+                continue;
+            }
+
+            // Try to find matching session by topic similarity
+            var matchingSession = FindBestMatchingSession(articleTitle, sessionSchedule);
+
+            if (matchingSession != null && !string.IsNullOrWhiteSpace(matchingSession.SuggestedUrl))
+            {
+                // Reconstruct the content JSON with the correct URL
+                var contentDict = new Dictionary<string, object?>();
+
+                // Copy existing properties
+                foreach (var prop in step.Content.EnumerateObject())
+                {
+                    // Use a robust method to convert JsonElement to a basic type
+                    contentDict[prop.Name] = prop.Value.ValueKind switch
+                    {
+                        JsonValueKind.String => prop.Value.GetString(),
+                        JsonValueKind.Number => prop.Value.GetDecimal(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        _ => JsonSerializer.Deserialize<object>(prop.Value.GetRawText())
+                    };
+                }
+
+                // Overwrite or add the correct URL
+                contentDict["url"] = matchingSession.SuggestedUrl;
+
+                // Create a new AiQuestStep record with the updated content
+                var updatedContentJson = JsonSerializer.Serialize(contentDict);
+                var newContentElement = JsonDocument.Parse(updatedContentJson).RootElement;
+
+                var newStep = step with { Content = newContentElement };
+                aiGeneratedSteps[i] = newStep;
+
+                _logger.LogInformation(
+                    "✅ Enriched Reading step '{Title}' with URL '{Url}' from session #{SessionNumber} ('{Topic}') for Quest {QuestId}",
+                    step.Title, matchingSession.SuggestedUrl, matchingSession.SessionNumber, matchingSession.Topic, questId);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "❌ Could not find matching session with a URL for Reading step '{Title}' (articleTitle: '{ArticleTitle}') in Quest {QuestId}",
+                    step.Title, articleTitle, questId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds the best matching session for a given article title using three fuzzy matching strategies:
+    /// 1. Exact match (normalized)
+    /// 2. Contains match (bidirectional)
+    /// 3. Keyword overlap using Jaccard similarity (60% threshold)
+    /// 
+    /// Returns the first match found in priority order, or null if no good match exists.
+    /// </summary>
+    /// <param name="articleTitle">Title of the article to match</param>
+    /// <param name="sessions">List of syllabus sessions to search</param>
+    /// <returns>Best matching session or null if no good match found</returns>
+    private SyllabusSessionDto? FindBestMatchingSession(string articleTitle, List<SyllabusSessionDto> sessions)
+    {
+        var normalizedTitle = NormalizeTopicString(articleTitle);
+
+        // Strategy 1: Exact match (after normalization)
+        var exactMatch = sessions.FirstOrDefault(s =>
+            NormalizeTopicString(s.Topic).Equals(normalizedTitle, StringComparison.OrdinalIgnoreCase));
+
+        if (exactMatch != null)
+        {
+            _logger.LogInformation("Found exact match for '{Title}' → Session '{Topic}'", articleTitle, exactMatch.Topic);
+            return exactMatch;
+        }
+
+        // Strategy 2: Contains match (bidirectional - either contains the other)
+        var containsMatch = sessions.FirstOrDefault(s =>
+        {
+            var normalizedTopic = NormalizeTopicString(s.Topic);
+            return normalizedTopic.Contains(normalizedTitle, StringComparison.OrdinalIgnoreCase) ||
+                   normalizedTitle.Contains(normalizedTopic, StringComparison.OrdinalIgnoreCase);
+        });
+
+        if (containsMatch != null)
+        {
+            _logger.LogInformation("Found contains match for '{Title}' → Session '{Topic}'", articleTitle, containsMatch.Topic);
+            return containsMatch;
+        }
+
+        // Strategy 3: Keyword overlap using Jaccard similarity (at least 60% similarity)
+        var titleWords = GetSignificantWords(normalizedTitle);
+        if (titleWords.Count == 0)
+        {
+            _logger.LogWarning("No significant words found in article title '{Title}'", articleTitle);
+            return null;
+        }
+
+        var bestMatch = sessions
+            .Select(s => new
+            {
+                Session = s,
+                Score = CalculateWordOverlapScore(titleWords, GetSignificantWords(NormalizeTopicString(s.Topic)))
+            })
+            .Where(x => x.Score >= 0.6) // Require 60% similarity threshold
+            .OrderByDescending(x => x.Score)
+            .FirstOrDefault();
+
+        if (bestMatch != null)
+        {
+            _logger.LogInformation(
+                "Found fuzzy match for '{Title}' → Session '{Topic}' (score: {Score:P0})",
+                articleTitle, bestMatch.Session.Topic, bestMatch.Score);
+        }
+
+        return bestMatch?.Session;
+    }
+
+    /// <summary>
+    /// Normalizes a topic string for comparison by:
+    /// - Converting to lowercase
+    /// - Replacing separators (-, _) with spaces
+    /// - Collapsing multiple spaces
+    /// - Trimming whitespace
+    /// </summary>
+    private string NormalizeTopicString(string topic)
+    {
+        return topic
+            .Replace("-", " ")
+            .Replace("_", " ")
+            .Replace("  ", " ")
+            .Trim()
+            .ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Extracts significant words from text by:
+    /// - Splitting on common separators
+    /// - Filtering out short words (< 3 chars)
+    /// - Removing common stop words
+    /// - Converting to lowercase
+    /// 
+    /// Used for fuzzy matching of topics.
+    /// </summary>
+    private HashSet<string> GetSignificantWords(string text)
+    {
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "as", "is", "are", "was", "were", "be",
+            "been", "being", "have", "has", "had", "do", "does", "did", "will",
+            "would", "should", "could", "may", "might", "must", "can", "intro",
+            "introduction", "overview", "part", "lesson"
+        };
+
+        return text
+            .Split(new[] { ' ', ',', '.', ';', ':', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(word => word.Length > 2 && !stopWords.Contains(word))
+            .Select(word => word.ToLowerInvariant())
+            .ToHashSet();
+    }
+
+    /// <summary>
+    /// Calculates word overlap score using Jaccard similarity index:
+    /// Score = |intersection| / |union|
+    /// 
+    /// Returns a value between 0 (no overlap) and 1 (identical sets).
+    /// This provides a normalized measure of text similarity based on shared keywords.
+    /// </summary>
+    private double CalculateWordOverlapScore(HashSet<string> words1, HashSet<string> words2)
+    {
+        if (words1.Count == 0 || words2.Count == 0)
+        {
+            return 0;
+        }
+
+        var intersection = words1.Intersect(words2).Count();
+        var union = words1.Union(words2).Count();
+
+        return (double)intersection / union; // Jaccard similarity
+    }
+
+    #endregion
 }
