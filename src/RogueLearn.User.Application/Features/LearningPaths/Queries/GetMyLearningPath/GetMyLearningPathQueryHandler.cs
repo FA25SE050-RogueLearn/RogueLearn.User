@@ -3,15 +3,9 @@
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
-using RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-// ADDED: Ensure ISubjectRepository is available if needed for context, though not directly used here.
-using RogueLearn.User.Domain.Interfaces;
-// ADDED: Required for JsonSerializerOptions and JsonStringEnumConverter
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
 

@@ -88,7 +88,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         try
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };
-            syllabusData = JsonSerializer.Deserialize<SyllabusData>(extractedJson, options);
+            syllabusData = JsonSerializer.Deserialize<SyllabusData>(extractedJson!, options);
         }
         catch (JsonException ex)
         {

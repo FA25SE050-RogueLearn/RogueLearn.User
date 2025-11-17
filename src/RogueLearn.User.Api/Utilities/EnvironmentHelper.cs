@@ -80,7 +80,7 @@ public class EnvironmentHelper
     }
     
     // Helper method to get configuration values
-    public static string GetValue(string key, string defaultValue = null)
+    public static string? GetValue(string key, string? defaultValue = null)
     {
         return Environment.GetEnvironmentVariable(key) ?? defaultValue;
     }
