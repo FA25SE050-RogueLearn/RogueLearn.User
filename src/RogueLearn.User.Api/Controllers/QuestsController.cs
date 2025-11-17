@@ -6,11 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Domain.Entities;
-// ADDED: New using directives for the update commands
-using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestProgress;
+// REMOVED: The following using statements are no longer needed.
+// using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestProgress;
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepProgress;
 using RogueLearn.User.Domain.Enums;
-// MODIFICATION: Add the necessary using for JsonStringEnumConverter.
 using System.Text.Json.Serialization;
 
 [ApiController]
@@ -45,24 +44,26 @@ public class QuestsController : ControllerBase
         return CreatedAtAction(nameof(GetQuestById), new { id = questId }, result);
     }
 
-    /// <summary>
-    /// Manually updates the status of a specific quest for the authenticated user.
-    /// </summary>
-    [HttpPost("{questId:guid}/progress")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateQuestProgress(Guid questId, [FromBody] UpdateQuestProgressRequest body)
-    {
-        var authUserId = User.GetAuthUserId();
-        var command = new UpdateQuestProgressCommand
-        {
-            AuthUserId = authUserId,
-            QuestId = questId,
-            Status = body.Status
-        };
-        await _mediator.Send(command);
-        return NoContent();
-    }
+    // REMOVED: This endpoint is now obsolete because the user_quest_progress table has been removed.
+    // Quest status is now derived from attempts, which are managed via step progress updates.
+    // /// <summary>
+    // /// Manually updates the status of a specific quest for the authenticated user.
+    // /// </summary>
+    // [HttpPost("{questId:guid}/progress")]
+    // [ProducesResponseType(StatusCodes.Status204NoContent)]
+    // [ProducesResponseType(StatusCodes.Status404NotFound)]
+    // public async Task<IActionResult> UpdateQuestProgress(Guid questId, [FromBody] UpdateQuestProgressRequest body)
+    // {
+    //     var authUserId = User.GetAuthUserId();
+    //     var command = new UpdateQuestProgressCommand
+    //     {
+    //         AuthUserId = authUserId,
+    //         QuestId = questId,
+    //         Status = body.Status
+    //     };
+    //     await _mediator.Send(command);
+    //     return NoContent();
+    // }
 
 
     /// <summary>
@@ -87,18 +88,17 @@ public class QuestsController : ControllerBase
     }
 }
 
-// DTO for the new endpoint's request body
-public class UpdateQuestProgressRequest
-{
-    // MODIFICATION: Tell the serializer to treat this enum as a string (e.g., "Completed").
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public QuestStatus Status { get; set; }
-}
+// REMOVED: This DTO is no longer needed.
+// // DTO for the new endpoint's request body
+// public class UpdateQuestProgressRequest
+// {
+//     [JsonConverter(typeof(JsonStringEnumConverter))]
+//     public QuestStatus Status { get; set; }
+// }
 
 // NEW DTO: Request body for updating a quest step.
 public class UpdateQuestStepProgressRequest
 {
-    // MODIFICATION: Tell the serializer to treat this enum as a string (e.g., "Completed").
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public StepCompletionStatus Status { get; set; }
 }

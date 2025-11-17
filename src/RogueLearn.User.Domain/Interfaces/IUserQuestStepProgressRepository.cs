@@ -6,4 +6,7 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IUserQuestStepProgressRepository : IGenericRepository<UserQuestStepProgress>
 {
+    // ADDED: A new, specialized method to reliably count completed steps for an attempt.
+    // This will bypass the faulty LINQ provider by using explicit filters in the implementation.
+    Task<int> GetCompletedStepsCountForAttemptAsync(Guid attemptId, CancellationToken cancellationToken = default);
 }
