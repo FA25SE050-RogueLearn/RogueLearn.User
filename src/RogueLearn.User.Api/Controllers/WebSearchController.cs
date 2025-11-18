@@ -20,32 +20,32 @@ namespace RogueLearn.User.Api.Controllers
             _readingUrlService = readingUrlService;
         }
 
-        /// <summary>
-        /// NEW Endpoint: Finds the single best, validated URL for a topic.
-        /// This demonstrates the robust URL sourcing logic by prioritizing existing links and falling back to a validated web search.
-        /// </summary>
-        /// <param name="topic">The topic to find a URL for.</param>
-        /// <returns>A single, validated URL or a 404 Not Found if no live URL could be sourced.</returns>
-        [HttpGet("find-and-validate")]
-        [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> FindAndValidate([FromQuery] string topic, CancellationToken cancellationToken)
-        {
-            if (string.IsNullOrWhiteSpace(topic))
-            {
-                return BadRequest("Query parameter 'topic' is required.");
-            }
+        ///// <summary>
+        ///// NEW Endpoint: Finds the single best, validated URL for a topic.
+        ///// This demonstrates the robust URL sourcing logic by prioritizing existing links and falling back to a validated web search.
+        ///// </summary>
+        ///// <param name="topic">The topic to find a URL for.</param>
+        ///// <returns>A single, validated URL or a 404 Not Found if no live URL could be sourced.</returns>
+        //[HttpGet("find-and-validate")]
+        //[ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+        //[ProducesResponseType(StatusCodes.Status404NotFound)]
+        //public async Task<IActionResult> FindAndValidate([FromQuery] string topic, CancellationToken cancellationToken)
+        //{
+        //    if (string.IsNullOrWhiteSpace(topic))
+        //    {
+        //        return BadRequest("Query parameter 'topic' is required.");
+        //    }
 
-            // Use the robust ReadingUrlService. Pass an empty list for readings to force the web search fallback.
-            var validUrl = await _readingUrlService.GetValidUrlForTopicAsync(topic, Enumerable.Empty<string>(), cancellationToken);
+        //    // Use the robust ReadingUrlService. Pass an empty list for readings to force the web search fallback.
+        //    var validUrl = await _readingUrlService.GetValidUrlForTopicAsync(topic, Enumerable.Empty<string>(), cancellationToken);
 
-            if (string.IsNullOrWhiteSpace(validUrl))
-            {
-                return NotFound($"Could not find a valid, live URL for the topic: '{topic}'");
-            }
+        //    if (string.IsNullOrWhiteSpace(validUrl))
+        //    {
+        //        return NotFound($"Could not find a valid, live URL for the topic: '{topic}'");
+        //    }
 
-            return Ok(new { topic = topic, validatedUrl = validUrl });
-        }
+        //    return Ok(new { topic = topic, validatedUrl = validUrl });
+        //}
 
 
         /// <summary>

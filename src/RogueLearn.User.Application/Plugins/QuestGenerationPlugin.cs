@@ -13,7 +13,10 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     private readonly ILogger<QuestGenerationPlugin> _logger;
     private readonly QuestStepsPromptBuilder _promptBuilder;
 
-    public QuestGenerationPlugin(Kernel kernel, ILogger<QuestGenerationPlugin> logger, QuestStepsPromptBuilder promptBuilder)
+    public QuestGenerationPlugin(
+        Kernel kernel,
+        ILogger<QuestGenerationPlugin> logger,
+        QuestStepsPromptBuilder promptBuilder)
     {
         _kernel = kernel;
         _logger = logger;
@@ -28,8 +31,8 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         string courseDescription,
         CancellationToken cancellationToken = default)
     {
-        // Build a comprehensive, LLM-friendly prompt with subject context
-        var prompt = _promptBuilder.BuildPrompt(syllabusJson, userContext, relevantSkills, subjectName, courseDescription);
+        var prompt = _promptBuilder.BuildPrompt(
+            syllabusJson, userContext, relevantSkills, subjectName, courseDescription);
 
         try
         {
@@ -49,35 +52,64 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         }
     }
 
+    /// <summary>
+    /// Cleans the AI response to extract valid JSON for the weekly module format.
+    /// Expected output format: { "activities": [...] }
+    /// </summary>
     private static string CleanToJson(string rawResponse)
     {
-        var cleanedResponse = rawResponse.Trim();
+        var cleaned = rawResponse.Trim();
 
-        if (cleanedResponse.StartsWith("```"))
+        // Remove markdown code fences if present
+        if (cleaned.StartsWith("```"))
         {
-            var firstNewline = cleanedResponse.IndexOf('\n');
+            // Remove opening fence and language identifier (e.g., ```json)
+            var firstNewline = cleaned.IndexOf('\n');
             if (firstNewline > -1)
             {
-                cleanedResponse = cleanedResponse[(firstNewline + 1)..];
+                cleaned = cleaned[(firstNewline + 1)..];
             }
         }
 
-        if (cleanedResponse.EndsWith("```") && cleanedResponse.Length >= 3)
+        if (cleaned.EndsWith("```"))
         {
-            var lastFenceIndex = cleanedResponse.LastIndexOf("```", StringComparison.Ordinal);
+            var lastFenceIndex = cleaned.LastIndexOf("```", StringComparison.Ordinal);
             if (lastFenceIndex > -1)
             {
-                cleanedResponse = cleanedResponse[..lastFenceIndex];
+                cleaned = cleaned[..lastFenceIndex];
             }
         }
 
-        var startIdx = cleanedResponse.IndexOf('[');
-        var endIdx = cleanedResponse.LastIndexOf(']');
+        cleaned = cleaned.Trim();
+
+        // CRITICAL FIX: Look for the OBJECT braces, not array brackets
+        // We expect: { "activities": [...] }
+        var startIdx = cleaned.IndexOf('{');
+        var endIdx = cleaned.LastIndexOf('}');
+
         if (startIdx >= 0 && endIdx > startIdx)
         {
-            cleanedResponse = cleanedResponse.Substring(startIdx, endIdx - startIdx + 1);
+            cleaned = cleaned.Substring(startIdx, endIdx - startIdx + 1);
         }
 
-        return cleanedResponse.Trim();
+        // Validate that we have a proper JSON object
+        try
+        {
+            using var doc = JsonDocument.Parse(cleaned);
+            if (!doc.RootElement.TryGetProperty("activities", out var activitiesElement) ||
+                activitiesElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidOperationException(
+                    "Cleaned JSON does not contain a root 'activities' array. " +
+                    "This indicates the AI did not follow the prompt format.");
+            }
+        }
+        catch (JsonException)
+        {
+            throw new InvalidOperationException(
+                $"Cleaned response is not valid JSON. Content: {cleaned}");
+        }
+
+        return cleaned.Trim();
     }
 }

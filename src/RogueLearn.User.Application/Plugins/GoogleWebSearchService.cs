@@ -1,13 +1,17 @@
-using RogueLearn.User.Application.Interfaces;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/GoogleWebSearchService.cs
 using Microsoft.Extensions.Logging;
+using RogueLearn.User.Application.Interfaces;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Web;
 
 namespace RogueLearn.User.Application.Plugins
 {
     /// <summary>
-    /// Google web search service that returns formatted search results strings.
+    /// Google web search optimized for finding FREE, high-quality developer tutorials and community blogs.
+    /// Prioritizes community sites over official documentation.
     /// </summary>
     public class GoogleWebSearchService : IWebSearchService
     {
@@ -16,15 +20,88 @@ namespace RogueLearn.User.Application.Plugins
         private readonly HttpClient _httpClient;
         private readonly ILogger<GoogleWebSearchService>? _logger;
 
+        // Blocked sources (paywalls)
+        private static readonly string[] BlockedSources = new[]
+        {
+            "medium.com", // Often paywalled
+            "towardsdatascience.com", // Paywalled
+        };
+
+        // HIGH PRIORITY: Tutorial sites with clear, well-written examples
+        private static readonly string[] TutorialSites = new[]
+        {
+            // International tutorial sites
+            "geeksforgeeks.org",
+            "w3schools.com",
+            "tutorialspoint.com",
+            "programiz.com",
+            "javatpoint.com",
+            "tutorialsteacher.com",
+            
+            // Vietnamese tutorial sites
+            "viblo.asia",
+            "topdev.vn",
+            "200lab.io",
+        };
+
+        // HIGH PRIORITY: Community blogs and developer platforms
+        private static readonly string[] CommunityBlogs = new[]
+        {
+            // Major community platforms
+            "dev.to",
+            "hashnode.dev",
+            "freecodecamp.org",
+            "digitalocean.com/community",
+            "css-tricks.com",
+            "smashingmagazine.com",
+            "logrocket.com/blog",
+            "scotch.io",
+            
+            // Personal developer blogs (highly recommended on Reddit)
+            "kentcdodds.com",
+            "joshwcomeau.com",
+            "overreacted.io",
+            "dan.luu",
+            "pragmaticengineer.com",
+            "martinfowler.com",
+            "joelonsoftware.com",
+            "blog.codinghorror.com",
+            
+            // Tech company engineering blogs
+            "engineering.fb.com",
+            "netflixtechblog.com",
+            "eng.uber.com",
+            "dropbox.tech",
+            
+            // Vietnamese community
+            "techtalk.vn",
+            "techmaster.vn",
+        };
+
+        // MEDIUM PRIORITY: Official docs (only as reference, not primary)
+        private static readonly string[] OfficialDocs = new[]
+        {
+            "developer.mozilla.org",
+            "web.dev",
+            "developer.android.com",
+            "learn.microsoft.com",
+            "react.dev",
+            "vuejs.org",
+            "angular.io",
+            "docs.oracle.com",
+            "spring.io",
+            "baeldung.com",
+        };
+
         public GoogleWebSearchService(
             string apiKey,
             string searchEngineId,
-            IHttpClientFactory? httpClientFactory = null,
+            HttpClient httpClient,
             ILogger<GoogleWebSearchService>? logger = null)
         {
             _apiKey = apiKey;
             _searchEngineId = searchEngineId;
-            _httpClient = httpClientFactory?.CreateClient() ?? new HttpClient();
+            _httpClient = httpClient;
             _logger = logger;
         }
 
@@ -36,155 +113,190 @@ namespace RogueLearn.User.Application.Plugins
         {
             try
             {
-                // Enhance query for better documentation results
                 var enhancedQuery = EnhanceSearchQuery(query);
+                _logger?.LogDebug("Enhanced search query: '{EnhancedQuery}' (original: '{Query}')",
+                    enhancedQuery, query);
 
-                _logger?.LogDebug("Original query: '{OriginalQuery}', Enhanced query: '{EnhancedQuery}'", query, enhancedQuery);
+                var encodedQuery = HttpUtility.UrlEncode(enhancedQuery);
+                var url = $"https://www.googleapis.com/customsearch/v1" +
+                         $"?key={_apiKey}" +
+                         $"&cx={_searchEngineId}" +
+                         $"&q={encodedQuery}" +
+                         $"&num={Math.Min(count, 10)}" +
+                         $"&start={offset + 1}";
 
-                // Google's Custom Search JSON API endpoint
-                var baseUrl = "https://www.googleapis.com/customsearch/v1";
-                var queryString = HttpUtility.ParseQueryString(string.Empty);
-                queryString["key"] = _apiKey;
-                queryString["cx"] = _searchEngineId;
-                queryString["q"] = enhancedQuery;
-                queryString["num"] = Math.Clamp(count, 1, 10).ToString();
-                queryString["start"] = (offset + 1).ToString(); // 1-based index
+                var response = await _httpClient.GetAsync(url, cancellationToken);
+                response.EnsureSuccessStatusCode();
 
-                var url = $"{baseUrl}?{queryString}";
+                var jsonResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+                var searchResults = JsonSerializer.Deserialize<GoogleSearchResponse>(jsonResponse);
 
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
+                if (searchResults?.Items == null || !searchResults.Items.Any())
                 {
-                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger?.LogError("Google Custom Search API error: {StatusCode} - {ErrorContent}",
-                        response.StatusCode, errorContent);
+                    _logger?.LogWarning("No search results for query: '{Query}'", query);
                     return Enumerable.Empty<string>();
                 }
 
-                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+                // Sort results by source priority
+                var prioritizedResults = PrioritizeResults(searchResults.Items);
 
-                var results = new List<string>();
-
-                if (json.RootElement.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+                return prioritizedResults.Select(item =>
                 {
-                    foreach (var item in items.EnumerateArray())
-                    {
-                        var title = item.TryGetProperty("title", out var t) ? t.GetString() : string.Empty;
-                        var link = item.TryGetProperty("link", out var l) ? l.GetString() : string.Empty;
-                        var snippet = item.TryGetProperty("snippet", out var s) ? s.GetString() : string.Empty;
-
-                        // Skip results without links
-                        if (string.IsNullOrWhiteSpace(link))
-                        {
-                            continue;
-                        }
-
-                        var resultBuilder = new StringBuilder();
-                        resultBuilder.AppendLine($"Title: {title}");
-                        resultBuilder.AppendLine($"Link: {link}");
-                        resultBuilder.AppendLine($"Snippet: {snippet}");
-                        results.Add(resultBuilder.ToString());
-                    }
-
-                    _logger?.LogInformation("Google Custom Search returned {Count} results for query '{Query}'",
-                        results.Count, query);
-                }
-                else
-                {
-                    _logger?.LogWarning("Google Custom Search returned no items for query '{Query}'", query);
-                }
-
-                return results;
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger?.LogError(ex, "HTTP error during Google Custom Search for query '{Query}'", query);
-                return Enumerable.Empty<string>();
-            }
-            catch (JsonException ex)
-            {
-                _logger?.LogError(ex, "JSON parsing error during Google Custom Search for query '{Query}'", query);
-                return Enumerable.Empty<string>();
+                    var source = GetSourceType(item.Link);
+                    return $"Title: {item.Title}\n" +
+                           $"Link: {item.Link}\n" +
+                           $"Snippet: {item.Snippet}\n" +
+                           $"Source: {source}";
+                });
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Unexpected error during Google Custom Search for query '{Query}'", query);
+                _logger?.LogError(ex, "Web search failed for query: '{Query}'", query);
                 return Enumerable.Empty<string>();
             }
         }
 
         /// <summary>
-        /// Enhances search queries to prioritize official documentation and tutorials
+        /// Enhance query to prioritize community blogs and tutorial sites.
         /// </summary>
         private string EnhanceSearchQuery(string query)
         {
             var queryLower = query.ToLowerInvariant();
+            var enhancedQuery = new StringBuilder(query);
 
-            // For Android topics, prioritize developer.android.com
-            if (queryLower.Contains("android"))
+            // Add content keywords if missing
+            var contentKeywords = new[] {
+                "tutorial", "guide", "documentation", "example",
+                "introduction", "beginner", "learn", "explained"
+            };
+            bool hasContentKeyword = contentKeywords.Any(k => queryLower.Contains(k));
+
+            if (!hasContentKeyword)
             {
-                return $"{query} site:developer.android.com OR site:developer.android.com/guide";
+                enhancedQuery.Append(" tutorial guide");
             }
 
-            // For ASP.NET topics, prioritize Microsoft Learn
-            if (queryLower.Contains("asp.net") || queryLower.Contains("aspnet") || queryLower.Contains(".net"))
+            // Vietnamese content detection and boost
+            if (IsVietnameseQuery(query))
             {
-                return $"{query} site:learn.microsoft.com OR site:docs.microsoft.com";
+                _logger?.LogDebug("🇻🇳 Detected Vietnamese query, boosting Vietnamese sources");
+
+                // Prioritize Vietnamese sites for Vietnamese queries
+                var vietnameseSites = string.Join(" OR ", new[]
+                {
+                    "site:viblo.asia",
+                    "site:topdev.vn",
+                    "site:techtalk.vn",
+                    "site:200lab.io"
+                });
+
+                enhancedQuery.Append($" ({vietnameseSites})");
+            }
+            else
+            {
+                // For non-Vietnamese queries, boost international community sites
+                // Don't use site: restriction - just boost these in ranking
+                enhancedQuery.Append(" (geeksforgeeks OR dev.to OR freecodecamp OR w3schools OR programiz)");
             }
 
-            // For Java/Spring topics
-            if (queryLower.Contains("spring boot") || queryLower.Contains("spring"))
-            {
-                return $"{query} site:spring.io";
-            }
+            return enhancedQuery.ToString();
+        }
 
-            if (queryLower.Contains("java") && !queryLower.Contains("javascript"))
-            {
-                return $"{query} site:docs.oracle.com OR site:docs.oracle.com/en/java";
-            }
+        /// <summary>
+        /// Detect if query contains Vietnamese characters or keywords.
+        /// </summary>
+        private bool IsVietnameseQuery(string query)
+        {
+            // Check for Vietnamese diacritics
+            return Regex.IsMatch(query, @"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđĐ]");
+        }
 
-            // For Python topics
-            if (queryLower.Contains("django"))
+        /// <summary>
+        /// Prioritize search results by source type.
+        /// Priority: Tutorial Sites > Community Blogs > Official Docs > Others
+        /// </summary>
+        private List<GoogleSearchItem> PrioritizeResults(List<GoogleSearchItem> items)
+        {
+            var prioritized = items.OrderByDescending(item =>
             {
-                return $"{query} site:docs.djangoproject.com";
-            }
+                var link = item.Link.ToLowerInvariant();
 
-            if (queryLower.Contains("flask"))
-            {
-                return $"{query} site:flask.palletsprojects.com";
-            }
+                // Highest priority: Tutorial sites with clear examples
+                if (TutorialSites.Any(site => link.Contains(site)))
+                    return 1000;
 
-            if (queryLower.Contains("python"))
-            {
-                return $"{query} site:docs.python.org OR tutorial";
-            }
+                // High priority: Community blogs
+                if (CommunityBlogs.Any(site => link.Contains(site)))
+                    return 900;
 
-            // For JavaScript frameworks
-            if (queryLower.Contains("react"))
-            {
-                return $"{query} site:react.dev OR site:reactjs.org";
-            }
+                // Medium priority: Official docs
+                if (OfficialDocs.Any(site => link.Contains(site)))
+                    return 500;
 
-            if (queryLower.Contains("vue"))
-            {
-                return $"{query} site:vuejs.org";
-            }
+                // Lower priority: Stack Overflow (good but often too specific)
+                if (link.Contains("stackoverflow.com"))
+                    return 400;
 
-            if (queryLower.Contains("angular"))
-            {
-                return $"{query} site:angular.io";
-            }
+                // Lower priority: Reddit discussions
+                if (link.Contains("reddit.com"))
+                    return 300;
 
-            // Default: Add "official documentation" or "tutorial" to improve results
-            if (queryLower.Contains("tutorial") || queryLower.Contains("guide") || queryLower.Contains("documentation"))
-            {
-                return query; // Already has good keywords
-            }
+                // Lowest: Everything else
+                return 100;
+            }).ToList();
 
-            return $"{query} official documentation tutorial";
+            _logger?.LogDebug("Prioritized {Count} results. Top source: {TopSource}",
+                prioritized.Count,
+                prioritized.FirstOrDefault()?.Link);
+
+            return prioritized;
+        }
+
+        /// <summary>
+        /// Classify source type for metadata.
+        /// </summary>
+        private string GetSourceType(string url)
+        {
+            var urlLower = url.ToLowerInvariant();
+
+            if (TutorialSites.Any(site => urlLower.Contains(site)))
+                return "Trusted Tutorial Site ⭐";
+
+            if (CommunityBlogs.Any(site => urlLower.Contains(site)))
+                return "Trusted Community Blog ⭐";
+
+            if (OfficialDocs.Any(site => urlLower.Contains(site)))
+                return "Official Documentation";
+
+            if (urlLower.Contains("stackoverflow.com"))
+                return "Stack Overflow Q&A";
+
+            if (urlLower.Contains("github.com"))
+                return "GitHub Repository";
+
+            if (urlLower.Contains("reddit.com"))
+                return "Reddit Discussion";
+
+            return "General Source";
+        }
+
+        // JSON response models
+        private class GoogleSearchResponse
+        {
+            [JsonPropertyName("items")]
+            public List<GoogleSearchItem>? Items { get; set; }
+        }
+
+        private class GoogleSearchItem
+        {
+            [JsonPropertyName("title")]
+            public string Title { get; set; } = string.Empty;
+
+            [JsonPropertyName("link")]
+            public string Link { get; set; } = string.Empty;
+
+            [JsonPropertyName("snippet")]
+            public string Snippet { get; set; } = string.Empty;
         }
     }
 }

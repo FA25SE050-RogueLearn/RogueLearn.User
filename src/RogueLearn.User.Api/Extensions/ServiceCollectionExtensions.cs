@@ -34,11 +34,38 @@ public static class ServiceCollectionExtensions
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehaviour<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnhandledExceptionBehaviour<,>));
 
-        // Register Web Search service (Google Custom Search)
-        var googleSearchApiKey = configuration["GoogleSearch:ApiKey"] ?? throw new InvalidOperationException("GoogleSearch:ApiKey is not configured.");
-        var googleSearchEngineId = configuration["GoogleSearch:SearchEngineId"] ?? throw new InvalidOperationException("GoogleSearch:SearchEngineId is not configured.");
-        services.AddSingleton<IWebSearchService>(
-                new GoogleWebSearchService(googleSearchApiKey, googleSearchEngineId));
+        // CRITICAL FIX: Read configuration ONCE outside the lambda
+        var googleSearchApiKey = configuration["GoogleSearch:ApiKey"]
+            ?? throw new InvalidOperationException("GoogleSearch:ApiKey is not configured.");
+        var googleSearchEngineId = configuration["GoogleSearch:SearchEngineId"]
+            ?? throw new InvalidOperationException("GoogleSearch:SearchEngineId is not configured.");
+
+        // Configure HttpClient for Google Search
+        services.AddHttpClient("GoogleSearchClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.Add("User-Agent", "RogueLearn-EducationPlatform/1.0");
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+        });
+
+        // Register GoogleWebSearchService
+        services.AddSingleton<IWebSearchService>(serviceProvider =>
+        {
+            var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient("GoogleSearchClient");
+            var logger = serviceProvider.GetService<ILogger<GoogleWebSearchService>>();
+
+            // Use the variables captured from outer scope - NO duplicate config reading
+            return new GoogleWebSearchService(
+                googleSearchApiKey,
+                googleSearchEngineId,
+                httpClient,
+                logger);
+        });
+
         // Register extraction plugins with new, separated responsibilities.
         services.AddScoped<ICurriculumExtractionPlugin, CurriculumExtractionPlugin>();
         services.AddScoped<ISyllabusExtractionPlugin, SyllabusExtractionPlugin>();

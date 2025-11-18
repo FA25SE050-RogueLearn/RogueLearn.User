@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/QuestStep.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -11,8 +12,10 @@ public class QuestStep : BaseEntity
 {
     [Column("quest_id")]
     public Guid QuestId { get; set; }
-    [Column("skill_id")]
-    public Guid SkillId { get; set; }
+
+    // REMOVED: The SkillId is no longer at the step level.
+    // It will be defined for each individual activity within the 'Content' JSON.
+    // public Guid SkillId { get; set; }
 
     [Column("step_number")]
     public int StepNumber { get; set; }
@@ -23,13 +26,16 @@ public class QuestStep : BaseEntity
     [Column("description")]
     public string Description { get; set; } = string.Empty;
 
-    [Column("step_type")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public StepType StepType { get; set; }
+    // REMOVED: The StepType is no longer needed at this level.
+    // Each activity within the 'Content' will have its own type.
+    // [Column("step_type")]
+    // [JsonConverter(typeof(StringEnumConverter))]
+    // public StepType StepType { get; set; }
 
-    // Stored as JSONB; represented as string
+    // MODIFIED: This is now a flexible object to store the new 'activities' array structure.
+    // It will be serialized to the JSONB 'content' column.
     [Column("content")]
-    public string? Content { get; set; }
+    public object? Content { get; set; }
 
     // Stored as JSONB; represented as string
     [Column("validation_criteria")]
