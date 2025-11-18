@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'src/RogueLearn.User.Api/**'
-      - 'building_blocks/**'
-      - 'src/**'
-      - '.github/workflows/docker-publish.yml'
 
 concurrency:
   group: docker-publish-${{ github.ref }}
@@ -74,6 +69,8 @@ jobs:
           # The rest of your script can now remain the same
           echo "--- Bringing down Docker Swarm services ---"
           docker stack rm roguelearn
+          echo "--- Waiting 45 seconds before bringing services up ---"
+          sleep 45
 
           echo "--- Removing old Docker image (latest) ---"
           OLD_IMAGE_ID=$(docker images -q $IMAGE_NAME:latest)

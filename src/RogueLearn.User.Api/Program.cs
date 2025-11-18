@@ -7,6 +7,7 @@ using Serilog;
 using BuildingBlocks.Shared.Authentication;
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.SemanticKernel;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
@@ -31,6 +32,7 @@ try
     Console.WriteLine($"[DEBUG] Google Model from ENV: {Environment.GetEnvironmentVariable("AI__Google__Model")}");
     Console.WriteLine($"[DEBUG] Google ApiKey from ENV: {(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AI__Google__ApiKey")) ? "YES" : "NO")}");
 
+
     // Check if IConfiguration can read them
     var config = builder.Configuration;
     Console.WriteLine($"[DEBUG] AI Provider from IConfiguration: {config["AI:Provider"]}");
@@ -41,6 +43,23 @@ try
 
     // Add Serilog to the host
     builder.Host.UseSerilog();
+    // --- THIS CONFIGURATION IS STILL REQUIRED ---
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        // Listen on the port specified for HTTP (6968)
+        options.ListenAnyIP(6968, listenOptions =>
+        {
+            // Explicitly enable HTTP/2 for gRPC on this unencrypted port
+            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+        });
+
+        // Listen on the port specified for HTTPS (6969)
+        options.ListenAnyIP(6969, listenOptions =>
+        {
+            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+            listenOptions.UseHttps();
+        });
+    }); 
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
@@ -131,11 +150,6 @@ try
         c.RoutePrefix = string.Empty;
     });
     
-    app.UseHangfireDashboard("/hangfire", new DashboardOptions
-    {
-        // Optional: Add authentication to prevent public access
-    });
-
     app.UseCors("AllowAll");
     app.UseHttpsRedirection();
 

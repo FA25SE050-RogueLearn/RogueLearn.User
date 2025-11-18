@@ -30,9 +30,7 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
             }
         }
 
-        member.Status = MemberStatus.Inactive;
-        member.LeftAt = DateTimeOffset.UtcNow;
-        await _memberRepository.UpdateAsync(member, cancellationToken);
+        await _memberRepository.DeleteAsync(member.Id, cancellationToken);
 
         // Decrement guild current member count after leaving
         var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)

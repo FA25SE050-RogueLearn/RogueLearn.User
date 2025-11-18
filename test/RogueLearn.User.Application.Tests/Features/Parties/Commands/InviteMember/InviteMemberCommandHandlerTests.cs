@@ -59,4 +59,27 @@ public class InviteMemberCommandHandlerTests
         _invitationRepository.Verify(r => r.AddAsync(It.IsAny<PartyInvitation>(), It.IsAny<CancellationToken>()), Times.Once);
         _notificationService.Verify(n => n.SendInvitationNotificationAsync(It.IsAny<PartyInvitation>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Handle_ShouldReturnBadRequest_WhenInviterEqualsInvitee()
+    {
+        var partyId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var cmd = new InviteMemberCommand(
+            PartyId: partyId,
+            InviterAuthUserId: userId,
+            Targets: new[] { new InviteTarget(userId, null) },
+            Message: "Join",
+            ExpiresAt: DateTimeOffset.UtcNow.AddDays(3)
+        );
+
+        _invitationRepository
+            .Setup(r => r.GetPendingInvitationsByPartyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PartyInvitation>());
+        Func<Task> act = async () => await _handler.Handle(cmd, CancellationToken.None);
+
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.BadRequestException>();
+        _invitationRepository.Verify(r => r.AddAsync(It.IsAny<PartyInvitation>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationService.Verify(n => n.SendInvitationNotificationAsync(It.IsAny<PartyInvitation>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

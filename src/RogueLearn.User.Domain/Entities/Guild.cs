@@ -25,11 +25,8 @@ public class Guild : BaseEntity
     [Column("current_member_count")]
     public int CurrentMemberCount { get; set; } = 1;
 
-    [Column("level")]
-    public int Level { get; set; } = 1;
-
-    [Column("experience_points")]
-    public int ExperiencePoints { get; set; } = 0;
+    [Column("merit_points")]
+    public int MeritPoints { get; set; } = 0;
 
     [Column("is_public")]
     public bool IsPublic { get; set; } = true;

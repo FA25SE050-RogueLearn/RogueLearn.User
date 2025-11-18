@@ -132,6 +132,7 @@ service AchievementsService {
   rpc Delete(DeleteAchievementRequest) returns (google.protobuf.Empty);
   rpc AwardToUser(AwardAchievementToUserRequest) returns (google.protobuf.Empty);
   rpc RevokeFromUser(RevokeAchievementFromUserRequest) returns (google.protobuf.Empty);
+  rpc GrantAchievements(GrantAchievementsRequest) returns (GrantAchievementsResponse);
   rpc GetByAuthUserId(GetUserAchievementsByAuthUserIdRequest) returns (UserAchievementList);
 }
 
@@ -175,6 +176,20 @@ message AwardAchievementToUserRequest {
 message RevokeAchievementFromUserRequest {
   string user_id = 1;
   string achievement_id = 2;
+}
+
+message GrantAchievementsRequest {
+  repeated UserAchievementGrant user_achievements = 1;
+}
+
+message UserAchievementGrant {
+  string user_id = 1;
+  string achievement_key = 2;
+}
+
+message GrantAchievementsResponse {
+  int32 granted_count = 1;
+  repeated string errors = 2;
 }
 
 message GetUserAchievementsByAuthUserIdRequest { string auth_user_id = 1; }

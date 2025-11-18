@@ -30,6 +30,11 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
         {
             Guid? inviteeId = target.UserId;
 
+            if (!inviteeId.HasValue && string.IsNullOrWhiteSpace(target.Email))
+            {
+                throw new Exceptions.BadRequestException("Invite target must include userId or email.");
+            }
+
             if (!inviteeId.HasValue && !string.IsNullOrWhiteSpace(target.Email))
             {
                 var userProfile = await _userProfileRepository.GetByEmailAsync(target.Email, cancellationToken);
@@ -39,20 +44,24 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
                 }
                 else
                 {
-                    // TODO: Handle email invitations for non-existing users
-                    continue;
+                    throw new Exceptions.BadRequestException($"No user found with email '{target.Email}'.");
                 }
             }
 
             if (!inviteeId.HasValue)
             {
-                continue;
+                throw new Exceptions.BadRequestException("Invalid invite target.");
+            }
+
+            if (inviteeId.Value == request.InviterAuthUserId)
+            {
+                throw new Exceptions.BadRequestException("Cannot invite yourself to the party.");
             }
 
             var pending = await _invitationRepository.GetPendingInvitationsByPartyAsync(request.PartyId, cancellationToken);
             if (pending.Any(i => i.InviteeId == inviteeId.Value))
             {
-                continue;
+                throw new Exceptions.BadRequestException("An invitation is already pending for this user.");
             }
 
             var invitation = new PartyInvitation
