@@ -80,7 +80,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IUserAchievementRepository, UserAchievementRepository>();
-        services.AddScoped<IUserQuestProgressRepository, UserQuestProgressRepository>();
+        // REMOVED: The IUserQuestProgressRepository is no longer needed.
+        // services.AddScoped<IUserQuestProgressRepository, UserQuestProgressRepository>();
         services.AddScoped<IUserSkillRepository, UserSkillRepository>();
         services.AddScoped<IUserSkillRewardRepository, UserSkillRewardRepository>();
 
@@ -110,8 +111,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILearningPathRepository, LearningPathRepository>();
         services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
         services.AddScoped<IQuestRepository, QuestRepository>();
-        // MODIFICATION: The obsolete repository registration has been removed.
-        // services.AddScoped<ILearningPathQuestRepository, LearningPathQuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();

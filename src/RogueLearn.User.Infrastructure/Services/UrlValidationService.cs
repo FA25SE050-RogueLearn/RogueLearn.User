@@ -7,14 +7,14 @@ using RogueLearn.User.Application.Interfaces;
 namespace RogueLearn.User.Infrastructure.Services;
 
 /// <summary>
-/// Implements URL validation using HTTP requests with content checking to detect soft 404s.
+/// Validates URLs for accessibility and detects soft 404s, paywalls, and restricted content.
 /// </summary>
 public class UrlValidationService : IUrlValidationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UrlValidationService> _logger;
 
-    // Common patterns that indicate a page doesn't exist or has no content
+    // Patterns indicating unavailable content
     private static readonly string[] _notFoundIndicators = new[]
     {
         "page not found",
@@ -31,6 +31,25 @@ public class UrlValidationService : IUrlValidationService
         "not exist",
         "we couldn't find that page",
         "the page you requested"
+    };
+
+    // ADDED: Patterns indicating paywalls or login requirements
+    private static readonly string[] _paywallIndicators = new[]
+    {
+        "member-only",
+        "members only",
+        "subscribe to read",
+        "subscription required",
+        "sign in to continue",
+        "login to continue",
+        "this article is for",
+        "premium content",
+        "become a member",
+        "upgrade to read",
+        "limited free article",
+        "free articles remaining",
+        "paywall",
+        "unlock this story"
     };
 
     public UrlValidationService(IHttpClientFactory httpClientFactory, ILogger<UrlValidationService> logger)
@@ -52,7 +71,7 @@ public class UrlValidationService : IUrlValidationService
             using var client = _httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(10);
 
-            // Try HEAD request first for efficiency
+            // Try HEAD request first
             var headRequest = new HttpRequestMessage(HttpMethod.Head, url);
             headRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
@@ -61,16 +80,15 @@ public class UrlValidationService : IUrlValidationService
             {
                 headResponse = await client.SendAsync(headRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
-                // If HEAD returns a clear error status, fail fast
                 if ((int)headResponse.StatusCode >= 400)
                 {
-                    _logger.LogWarning("URL validation failed for '{Url}'. Received status code {StatusCode}.", url, (int)headResponse.StatusCode);
+                    _logger.LogWarning("URL validation failed for '{Url}'. Received status code {StatusCode}.",
+                        url, (int)headResponse.StatusCode);
                     return false;
                 }
             }
             catch (HttpRequestException)
             {
-                // HEAD request failed, will try GET below
                 _logger.LogDebug("HEAD request failed for '{Url}', falling back to GET.", url);
             }
             finally
@@ -78,7 +96,7 @@ public class UrlValidationService : IUrlValidationService
                 headResponse?.Dispose();
             }
 
-            // Fetch actual content to check for soft 404s
+            // Fetch actual content
             var getRequest = new HttpRequestMessage(HttpMethod.Get, url);
             getRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
@@ -86,50 +104,65 @@ public class UrlValidationService : IUrlValidationService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("URL validation failed for '{Url}'. Received status code {StatusCode}.", url, (int)response.StatusCode);
+                _logger.LogWarning("URL validation failed for '{Url}'. Received status code {StatusCode}.",
+                    url, (int)response.StatusCode);
                 return false;
             }
 
-            // Check if content type is HTML (skip detailed validation for PDFs, images, etc.)
+            // Skip detailed validation for non-HTML content
             var contentType = response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant();
             if (contentType != null && !contentType.Contains("html") && !contentType.Contains("text"))
             {
-                _logger.LogInformation("URL validation successful for '{Url}' (non-HTML content: {ContentType}).", url, contentType);
+                _logger.LogInformation("URL validation successful for '{Url}' (non-HTML content: {ContentType}).",
+                    url, contentType);
                 return true;
             }
 
-            // Read a portion of the HTML content to check for "soft 404s"
+            // Read content to check for soft 404s and paywalls
             var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var reader = new StreamReader(contentStream);
 
-            // Read first 50KB of content (enough to detect 404 pages without loading entire page)
-            var buffer = new char[51200];
+            // Read first 100KB to catch paywall overlays and modals
+            var buffer = new char[102400];
             var charsRead = await reader.ReadAsync(buffer, 0, buffer.Length);
             var contentSnippet = new string(buffer, 0, charsRead);
             var contentLower = contentSnippet.ToLowerInvariant();
 
-            // Check for common "not found" indicators in the content
+            // Check for "not found" indicators
             foreach (var indicator in _notFoundIndicators)
             {
                 if (contentLower.Contains(indicator))
                 {
-                    _logger.LogWarning("URL '{Url}' appears to be a soft 404 (contains '{Indicator}').", url, indicator);
+                    _logger.LogWarning("URL '{Url}' appears to be a soft 404 (contains '{Indicator}').",
+                        url, indicator);
                     return false;
                 }
             }
 
-            // Additional heuristic: Check if the page has minimal content
-            // Remove HTML tags and check actual text length
+            // ADDED: Check for paywall indicators
+            foreach (var indicator in _paywallIndicators)
+            {
+                if (contentLower.Contains(indicator))
+                {
+                    _logger.LogWarning("URL '{Url}' appears to have a paywall (contains '{Indicator}').",
+                        url, indicator);
+                    return false;
+                }
+            }
+
+            // Check for minimal content (possible blank page or redirect stub)
             var textContent = Regex.Replace(contentSnippet, "<.*?>", string.Empty);
             var meaningfulText = Regex.Replace(textContent, @"\s+", " ").Trim();
 
-            if (meaningfulText.Length < 100)
+            if (meaningfulText.Length < 200)
             {
-                _logger.LogWarning("URL '{Url}' has insufficient content (only {Length} characters of text).", url, meaningfulText.Length);
+                _logger.LogWarning("URL '{Url}' has insufficient content (only {Length} characters of text).",
+                    url, meaningfulText.Length);
                 return false;
             }
 
-            _logger.LogInformation("URL validation successful for '{Url}' with status code {StatusCode}.", url, (int)response.StatusCode);
+            _logger.LogInformation("URL validation successful for '{Url}' with status code {StatusCode}.",
+                url, (int)response.StatusCode);
             return true;
         }
         catch (TaskCanceledException)

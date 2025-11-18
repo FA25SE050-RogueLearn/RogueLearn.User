@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/UserQuestStepProgress.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -37,6 +38,10 @@ public class UserQuestStepProgress : BaseEntity
 
     [Column("attempts_count")]
     public int AttemptsCount { get; set; } = 0;
+
+    // ADDED: This new field tracks which specific activities within the weekly module (step) are completed.
+    [Column("completed_activity_ids")]
+    public Guid[]? CompletedActivityIds { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
