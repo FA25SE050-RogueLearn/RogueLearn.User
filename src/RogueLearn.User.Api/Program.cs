@@ -50,14 +50,7 @@ try
         options.ListenAnyIP(6968, listenOptions =>
         {
             // Explicitly enable HTTP/2 for gRPC on this unencrypted port
-            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
-        });
-
-        // Listen on the port specified for HTTPS (6969)
-        options.ListenAnyIP(6969, listenOptions =>
-        {
-            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
-            listenOptions.UseHttps();
+            listenOptions.Protocols = HttpProtocols.Http2;
         });
     }); 
 

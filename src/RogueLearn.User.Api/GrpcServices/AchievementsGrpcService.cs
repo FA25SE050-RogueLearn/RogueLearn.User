@@ -8,6 +8,7 @@ using RogueLearn.User.Application.Features.Achievements.Commands.DeleteAchieveme
 using RogueLearn.User.Application.Features.Achievements.Commands.AwardAchievementToUser;
 using RogueLearn.User.Application.Features.Achievements.Commands.RevokeAchievementFromUser;
 using RogueLearn.User.Application.Features.Achievements.Queries.GetUserAchievementsByAuthId;
+using GrantAchievementsResponse = RogueLearn.User.Api.Grpc.GrantAchievementsResponse;
 
 namespace RogueLearn.User.Api.GrpcServices;
 
