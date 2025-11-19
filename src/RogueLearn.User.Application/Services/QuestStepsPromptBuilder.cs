@@ -8,12 +8,13 @@ namespace RogueLearn.User.Application.Services;
 /// <summary>
 /// Builds LLM-friendly prompts for generating quest steps based on syllabus content and user context.
 /// Generates activities for a SINGLE week (one quest step = one week).
+/// Activity types: Reading, KnowledgeCheck, Quiz (NO Coding activities).
 /// </summary>
 public class QuestStepsPromptBuilder
 {
     /// <summary>
     /// Generates a prompt for the LLM to create quest steps for a SINGLE week.
-    /// Each step contains 8-10 activities following a structured pattern.
+    /// Each step contains 7-10 activities following a structured pattern (Reading, KnowledgeCheck, Quiz only).
     /// This method is called multiple times (once per week) to generate all quest steps.
     /// </summary>
     public string BuildPrompt(
@@ -31,7 +32,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("You are an expert curriculum designer creating gamified weekly learning modules for a university subject.");
         prompt.AppendLine($"Your task is to analyze the syllabus for '{subjectName}' and generate activities for Week {weekNumber} out of {totalWeeks} weeks.");
         prompt.AppendLine();
-        prompt.AppendLine($"⚠️ CRITICAL: Generate structured activities for ONLY Week {weekNumber}. Group the appropriate syllabus sessions (typically sessions {(weekNumber - 1) * 5 + 1} through {weekNumber * 5}) and create 8-10 high-quality activities.");
+        prompt.AppendLine($"⚠️ CRITICAL: Generate structured activities for ONLY Week {weekNumber}. Group the appropriate syllabus sessions (typically sessions {(weekNumber - 1) * 5 + 1} through {weekNumber * 5}) and create 7-10 high-quality activities.");
         prompt.AppendLine();
         prompt.AppendLine("---");
 
@@ -90,10 +91,10 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"activities\": [");
         prompt.AppendLine("    {");
         prompt.AppendLine("      \"activityId\": \"<UUID>\",");
-        prompt.AppendLine("      \"type\": \"Reading | KnowledgeCheck | Quiz | Coding\",");
+        prompt.AppendLine("      \"type\": \"Reading | KnowledgeCheck | Quiz\",");
         prompt.AppendLine("      \"payload\": { /* type-specific fields */ }");
         prompt.AppendLine("    }");
-        prompt.AppendLine("    // ... more activities (8-10 total per week)");
+        prompt.AppendLine("    // ... more activities (7-10 total per week)");
         prompt.AppendLine("  ]");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
@@ -176,30 +177,6 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- Should be comprehensive end-of-week assessment");
         prompt.AppendLine();
 
-        // Coding
-        prompt.AppendLine("**D. `Coding` Payload (For technical subjects only):**");
-        prompt.AppendLine("```json");
-        prompt.AppendLine("{");
-        prompt.AppendLine("  \"skillId\": \"<UUID from pre-approved list>\",");
-        prompt.AppendLine("  \"experiencePoints\": 100,");
-        prompt.AppendLine("  \"language\": \"<e.g., Kotlin, Java, C#, Python>\",");
-        prompt.AppendLine("  \"difficulty\": \"<Beginner|Intermediate|Advanced>\",");
-        prompt.AppendLine("  \"topic\": \"<Specific coding challenge based on week's content>\",");
-        prompt.AppendLine("  \"description\": \"<2-3 sentences describing what to build>\",");
-        prompt.AppendLine("  \"objectives\": [");
-        prompt.AppendLine("    \"<Learning objective 1>\",");
-        prompt.AppendLine("    \"<Learning objective 2>\",");
-        prompt.AppendLine("    \"<Learning objective 3>\"");
-        prompt.AppendLine("  ],");
-        prompt.AppendLine("  \"requirements\": [");
-        prompt.AppendLine("    \"<Specific requirement 1>\",");
-        prompt.AppendLine("    \"<Specific requirement 2>\",");
-        prompt.AppendLine("    \"<Specific requirement 3>\"");
-        prompt.AppendLine("  ]");
-        prompt.AppendLine("}");
-        prompt.AppendLine("```");
-        prompt.AppendLine();
-
         // CRITICAL RULES
         prompt.AppendLine("### CRITICAL RULES:");
         prompt.AppendLine();
@@ -214,73 +191,65 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("   - If a session has no suggestedUrl, still include it but set url: \"\"");
         prompt.AppendLine("   - Prioritize sessions that teach new concepts or skills");
         prompt.AppendLine();
-        prompt.AppendLine("**3. Activity Pattern Per Week (8-10 activities total):**");
+        prompt.AppendLine("**3. Activity Pattern Per Week (7-10 activities total):**");
         prompt.AppendLine();
         prompt.AppendLine("   **STANDARD PATTERN:**");
-        prompt.AppendLine("   - 2 `Reading` activities (from first 2-3 sessions)");
+        prompt.AppendLine("   - 2-3 `Reading` activities (from first 2-3 sessions)");
         prompt.AppendLine("   - 1 `KnowledgeCheck` with 3-5 questions (covering those readings)");
-        prompt.AppendLine("   - 2 more `Reading` activities (remaining sessions)");
+        prompt.AppendLine("   - 2-3 more `Reading` activities (remaining sessions)");
         prompt.AppendLine("   - 1 `KnowledgeCheck` with 3-5 questions (covering those readings)");
-        prompt.AppendLine("   - 1 `Coding` challenge (for technical subjects like Mobile Programming, Web Dev, etc.)");
         prompt.AppendLine("   - 1-2 `Quiz` activities with 10-15 questions each (comprehensive week review)");
         prompt.AppendLine();
-        prompt.AppendLine("   **Example Week Structure (Technical Subject - 8-9 activities):**");
+        prompt.AppendLine("   **Example Week Structure - 8-9 activities:**");
         prompt.AppendLine("   1. Reading (Session 1)");
         prompt.AppendLine("   2. Reading (Session 2)");
         prompt.AppendLine("   3. KnowledgeCheck (3-5 questions on Sessions 1-2)");
         prompt.AppendLine("   4. Reading (Session 3)");
         prompt.AppendLine("   5. Reading (Session 4)");
         prompt.AppendLine("   6. KnowledgeCheck (3-5 questions on Sessions 3-4)");
-        prompt.AppendLine("   7. Coding (Hands-on practice on Session 5)");
+        prompt.AppendLine("   7. Reading (Session 5 - optional)");
         prompt.AppendLine("   8. Quiz (10-15 questions covering all sessions)");
         prompt.AppendLine("   9. (Optional) Additional KnowledgeCheck or Reading if beneficial");
         prompt.AppendLine();
-        prompt.AppendLine("   **Example Week Structure (Non-Technical Subject - 7-8 activities):**");
-        prompt.AppendLine("   1. Reading (Session 1)");
-        prompt.AppendLine("   2. Reading (Session 2)");
-        prompt.AppendLine("   3. KnowledgeCheck (4 questions on Sessions 1-2)");
-        prompt.AppendLine("   4. Reading (Session 3)");
-        prompt.AppendLine("   5. Reading (Session 4)");
-        prompt.AppendLine("   6. KnowledgeCheck (5 questions on Sessions 3-4)");
-        prompt.AppendLine("   7. Quiz (12-15 questions covering all sessions)");
-        prompt.AppendLine("   8. (Optional) Additional activity if beneficial");
-        prompt.AppendLine();
-        prompt.AppendLine("**4. Subject Type Detection:**");
-        prompt.AppendLine("   - **Technical subjects** (Android, Mobile Development, Web Dev, Programming, etc.): MUST include Coding activities");
-        prompt.AppendLine("   - **Non-technical subjects** (Philosophy, History, Business, etc.): NO Coding activities");
-        prompt.AppendLine("   - Use subject name and course description to determine type");
-        prompt.AppendLine();
-        prompt.AppendLine("**5. Activity Count Per Week (STRICT):**");
+        prompt.AppendLine("**4. Activity Count Per Week (STRICT):**");
         prompt.AppendLine("   - Minimum: 6 activities (MUST NOT go below)");
-        prompt.AppendLine("   - Typical: 8-10 activities");
+        prompt.AppendLine("   - Typical: 7-10 activities");
         prompt.AppendLine("   - Maximum: 10 activities (MUST NOT exceed)");
         prompt.AppendLine("   - Quality over quantity: Skip obvious or duplicate activities");
+        prompt.AppendLine("   - NO Coding activities - only Reading, KnowledgeCheck, and Quiz");
         prompt.AppendLine();
-        prompt.AppendLine("**6. UUIDs:**");
+        prompt.AppendLine("**5. UUIDs:**");
         prompt.AppendLine("   - Generate unique UUID v4 for every `activityId`");
         prompt.AppendLine("   - Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx");
         prompt.AppendLine("   - Example: a1b2c3d4-e5f6-4789-0123-456789abcdef");
         prompt.AppendLine();
-        prompt.AppendLine("**7. Skill ID Enforcement:**");
+        prompt.AppendLine("**6. Skill ID Enforcement:**");
         prompt.AppendLine("   - Every activity payload MUST contain valid `skillId` from pre-approved list");
         prompt.AppendLine("   - Select most relevant skill based on activity content");
         prompt.AppendLine("   - Do NOT invent skillIds");
         prompt.AppendLine();
-        prompt.AppendLine("**8. Experience Points (FIXED VALUES):**");
+        prompt.AppendLine("**7. Experience Points (FIXED VALUES):**");
         prompt.AppendLine("   - Reading: 15 XP each");
         prompt.AppendLine("   - KnowledgeCheck: 35 XP each (regardless of question count)");
         prompt.AppendLine("   - Quiz: 50 XP each (regardless of question count)");
-        prompt.AppendLine("   - Coding: 100 XP each");
         prompt.AppendLine("   - Target per week: 250-400 XP total");
-        prompt.AppendLine("   - Example: 2 Reading (30) + 2 KnowledgeCheck (70) + 1 Coding (100) + 1 Quiz (50) = 250 XP");
+        prompt.AppendLine("   - Example: 4 Reading (60) + 2 KnowledgeCheck (70) + 1 Quiz (50) = 180 XP (adjust with more activities)");
+        prompt.AppendLine("   - Example: 5 Reading (75) + 2 KnowledgeCheck (70) + 2 Quiz (100) = 245 XP");
         prompt.AppendLine();
-        prompt.AppendLine("**9. Quality Standards (DO NOT SKIP):**");
+        prompt.AppendLine("**8. Quality Standards (DO NOT SKIP):**");
         prompt.AppendLine("   - All questions must have exactly 4 plausible options");
         prompt.AppendLine("   - Explanations must be educational (2-4 sentences, not just confirming)");
         prompt.AppendLine("   - Avoid trivial, obvious, or trick questions");
         prompt.AppendLine("   - KnowledgeChecks test understanding of specific readings");
         prompt.AppendLine("   - Quizzes test comprehensive understanding of entire week");
         prompt.AppendLine("   - Do NOT include activities without educational value");
+        prompt.AppendLine();
+        prompt.AppendLine("**9. Allowed Activity Types ONLY:**");
+        prompt.AppendLine("   - Reading (link to syllabus content)");
+        prompt.AppendLine("   - KnowledgeCheck (3-5 questions)");
+        prompt.AppendLine("   - Quiz (10-15 questions)");
+        prompt.AppendLine("   - NO Coding activities");
+        prompt.AppendLine("   - NO other types");
         prompt.AppendLine();
         prompt.AppendLine("**10. JSON Output (MUST BE PERFECT):**");
         prompt.AppendLine("   - Output ONLY the JSON object (no markdown, no commentary, no extra text)");
@@ -292,7 +261,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("   - Root level MUST contain \"activities\" array (NOT \"weeks\")");
         prompt.AppendLine("   - Every field must have correct type (string, number, array, object)");
         prompt.AppendLine();
-        prompt.AppendLine($"Generate the complete JSON object for Week {weekNumber} activities now. Remember: 8-10 activities, valid JSON only, no extra text.");
+        prompt.AppendLine($"Generate the complete JSON object for Week {weekNumber} activities now. Remember: 7-10 activities (Reading, KnowledgeCheck, Quiz ONLY), valid JSON only, no extra text.");
 
         return prompt.ToString();
     }

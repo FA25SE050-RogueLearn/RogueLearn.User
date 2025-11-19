@@ -15,8 +15,9 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestStep
 
 /// <summary>
 /// Generates weekly learning modules for a quest.
-/// Each call to this handler generates ONE week's activities at a time.
+/// Each call to this handler generates quest steps by looping through weeks (1-N).
 /// Supports 5-12 total weeks based on syllabus size.
+/// Each week = 1 quest step with 7-10 activities (Reading, KnowledgeCheck, Quiz ONLY - NO Coding).
 /// </summary>
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
@@ -28,6 +29,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private const int MaxActivitiesPerStep = 10;
     private const int MinXpPerStep = 250;
     private const int MaxXpPerStep = 400;
+    private const int DefaultSessionCount = 60;
 
     private record AiActivity(
         [property: JsonPropertyName("activityId")] string ActivityId,
@@ -84,7 +86,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        // 1. PRE-CONDITION CHECKS
+        // ========== 1. PRE-CONDITION CHECKS ==========
         var questHasSteps = await _questStepRepository.QuestContainsSteps(request.QuestId, cancellationToken);
         if (questHasSteps)
         {
@@ -118,7 +120,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             throw new BadRequestException("No syllabus content available for this quest's subject.");
         }
 
-        // 2. VERIFY URL ENRICHMENT
+        // ========== 2. VERIFY URL ENRICHMENT ==========
         if (!HasEnrichedUrls(subject.Content))
         {
             _logger.LogWarning(
@@ -127,7 +129,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 subject.Id);
         }
 
-        // 3. SKILL UNLOCKING & FETCHING
+        // ========== 3. SKILL UNLOCKING & FETCHING ==========
         var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(
             new[] { quest.SubjectId.Value }, cancellationToken);
 
@@ -142,7 +144,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             .Where(s => relevantSkillIds.Contains(s.Id))
             .ToList();
 
-        // Unlock skills
+        // Unlock skills for user
         var existingUserSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
         var existingSkillIds = existingUserSkills.Select(us => us.SkillId).ToHashSet();
 
@@ -170,7 +172,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 unlockedCount, request.AuthUserId, request.QuestId);
         }
 
-        // 4. PREPARE DATA FOR AI
+        // ========== 4. PREPARE DATA FOR AI ==========
         var userContext = await _promptBuilder.GenerateAsync(userProfile, userClass, cancellationToken);
 
         var syllabusJson = Newtonsoft.Json.JsonConvert.SerializeObject(
@@ -182,15 +184,18 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             }
         );
 
-        // 5. CALCULATE WEEKS TO GENERATE
+        // ========== 5. CALCULATE WEEKS TO GENERATE ==========
         int totalSessions = ExtractTotalSessions(subject.Content);
         int sessionsToUse = totalSessions;
 
         // Filter sessions if > 100 (keep only important ones)
         if (totalSessions > 100)
         {
-            _logger.LogInformation("Filtering {Total} sessions to keep only important ones (~60 target)", totalSessions);
-            sessionsToUse = 60; // Target ~60 after filtering (handled by syllabus import ideally)
+            _logger.LogInformation(
+                "⚠️ Subject has {Total} sessions (exceeds 100). " +
+                "Filtering to keep only important sessions (~60 target)",
+                totalSessions);
+            sessionsToUse = 60; // Target ~60 after filtering
         }
 
         int weeksToGenerate = (int)Math.Ceiling((decimal)sessionsToUse / SessionsPerWeek);
@@ -200,23 +205,23 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             throw new BadRequestException(
                 $"Insufficient sessions ({sessionsToUse}). Need at least {MinQuestSteps * SessionsPerWeek} sessions " +
-                $"to generate {MinQuestSteps} weeks. Got {weeksToGenerate} weeks.");
+                $"to generate minimum {MinQuestSteps} weeks. Current: {weeksToGenerate} weeks.");
         }
 
         if (weeksToGenerate > MaxQuestSteps)
         {
             _logger.LogWarning(
                 "⚠️ Subject has {Sessions} sessions, which would generate {Weeks} weeks. " +
-                "Capping at maximum {Max} weeks. Oldest weeks will be excluded.",
+                "Capping at maximum {Max} weeks. Excess weeks will not be generated.",
                 sessionsToUse, weeksToGenerate, MaxQuestSteps);
             weeksToGenerate = MaxQuestSteps;
         }
 
         _logger.LogInformation(
-            "📋 Generation Plan: {Sessions} sessions → {Weeks} weeks (5 sessions/week) → {Weeks} quest steps",
+            "📋 Generation Plan: {Sessions} sessions → {Weeks} weeks (5 sessions/week) → {Steps} quest steps",
             sessionsToUse, weeksToGenerate, weeksToGenerate);
 
-        // 6. LOOP: GENERATE EACH WEEK
+        // ========== 6. LOOP: GENERATE EACH WEEK ==========
         var createdSteps = new List<QuestStep>();
         int totalActivitiesGenerated = 0;
         int skippedWeeks = 0;
@@ -225,9 +230,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             try
             {
-                _logger.LogInformation("🔄 Generating Week {Week}/{Total}...", weekNumber, weeksToGenerate);
+                _logger.LogInformation("🔄 [Week {Week}/{Total}] Starting generation...", weekNumber, weeksToGenerate);
 
-                // Build prompt for this specific week
+                // ========== 6a. Build prompt for this specific week ==========
                 string prompt = _questStepsPromptBuilder.BuildPrompt(
                     syllabusJson,
                     userContext,
@@ -237,70 +242,72 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     weekNumber,
                     weeksToGenerate);
 
-                // Call AI for this week
+                // ========== 6b. Call AI for this week ==========
                 var generatedJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(
-     syllabusJson,
-     userContext,
-     relevantSkills,
-     subject.SubjectName,
-     subject.Description ?? "",
-     weekNumber,            // ✅ Added
-     weeksToGenerate,       // ✅ Added
-     cancellationToken);
-
+                    syllabusJson,
+                    userContext,
+                    relevantSkills,
+                    subject.SubjectName,
+                    subject.Description ?? "",
+                    weekNumber,
+                    weeksToGenerate,
+                    cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(generatedJson))
                 {
-                    _logger.LogError("Week {Week}: AI returned empty response", weekNumber);
+                    _logger.LogError("❌ Week {Week}: AI returned empty/null response", weekNumber);
                     skippedWeeks++;
                     continue;
                 }
 
-                // 7. DESERIALIZE ACTIVITIES ARRAY
+                // ========== 6c. DESERIALIZE ACTIVITIES ARRAY ==========
                 JsonElement activitiesElement;
                 try
                 {
                     var jsonDoc = JsonDocument.Parse(generatedJson);
+
                     if (!jsonDoc.RootElement.TryGetProperty("activities", out activitiesElement) ||
                         activitiesElement.ValueKind != JsonValueKind.Array)
                     {
-                        _logger.LogError("Week {Week}: Response missing 'activities' array. Response: {Json}",
-                            weekNumber, generatedJson);
+                        _logger.LogError(
+                            "❌ Week {Week}: Response missing 'activities' array. Response: {Json}",
+                            weekNumber, generatedJson[..Math.Min(200, generatedJson.Length)]);
                         skippedWeeks++;
                         continue;
                     }
                 }
                 catch (JsonException jsonEx)
                 {
-                    _logger.LogError(jsonEx, "Week {Week}: JSON deserialization failed. Raw: {Json}",
-                        weekNumber, generatedJson);
+                    _logger.LogError(jsonEx,
+                        "❌ Week {Week}: JSON deserialization failed. Raw: {Json}",
+                        weekNumber, generatedJson[..Math.Min(200, generatedJson.Length)]);
                     skippedWeeks++;
                     continue;
                 }
 
-                // 8. VALIDATE ACTIVITIES FOR THIS WEEK
+                // ========== 6d. VALIDATE ACTIVITIES FOR THIS WEEK ==========
                 var validatedActivities = ValidateActivities(activitiesElement, relevantSkillIds, weekNumber);
 
                 // Check minimum activities
                 if (validatedActivities.Count < MinActivitiesPerStep)
                 {
                     _logger.LogWarning(
-                        "Week {Week}: Only {Count} activities (minimum {Min}). Skipping.",
+                        "⚠️ Week {Week}: Only {Count} activities (minimum {Min}). Skipping.",
                         weekNumber, validatedActivities.Count, MinActivitiesPerStep);
                     skippedWeeks++;
                     continue;
                 }
 
-                // Check maximum activities
+                // Check maximum activities and trim if needed
                 if (validatedActivities.Count > MaxActivitiesPerStep)
                 {
                     _logger.LogWarning(
-                        "Week {Week}: {Count} activities exceeds max {Max}. Trimming.",
+                        "⚠️ Week {Week}: {Count} activities exceeds max {Max}. Trimming.",
                         weekNumber, validatedActivities.Count, MaxActivitiesPerStep);
                     validatedActivities = validatedActivities.Take(MaxActivitiesPerStep).ToList();
                 }
 
-                // 9. ANALYZE & LOG WEEK STATISTICS
+                // ========== 6e. ANALYZE & LOG WEEK STATISTICS ==========
                 var activityStats = AnalyzeActivities(validatedActivities);
                 LogWeekStatistics(weekNumber, activityStats);
 
@@ -312,17 +319,17 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 if (totalXp < MinXpPerStep || totalXp > MaxXpPerStep)
                 {
                     _logger.LogWarning(
-                        "Week {Week}: XP is {XP} (target {Min}-{Max}). Acceptable but monitor.",
+                        "⚠️ Week {Week}: XP is {XP} (target {Min}-{Max}). Acceptable but monitor.",
                         weekNumber, totalXp, MinXpPerStep, MaxXpPerStep);
                 }
 
-                // 10. CREATE QUEST STEP
+                // ========== 6f. CREATE QUEST STEP ==========
                 var questStep = new QuestStep
                 {
                     QuestId = request.QuestId,
                     StepNumber = weekNumber,
                     Title = $"Week {weekNumber}: Session {(weekNumber - 1) * SessionsPerWeek + 1}-{weekNumber * SessionsPerWeek}",
-                    Description = $"Learning activities for Week {weekNumber}",
+                    Description = $"Learning activities for Week {weekNumber} covering {validatedActivities.Count} activities",
                     ExperiencePoints = totalXp,
                     Content = new Dictionary<string, object> { { "activities", validatedActivities } }
                 };
@@ -332,21 +339,22 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 totalActivitiesGenerated += validatedActivities.Count;
 
                 _logger.LogInformation(
-                    "✅ Week {Week}/{Total}: Created with {Activities} activities = {XP} XP",
+                    "✅ Week {Week}/{Total}: Successfully created with {Activities} activities = {XP} XP",
                     weekNumber, weeksToGenerate, validatedActivities.Count, totalXp);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Week {Week}: Unexpected error. Skipping.", weekNumber);
+                _logger.LogError(ex, "❌ Week {Week}: Unexpected error during generation. Skipping.", weekNumber);
                 skippedWeeks++;
             }
         }
 
-        // 11. FINAL VALIDATION
+        // ========== 7. FINAL VALIDATION ==========
         if (!createdSteps.Any())
         {
             throw new InvalidOperationException(
-                $"Failed to generate any valid quest steps. All {weeksToGenerate} weeks were skipped.");
+                $"Failed to generate any valid quest steps. All {weeksToGenerate} weeks were skipped. " +
+                "Check AI response format and syllabus content quality.");
         }
 
         if (createdSteps.Count < MinQuestSteps)
@@ -359,8 +367,13 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         _logger.LogInformation(
             "✅ Successfully generated {Steps} quest steps with {Total} total activities " +
-            "({Skipped} weeks skipped due to validation failures)",
-            createdSteps.Count, totalActivitiesGenerated, skippedWeeks);
+            "({Skipped} weeks skipped due to validation failures). " +
+            "Average: {Avg} activities/step, Total XP: {TotalXP}",
+            createdSteps.Count,
+            totalActivitiesGenerated,
+            skippedWeeks,
+            Math.Round((decimal)totalActivitiesGenerated / createdSteps.Count, 1),
+            createdSteps.Sum(s => s.ExperiencePoints));
 
         return _mapper.Map<List<GeneratedQuestStepDto>>(createdSteps);
     }
@@ -377,12 +390,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 return sessions.Count;
             }
         }
-        catch
-        {
-            // Ignore parsing errors
-        }
+        catch { }
 
-        return 60; // Default assumption
+        return DefaultSessionCount;
     }
 
     /// <summary>
@@ -527,7 +537,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         if (discardedCount > 0)
         {
-            _logger.LogWarning("Week {Week}: Discarded {Count} activities", weekNumber, discardedCount);
+            _logger.LogWarning("Week {Week}: Discarded {Count} activities due to validation failures", weekNumber, discardedCount);
         }
 
         if (readingsWithoutUrls > 0)
@@ -539,7 +549,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     }
 
     /// <summary>
-    /// Analyzes activity distribution in a week.
+    /// Analyzes activity distribution in a week (NO Coding tracking).
     /// </summary>
     private ActivityStats AnalyzeActivities(List<Dictionary<string, object>> activities)
     {
@@ -578,9 +588,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                         stats.TotalQuizQuestions += quizQuestionsElement.GetArrayLength();
                     }
                     break;
-                case "coding":
-                    stats.CodingCount++;
-                    break;
             }
         }
 
@@ -589,24 +596,23 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     }
 
     /// <summary>
-    /// Logs statistics for a week.
+    /// Logs statistics for a week (NO Coding tracking).
     /// </summary>
     private void LogWeekStatistics(int weekNumber, ActivityStats stats)
     {
         _logger.LogInformation(
-            "Week {Week} Stats: {Total}A ({R}R, {KC}KC[{KCQ}Q], {Q}Quiz[{QQ}Q], {C}C)",
+            "Week {Week} Statistics: {Total}A ({R}R, {KC}KC[{KCQ}Q], {Q}Quiz[{QQ}Q])",
             weekNumber,
             stats.TotalActivities,
             stats.ReadingCount,
             stats.KnowledgeCheckCount,
             stats.TotalKnowledgeCheckQuestions,
             stats.QuizCount,
-            stats.TotalQuizQuestions,
-            stats.CodingCount);
+            stats.TotalQuizQuestions);
     }
 
     /// <summary>
-    /// Validates week meets minimum requirements.
+    /// Validates week meets minimum requirements (NO Coding requirement check).
     /// </summary>
     private void ValidateWeekRequirements(int weekNumber, ActivityStats stats, string subjectName)
     {
@@ -631,31 +637,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             _logger.LogWarning("⚠️ Week {Week}: Quiz has {Count} questions (min 10)",
                 weekNumber, stats.TotalQuizQuestions);
         }
-
-        var isTechnical = IsTechnicalSubject(subjectName);
-        if (isTechnical && stats.CodingCount < 1)
-        {
-            _logger.LogWarning("⚠️ Week {Week}: Technical subject missing Coding challenge!",
-                weekNumber);
-        }
-    }
-
-    /// <summary>
-    /// Determines if a subject is technical.
-    /// </summary>
-    private bool IsTechnicalSubject(string subjectName)
-    {
-        var nameLower = subjectName.ToLowerInvariant();
-        return nameLower.Contains("programming") ||
-               nameLower.Contains("mobile") ||
-               nameLower.Contains("web") ||
-               nameLower.Contains("software") ||
-               nameLower.Contains("development") ||
-               nameLower.Contains("coding") ||
-               nameLower.Contains("android") ||
-               nameLower.Contains("java") ||
-               nameLower.Contains("c#") ||
-               nameLower.Contains(".net");
     }
 
     /// <summary>
@@ -683,6 +664,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         return false;
     }
 
+    /// <summary>
+    /// Calculates total experience points for a list of activities.
+    /// </summary>
     private int CalculateTotalExperience(List<Dictionary<string, object>> activities)
     {
         int totalXp = 0;
@@ -699,6 +683,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         return totalXp;
     }
 
+    /// <summary>
+    /// Statistics for activities in a week (NO Coding tracking).
+    /// </summary>
     private class ActivityStats
     {
         public int TotalActivities { get; set; }
@@ -707,6 +694,5 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         public int TotalKnowledgeCheckQuestions { get; set; }
         public int QuizCount { get; set; }
         public int TotalQuizQuestions { get; set; }
-        public int CodingCount { get; set; }
     }
 }
