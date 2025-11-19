@@ -95,7 +95,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                         Status = status,
                         SequenceOrder = quest.Sequence ?? 0,
                         LearningPathId = learningPath.Id,
-                        ChapterId = chapter.Id
+                        ChapterId = chapter.Id,
+                        IsRecommended = quest.IsRecommended,
+                        RecommendationReason = quest.RecommendationReason
                     });
                 }
             }

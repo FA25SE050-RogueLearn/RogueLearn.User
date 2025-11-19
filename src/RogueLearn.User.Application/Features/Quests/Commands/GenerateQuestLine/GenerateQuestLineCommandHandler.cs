@@ -1,9 +1,8 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestLine/GenerateQuestLineCommandHandler.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestLineFromCurriculum/GenerateQuestLineCommandHandler.cs
 using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
-using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums;
@@ -12,6 +11,18 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLine
 
 public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine, GenerateQuestLineResponse>
 {
+    private static readonly HashSet<string> ExcludedSubjectCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    "VOV114",
+    "VOV124",
+    "VOV134",  // Vovinam
+    "TMI101",  // Musical instruments
+    "OTP101",  // Orientation
+    "TRS601",  // English 6
+    "PEN"      // if you actually use this code; adjust as needed
+};
+
+
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly ISubjectRepository _subjectRepository;
     private readonly IClassSpecializationSubjectRepository _classSpecializationSubjectRepository;
@@ -84,8 +95,17 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         // 1. Get the "ideal" state from the curriculum
         var routeSubjects = await _subjectRepository.GetSubjectsByRoute(userProfile.RouteId.Value, cancellationToken);
         var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(userProfile.ClassId.Value, cancellationToken);
+
+        // 1. Create ideal subjects list
         var idealSubjects = routeSubjects.Concat(classSubjects).DistinctBy(s => s.Id).ToList();
-        var idealSubjectIds = idealSubjects.Select(s => s.Id).ToHashSet();
+
+        // 2. Filter out excluded subjects
+        var filteredIdealSubjects = idealSubjects
+            .Where(s => !IsExcludedSubject(s))
+            .ToList();
+
+        // 3. Get IDs from filtered list (only once)
+        var idealSubjectIds = filteredIdealSubjects.Select(s => s.Id).ToHashSet();
 
         // 2. Get the "current" state from the user's learning path
         var currentChapters = (await _questChapterRepository.FindAsync(c => c.LearningPathId == learningPath.Id, cancellationToken)).ToList();
@@ -110,7 +130,8 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         }
 
         // 4. Group ideal subjects by semester to create/update chapters and quests
-        var idealSemesterMap = idealSubjects
+        // ⭐ FIXED: Use filteredIdealSubjects instead of idealSubjects
+        var idealSemesterMap = filteredIdealSubjects
             .Where(subject => subject.Semester.HasValue)
             .GroupBy(subject => subject.Semester!.Value)
             .ToDictionary(
@@ -136,17 +157,24 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 _logger.LogInformation("Created new QuestChapter: {Title}", chapter.Title);
             }
 
+            // ⭐ NEW: Get all student semester subjects for this user to determine recommendation reason
+            var userSemesterSubjects = (await _studentSemesterSubjectRepository.FindAsync(
+                ss => ss.AuthUserId == request.AuthUserId, cancellationToken)).ToList();
+
             // 5. Identify new quests to create for this chapter
             int questSequence = 1;
             foreach (var subject in subjectsInSemester.OrderBy(s => s.SubjectCode))
             {
                 if (!currentSubjectIdsWithQuests.Contains(subject.Id))
                 {
+                    // ⭐ NEW: Get recommendation reason based on student's status for this subject
+                    var recommendationReason = DetermineRecommendationReason(userSemesterSubjects, subject.Id);
+
                     // This subject is in the ideal curriculum but doesn't have a quest yet. Create one.
-                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode}", subject.SubjectCode);
+                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} with recommendation: {Reason}", subject.SubjectCode, recommendationReason);
                     var newQuest = new Quest
                     {
-                        Title = subject.SubjectName,
+                        Title = subject.SubjectCode + ": " + subject.SubjectName,
                         Description = subject.Description ?? $"Embark on the quest for {subject.SubjectName}.",
                         QuestType = QuestType.Practice,
                         DifficultyLevel = DifficultyLevel.Beginner,
@@ -155,7 +183,9 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                         Sequence = questSequence++,
                         Status = QuestStatus.NotStarted,
                         IsActive = true, // New quests are active by default
-                        CreatedBy = userProfile.AuthUserId
+                        CreatedBy = userProfile.AuthUserId,
+                        IsRecommended = true,  // ⭐ NEW: Mark as recommended
+                        RecommendationReason = recommendationReason  // ⭐ NEW: Set reason
                     };
                     await _questRepository.AddAsync(newQuest, cancellationToken);
                 }
@@ -180,6 +210,43 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         return new GenerateQuestLineResponse
         {
             LearningPathId = learningPath.Id,
+        };
+    }
+    private static bool IsExcludedSubject(Subject subject)
+    {
+        // Check by code
+        if (ExcludedSubjectCodes.Contains(subject.SubjectCode))
+            return true;
+
+        // Check by name (catches variants)
+        if (!string.IsNullOrEmpty(subject.SubjectName))
+        {
+            var nameLower = subject.SubjectName.ToLowerInvariant();
+            if (nameLower.Contains("musical instrument")
+                || nameLower.Contains("orientation")
+                || nameLower.Contains("vovinam"))
+                return true;
+        }
+        return false;
+    }
+
+    // ⭐ NEW: Helper method to determine recommendation reason
+    private string DetermineRecommendationReason(List<StudentSemesterSubject> userSemesterSubjects, Guid subjectId)
+    {
+        var studentSubject = userSemesterSubjects.FirstOrDefault(ss => ss.SubjectId == subjectId);
+
+        if (studentSubject == null)
+        {
+            return "Recommended";
+        }
+
+        return studentSubject.Status switch
+        {
+            SubjectEnrollmentStatus.Passed => "Passed",
+            SubjectEnrollmentStatus.Studying => "Studying",
+            SubjectEnrollmentStatus.NotPassed => "Failed",
+            SubjectEnrollmentStatus.NotStarted => "Recommended",
+            _ => "Recommended"
         };
     }
 }

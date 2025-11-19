@@ -1,4 +1,4 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Quest.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Quest.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -54,4 +54,10 @@ public class Quest : BaseEntity
 
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    [Column("is_recommended")]
+    public bool IsRecommended { get; set; } = false;  
+
+    [Column("recommendation_reason")]
+    public string? RecommendationReason { get; set; }  
+
 }

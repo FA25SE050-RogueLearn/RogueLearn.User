@@ -1,4 +1,6 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommandHandler.cs
+// KEY CHANGE: Remove background job scheduling loop
+
 using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -15,7 +17,6 @@ using System.Text;
 using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
-
 public class FapRecordData
 {
     public double? Gpa { get; set; }
@@ -25,6 +26,7 @@ public class FapRecordData
 public class FapSubjectData
 {
     public string SubjectCode { get; set; } = string.Empty;
+    public string? SubjectName { get; set; }  // ⭐ NEW
     public string Status { get; set; } = string.Empty;
     public double? Mark { get; set; }
     public int Semester { get; set; }
@@ -33,6 +35,14 @@ public class FapSubjectData
 
 public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcademicRecordCommand, ProcessAcademicRecordResponse>
 {
+    private static readonly HashSet<string> ExcludedSubjectCodes = new(StringComparer.OrdinalIgnoreCase)
+{
+    "VOV114", "VOV124", "VOV134", // Vovinam
+    "TMI101",                     // Traditional musical instrument
+    "OTP101",                     // Orientation
+    "TRS601",                      // English 6 (University success), add more codes as needed
+    "PEN",
+};
     private readonly IFapExtractionPlugin _fapPlugin;
     private readonly IStudentEnrollmentRepository _enrollmentRepository;
     private readonly IStudentSemesterSubjectRepository _semesterSubjectRepository;
@@ -173,10 +183,14 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         int recordsUpdated = 0;
         int recordsIgnored = 0;
 
-        var highPrioritySubjectIds = new HashSet<Guid>();
-
         foreach (var subjectRecord in fapData.Subjects)
         {
+            if (IsExcludedSubject(subjectRecord))
+            {
+                _logger.LogInformation("🚫 Skipping excluded subject: {Code}", subjectRecord.SubjectCode);
+                recordsIgnored++;
+                continue;
+            }
             if (!subjectCatalog.TryGetValue(subjectRecord.SubjectCode, out var subject))
             {
                 _logger.LogWarning("Subject {SubjectCode} from transcript not found in user's program/class catalog. Skipping.", subjectRecord.SubjectCode);
@@ -189,11 +203,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 ss.AcademicYear == subjectRecord.AcademicYear);
 
             var parsedStatus = MapFapStatusToEnum(subjectRecord.Status);
-
-            if (parsedStatus == SubjectEnrollmentStatus.Studying || parsedStatus == SubjectEnrollmentStatus.NotPassed)
-            {
-                highPrioritySubjectIds.Add(subject.Id);
-            }
 
             if (existingRecord == null)
             {
@@ -226,39 +235,40 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _logger.LogInformation("Dispatching GenerateQuestLine command for user {AuthUserId} to create learning path structure.", request.AuthUserId);
         var questLineResponse = await _mediator.Send(new GenerateQuestLine { AuthUserId = request.AuthUserId }, cancellationToken);
 
-        _logger.LogInformation("Scheduling background jobs for {Count} high-priority subjects.", highPrioritySubjectIds.Count);
-        var questsToSchedule = (await _questRepository.GetAllAsync(cancellationToken))
-            .Where(q => q.SubjectId.HasValue && highPrioritySubjectIds.Contains(q.SubjectId.Value))
-            .ToList();
-
-        int jobsScheduled = 0;
-        foreach (var quest in questsToSchedule)
-        {
-            // ARCHITECTURAL FIX: Check if the subject has content before scheduling the background job.
-            var subjectForQuest = subjectCatalog.Values.FirstOrDefault(s => s.Id == quest.SubjectId);
-            if (subjectForQuest != null && subjectForQuest.Content != null && subjectForQuest.Content.Any())
-            {
-                _logger.LogInformation("Scheduling background job for quest step generation for Quest {QuestId} (Subject: {SubjectCode})", quest.Id, subjectForQuest.SubjectCode);
-                _backgroundJobClient.Schedule<IQuestStepGenerationService>(
-                    service => service.GenerateQuestStepsAsync(request.AuthUserId, quest.Id),
-                    TimeSpan.FromSeconds(15));
-                jobsScheduled++;
-            }
-            else
-            {
-                _logger.LogWarning("Skipping auto-generation for priority quest {QuestId} because its subject ({SubjectCode}) is missing syllabus content.", quest.Id, subjectForQuest?.SubjectCode ?? "N/A");
-            }
-        }
-        _logger.LogInformation("Successfully scheduled {JobCount} background jobs for immediate quest step generation.", jobsScheduled);
+        // ⭐ REMOVED: Background job scheduling loop
+        // Previously, we would schedule background jobs to generate quest steps immediately.
+        // Now, quest steps are generated on-demand when users click "Start Quest".
+        _logger.LogInformation("✅ Academic records processed successfully. Quests marked as recommended. " +
+            "Users can now manually trigger step generation via the generateQuestSteps endpoint. " +
+            "No background jobs scheduled.");
 
         return new ProcessAcademicRecordResponse
         {
             IsSuccess = true,
-            Message = "Academic record processed successfully. Your gradebook and learning path have been updated.",
+            Message = "Academic record processed successfully. Your gradebook and learning path have been updated. " +
+                      "Recommended quests are ready to explore!",
             LearningPathId = questLineResponse.LearningPathId,
             SubjectsProcessed = fapData.Subjects.Count,
             CalculatedGpa = fapData.Gpa ?? 0.0
         };
+    }
+    private static bool IsExcludedSubject(FapSubjectData subject)
+    {
+        // Check by code first
+        if (ExcludedSubjectCodes.Contains(subject.SubjectCode))
+            return true;
+
+        // Check by name (catches variants)
+        if (!string.IsNullOrEmpty(subject.SubjectName))
+        {
+            var nameLower = subject.SubjectName.ToLowerInvariant();
+            if (nameLower.Contains("musical instrument")
+                || nameLower.Contains("orientation")
+                || nameLower.Contains("vovinam"))
+                return true;
+        }
+
+        return false;
     }
 
     private async Task<HashSet<Guid>> BuildAllowedSubjectList(Guid programId, Guid classId, CancellationToken cancellationToken)

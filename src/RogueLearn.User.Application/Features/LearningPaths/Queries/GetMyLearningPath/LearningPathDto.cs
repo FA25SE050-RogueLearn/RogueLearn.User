@@ -29,4 +29,7 @@ public class QuestSummaryDto
     public Guid LearningPathId { get; set; }
     // ADDED: Include the parent Chapter ID for constructing navigation URLs.
     public Guid ChapterId { get; set; }
+    public bool IsRecommended { get; set; }
+    public string? RecommendationReason { get; set; }
+
 }
