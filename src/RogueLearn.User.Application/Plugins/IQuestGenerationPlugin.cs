@@ -1,27 +1,36 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/IQuestGenerationPlugin.cs
+
 using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Plugins;
 
 /// <summary>
-/// Defines the contract for a plugin that generates interactive quest steps from syllabus content.
+/// Interface for quest step generation plugin using AI.
+/// Generates activities for a SINGLE week per call.
+/// This plugin is called multiple times (once per week) to generate all quest steps.
 /// </summary>
 public interface IQuestGenerationPlugin
 {
     /// <summary>
-    /// Generates a list of QuestStep entities in JSON format based on syllabus content and user context.
+    /// Generates quest steps for a SINGLE week using AI.
+    /// Called once per week to generate all quest steps sequentially.
     /// </summary>
-    /// <param name="syllabusJson">The structured syllabus content as a JSON string.</param>
-    /// <param name="userContext">A string describing the user's career goals for personalization.</param>
-    /// <param name="relevantSkills">A list of pre-approved skills for the AI to use.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A JSON string representing an array of quest steps, or null if generation fails.</returns>
-    // MODIFICATION: Return type is nullable to handle potential AI generation failures gracefully.
-    Task<string> GenerateQuestStepsJsonAsync(
-         string syllabusJson,
-         string userContext,
-         List<Skill> skills,
-         string subjectName,
-         string courseDescription,
-         CancellationToken cancellationToken = default);
+    /// <param name="syllabusJson">The complete syllabus content as JSON</param>
+    /// <param name="userContext">User/class context for personalization</param>
+    /// <param name="relevantSkills">List of skills linked to the subject</param>
+    /// <param name="subjectName">Name of the subject</param>
+    /// <param name="courseDescription">Course description for context</param>
+    /// <param name="weekNumber">The current week number (1-based)</param>
+    /// <param name="totalWeeks">Total number of weeks to generate</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>JSON response with activities array: { "activities": [...] }</returns>
+    Task<string?> GenerateQuestStepsJsonAsync(
+        string syllabusJson,
+        string userContext,
+        List<Skill> relevantSkills,
+        string subjectName,
+        string courseDescription,
+        int weekNumber,
+        int totalWeeks,
+        CancellationToken cancellationToken = default);
 }

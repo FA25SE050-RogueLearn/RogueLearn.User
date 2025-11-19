@@ -23,37 +23,56 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         _promptBuilder = promptBuilder;
     }
 
+    /// <summary>
+    /// Generates quest steps for a SINGLE week using AI.
+    /// This method is called multiple times (once per week) to generate all quest steps.
+    /// </summary>
     public async Task<string?> GenerateQuestStepsJsonAsync(
         string syllabusJson,
         string userContext,
         List<Skill> relevantSkills,
         string subjectName,
         string courseDescription,
+        int weekNumber,
+        int totalWeeks,
         CancellationToken cancellationToken = default)
     {
+        // Build prompt for the specific week
         var prompt = _promptBuilder.BuildPrompt(
-            syllabusJson, userContext, relevantSkills, subjectName, courseDescription);
+            syllabusJson,
+            userContext,
+            relevantSkills,
+            subjectName,
+            courseDescription,
+            weekNumber,
+            totalWeeks);
 
         try
         {
-            _logger.LogInformation("Generating quest steps for subject: {SubjectName}", subjectName);
+            _logger.LogInformation(
+                "Generating quest steps for Subject '{SubjectName}', Week {Week}/{Total}",
+                subjectName, weekNumber, totalWeeks);
 
             var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
             var rawResponse = result.GetValue<string>() ?? string.Empty;
 
-            _logger.LogInformation("Quest Step Generation raw AI response: {RawResponse}", rawResponse);
+            _logger.LogInformation(
+                "Quest Generation - Week {Week} raw AI response: {RawResponse}",
+                weekNumber, rawResponse);
 
             return CleanToJson(rawResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to generate quest steps using AI for subject {SubjectName}.", subjectName);
+            _logger.LogError(ex,
+                "Failed to generate quest steps using AI for subject '{SubjectName}', Week {Week}.",
+                subjectName, weekNumber);
             return null;
         }
     }
 
     /// <summary>
-    /// Cleans the AI response to extract valid JSON for the weekly module format.
+    /// Cleans the AI response to extract valid JSON for the weekly activity format.
     /// Expected output format: { "activities": [...] }
     /// </summary>
     private static string CleanToJson(string rawResponse)
@@ -82,8 +101,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
 
         cleaned = cleaned.Trim();
 
-        // CRITICAL FIX: Look for the OBJECT braces, not array brackets
-        // We expect: { "activities": [...] }
+        // Extract JSON object: { "activities": [...] }
         var startIdx = cleaned.IndexOf('{');
         var endIdx = cleaned.LastIndexOf('}');
 
@@ -92,7 +110,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
             cleaned = cleaned.Substring(startIdx, endIdx - startIdx + 1);
         }
 
-        // Validate that we have a proper JSON object
+        // Validate JSON structure
         try
         {
             using var doc = JsonDocument.Parse(cleaned);
