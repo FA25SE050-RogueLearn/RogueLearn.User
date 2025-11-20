@@ -65,16 +65,15 @@ try
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
     
     var supabaseConnStr =  builder.Configuration["Supabase:ConnStr"];
+    //  ADD THIS INSTEAD:
     builder.Services.AddHangfire(configuration => configuration
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(supabaseConnStr), new PostgreSqlStorageOptions()
-        {
-            SchemaName = "hangfire"
-        }));
-    
-    builder.Services.AddScoped<IQuestStepGenerationService, QuestStepGenerationService>(); 
+        .UseInMemoryStorage());
+
+    builder.Services.AddScoped<IQuestStepGenerationService, QuestStepGenerationService>();
+    builder.Services.AddHangfireServer();
 
     builder.Services.AddHangfireServer();
     // --- SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
