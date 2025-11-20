@@ -9,4 +9,5 @@ public interface IUserSkillRepository : IGenericRepository<UserSkill>
     // A new specialized method to reliably fetch skills by a user's authentication ID.
     // This avoids the problematic LINQ expression translator in the generic repository for this specific query.
     Task<IEnumerable<UserSkill>> GetSkillsByAuthIdAsync(Guid authUserId, CancellationToken cancellationToken = default);
+    Task<List<UserSkill>> AddRangeAsync(List<UserSkill> userSkills, CancellationToken cancellationToken = default);
 }

@@ -143,33 +143,27 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken))
             .Where(s => relevantSkillIds.Contains(s.Id))
             .ToList();
-
-        // Unlock skills for user
+        // Unlock skills for user - ⭐ OPTIMIZED
         var existingUserSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
         var existingSkillIds = existingUserSkills.Select(us => us.SkillId).ToHashSet();
 
-        int unlockedCount = 0;
-        foreach (var skill in relevantSkills)
-        {
-            if (!existingSkillIds.Contains(skill.Id))
+        var newUserSkills = relevantSkills
+            .Where(skill => !existingSkillIds.Contains(skill.Id))
+            .Select(skill => new UserSkill
             {
-                var newUserSkill = new UserSkill
-                {
-                    AuthUserId = request.AuthUserId,
-                    SkillId = skill.Id,
-                    SkillName = skill.Name,
-                    ExperiencePoints = 0,
-                    Level = 1
-                };
-                await _userSkillRepository.AddAsync(newUserSkill, cancellationToken);
-                unlockedCount++;
-            }
-        }
+                AuthUserId = request.AuthUserId,
+                SkillId = skill.Id,
+                SkillName = skill.Name,
+                ExperiencePoints = 0,
+                Level = 1
+            })
+            .ToList();
 
-        if (unlockedCount > 0)
+        if (newUserSkills.Any())
         {
-            _logger.LogInformation("Unlocked {Count} new skills for User {AuthUserId} upon starting Quest {QuestId}",
-                unlockedCount, request.AuthUserId, request.QuestId);
+            await _userSkillRepository.AddRangeAsync(newUserSkills, cancellationToken);
+            _logger.LogInformation("Unlocked {Count} new skills in batch for User {AuthUserId}",
+                newUserSkills.Count, request.AuthUserId);
         }
 
         // ========== 4. PREPARE DATA FOR AI ==========
