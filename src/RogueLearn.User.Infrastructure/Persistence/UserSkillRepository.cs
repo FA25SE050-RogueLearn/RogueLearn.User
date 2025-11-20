@@ -26,4 +26,18 @@ public class UserSkillRepository : GenericRepository<UserSkill>, IUserSkillRepos
 
         return response.Models;
     }
+    public async Task<List<UserSkill>> AddRangeAsync(List<UserSkill> userSkills, CancellationToken cancellationToken = default)
+    {
+        if (!userSkills.Any())
+        {
+            return new List<UserSkill>();
+        }
+
+        // Supabase batch insert - sends all records in a single request
+        var response = await _supabaseClient
+            .From<UserSkill>()
+            .Insert(userSkills, cancellationToken: cancellationToken);
+
+        return response.Models.ToList();
+    }
 }
