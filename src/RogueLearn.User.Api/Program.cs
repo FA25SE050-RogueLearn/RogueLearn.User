@@ -46,10 +46,15 @@ try
     // --- THIS CONFIGURATION IS STILL REQUIRED ---
     builder.WebHost.ConfigureKestrel(options =>
     {
-        // Listen on the port specified for HTTP (6968)
+        // Port 6968: HTTP/1.1 and HTTP/2 for REST API, Swagger, and gRPC
         options.ListenAnyIP(6968, listenOptions =>
         {
-            // Explicitly enable HTTP/2 for gRPC on this unencrypted port
+            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+        });
+
+        // Port 6969: HTTP/2 only for pure gRPC clients
+        options.ListenAnyIP(6969, listenOptions =>
+        {
             listenOptions.Protocols = HttpProtocols.Http2;
         });
     }); 
