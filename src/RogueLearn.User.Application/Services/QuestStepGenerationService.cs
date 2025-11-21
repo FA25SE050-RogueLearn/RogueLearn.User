@@ -1,5 +1,6 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepGenerationService.cs
 using Hangfire;
+using Hangfire.Server;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -16,7 +17,7 @@ public interface IQuestStepGenerationService
     /// Total: 4 attempts over ~4 minutes with exponential backoff.
     /// </summary>
     [AutomaticRetry(Attempts = 4, DelaysInSeconds = new[] { 30, 60, 120 })]
-    Task GenerateQuestStepsAsync(Guid authUserId, Guid questId);
+    Task GenerateQuestStepsAsync(Guid authUserId, Guid questId, PerformContext context);
 }
 
 public class QuestStepGenerationService : IQuestStepGenerationService
@@ -45,28 +46,34 @@ public class QuestStepGenerationService : IQuestStepGenerationService
     /// Does NOT retry on:
     /// - BadRequestException (validation error)
     /// - Other permanent errors
+    /// 
+    /// ⭐ UPDATED: Uses PerformContext to access Hangfire job ID for progress tracking
     /// </summary>
     [AutomaticRetry(Attempts = 4, DelaysInSeconds = new[] { 30, 60, 120 })]
-    public async Task GenerateQuestStepsAsync(Guid authUserId, Guid questId)
+    public async Task GenerateQuestStepsAsync(Guid authUserId, Guid questId, PerformContext context)
     {
         try
         {
+            // ⭐ UPDATED: Use PerformContext to get job ID (official Hangfire way)
+            var jobId = context?.BackgroundJob?.Id;
+
             _logger.LogInformation(
-                "[BACKGROUND JOB] Starting quest step generation. Quest: {QuestId}, User: {AuthUserId}",
-                questId, authUserId);
+                "[BACKGROUND JOB] Starting quest step generation. Job: {JobId}, Quest: {QuestId}, User: {AuthUserId}",
+                jobId, questId, authUserId);
 
             var command = new GenerateQuestStepsCommand
             {
                 AuthUserId = authUserId,
-                QuestId = questId
+                QuestId = questId,
+                HangfireJobId = jobId  // ⭐ Pass job ID to handler
             };
 
             var result = await _mediator.Send(command);
 
             _logger.LogInformation(
                 "[BACKGROUND JOB] ✅ Successfully completed quest step generation. " +
-                "Quest: {QuestId}, Generated: {StepCount} steps",
-                questId, result.Count);
+                "Job: {JobId}, Quest: {QuestId}, Generated: {StepCount} steps",
+                jobId, questId, result.Count);
         }
         // ========== TRANSIENT ERRORS (WILL RETRY) ==========
 
