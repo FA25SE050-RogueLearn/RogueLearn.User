@@ -8,13 +8,17 @@ namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFr
 public class ImportSubjectFromTextCommand : IRequest<CreateSubjectResponse>
 {
     public string RawText { get; set; } = string.Empty;
-    // MODIFIED: The command now takes AuthUserId to derive the full context.
-    [JsonIgnore] // This is set by the handler, not the client.
-    public Guid AuthUserId { get; set; }
+
+    // --- MODIFICATION: ADDED SEMESTER ---
+    // This allows the admin to provide an explicit semester, overriding any value
+    // extracted by the AI from the syllabus text.
+    public int? Semester { get; set; }
 }
 
-// MODIFIED: The request DTO from the client is simplified. It no longer needs ProgramId.
+// --- MODIFICATION: UPDATED THE REQUEST DTO ---
+// This record is used by the controller to bind the form data.
 public class ImportSubjectFromTextRequest
 {
     public string RawText { get; set; } = string.Empty;
+    public int? Semester { get; set; }
 }
