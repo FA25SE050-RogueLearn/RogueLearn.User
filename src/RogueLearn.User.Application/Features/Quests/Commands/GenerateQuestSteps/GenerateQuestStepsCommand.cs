@@ -13,4 +13,11 @@ public class GenerateQuestStepsCommand : IRequest<List<GeneratedQuestStepDto>>
 
     [JsonIgnore]
     public Guid QuestId { get; set; }
+
+    /// <summary>
+    /// Hangfire background job ID for progress tracking.
+    /// Allows the handler to update real-time progress in the job parameters.
+    /// </summary>
+    [JsonIgnore]
+    public string HangfireJobId { get; set; }
 }

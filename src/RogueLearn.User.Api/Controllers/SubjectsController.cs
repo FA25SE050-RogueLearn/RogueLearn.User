@@ -46,10 +46,9 @@ public class SubjectsController : ControllerBase
         var command = new ImportSubjectFromTextCommand
         {
             RawText = request.RawText,
-            AuthUserId = User.GetAuthUserId()
+            Semester = request.Semester // Pass the semester to the command
         };
         var result = await _mediator.Send(command, cancellationToken);
-        // Returns 200 OK because it's an "upsert" (create or update).
         return Ok(result);
     }
 

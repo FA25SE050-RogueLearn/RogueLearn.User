@@ -1,8 +1,10 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestsController.cs
 // CORRECTED HANGFIRE API - Using proper JobStorage.Current.GetMonitoringApi()
+// ⭐ UPDATED: Pass null for PerformContext - Hangfire injects it automatically
 
 using BuildingBlocks.Shared.Authentication;
 using Hangfire;
+using Hangfire.Server;
 using Hangfire.States;
 using Hangfire.Storage;
 using MediatR;
@@ -92,9 +94,9 @@ public class QuestsController : ControllerBase
 
             // ========== SCHEDULE BACKGROUND JOB ==========
 
-            // Schedule background job with immediate execution (no delay)
+            // ⭐ UPDATED: Pass null for PerformContext - Hangfire will inject it automatically
             var jobId = _backgroundJobClient.Schedule<IQuestStepGenerationService>(
-                service => service.GenerateQuestStepsAsync(authUserId, questId),
+                service => service.GenerateQuestStepsAsync(authUserId, questId, null),  // ⭐ Pass null here
                 TimeSpan.Zero); // Immediate scheduling
 
             _logger.LogInformation(
@@ -196,6 +198,35 @@ public class QuestsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Gets the real-time progress of a Hangfire quest generation job.
+    /// ⭐ NEW: Returns detailed progress information including current step, total steps, and percentage.
+    /// </summary>
+    [HttpGet("generation-progress/{jobId}")]
+    [ProducesResponseType(typeof(QuestGenerationProgressDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetGenerationProgress(string jobId)
+    {
+        try
+        {
+            var connection = JobStorage.Current.GetConnection();
+            var progressJson = connection.GetJobParameter(jobId, "Progress");
+
+            if (string.IsNullOrEmpty(progressJson))
+            {
+                return NotFound(new { message = "No progress found for this job" });
+            }
+
+            var progress = System.Text.Json.JsonSerializer.Deserialize<QuestGenerationProgressDto>(progressJson);
+            return Ok(progress);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving job progress for {JobId}", jobId);
+            return StatusCode(500, new { message = "Error retrieving progress" });
+        }
+    }
+
     // MODIFIED: This endpoint is now more specific. It targets a specific activity within a step.
     /// <summary>
     /// Updates the progress status of a specific activity within a quest step (weekly module) for the authenticated user.
@@ -282,6 +313,37 @@ public class JobStatusResponse
     /// Human-readable status message.
     /// </summary>
     public string? Message { get; set; }
+}
+
+/// <summary>
+/// ⭐ NEW: Real-time progress of quest generation job from Hangfire job parameters.
+/// </summary>
+public class QuestGenerationProgressDto
+{
+    /// <summary>
+    /// Current step being processed (0-based).
+    /// </summary>
+    public int CurrentStep { get; set; }
+
+    /// <summary>
+    /// Total steps to complete.
+    /// </summary>
+    public int TotalSteps { get; set; }
+
+    /// <summary>
+    /// Human-readable progress message.
+    /// </summary>
+    public string Message { get; set; }
+
+    /// <summary>
+    /// Progress percentage (0-100).
+    /// </summary>
+    public int ProgressPercentage { get; set; }
+
+    /// <summary>
+    /// When this progress was last updated.
+    /// </summary>
+    public DateTime UpdatedAt { get; set; }
 }
 
 // MODIFIED: Renamed request DTO for clarity.

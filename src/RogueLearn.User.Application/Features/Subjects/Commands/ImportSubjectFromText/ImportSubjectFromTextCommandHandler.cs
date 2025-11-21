@@ -19,19 +19,17 @@ using System.Text.Json.Serialization;
 namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
 
 /// <summary>
-/// Imports syllabus text and enriches it with validated URLs for each session/topic.
-/// URLs are stored in subject.content so quest generation can use them directly.
+/// Imports syllabus text, enriches it, and creates or updates the subject in the master catalog.
+/// This handler does NOT link the subject to any program; that is a separate administrative action.
 /// </summary>
 public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubjectFromTextCommand, CreateSubjectResponse>
 {
     private readonly ISyllabusExtractionPlugin _syllabusExtractionPlugin;
     private readonly IConstructiveQuestionGenerationPlugin _questionGenerationPlugin;
     private readonly ISubjectRepository _subjectRepository;
-    private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
     private readonly IMapper _mapper;
     private readonly ILogger<ImportSubjectFromTextCommandHandler> _logger;
     private readonly IHtmlCleaningService _htmlCleaningService;
-    private readonly IUserProfileRepository _userProfileRepository;
     private readonly ICurriculumImportStorage _storage;
     private readonly IReadingUrlService _readingUrlService;
 
@@ -39,29 +37,25 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         ISyllabusExtractionPlugin syllabusExtractionPlugin,
         IConstructiveQuestionGenerationPlugin questionGenerationPlugin,
         ISubjectRepository subjectRepository,
-        ICurriculumProgramSubjectRepository programSubjectRepository,
         IMapper mapper,
         ILogger<ImportSubjectFromTextCommandHandler> logger,
         IHtmlCleaningService htmlCleaningService,
-        IUserProfileRepository userProfileRepository,
         ICurriculumImportStorage storage,
         IReadingUrlService readingUrlService)
     {
         _syllabusExtractionPlugin = syllabusExtractionPlugin;
         _questionGenerationPlugin = questionGenerationPlugin;
         _subjectRepository = subjectRepository;
-        _programSubjectRepository = programSubjectRepository;
         _mapper = mapper;
         _logger = logger;
         _htmlCleaningService = htmlCleaningService;
-        _userProfileRepository = userProfileRepository;
         _storage = storage;
         _readingUrlService = readingUrlService;
     }
 
     public async Task<CreateSubjectResponse> Handle(ImportSubjectFromTextCommand request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting single subject syllabus import for user {AuthUserId}.", request.AuthUserId);
+        _logger.LogInformation("Starting single subject syllabus import for admin.");
 
         var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.RawText);
         if (string.IsNullOrWhiteSpace(cleanText))
@@ -117,8 +111,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 if (generatedQuestions.Any())
                 {
                     syllabusData.Content.ConstructiveQuestions = generatedQuestions;
-                    _logger.LogInformation("Successfully generated {Count} constructive questions for the syllabus.",
-                        generatedQuestions.Count);
+                    _logger.LogInformation("Successfully generated {Count} constructive questions for the syllabus.", generatedQuestions.Count);
                 }
                 else
                 {
@@ -130,29 +123,21 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         // CRITICAL: URL ENRICHMENT PHASE
         if (syllabusData.Content?.SessionSchedule != null)
         {
-            _logger.LogInformation("🔍 Starting URL enrichment for {Count} sessions in syllabus '{SubjectCode}'",
-                syllabusData.Content.SessionSchedule.Count, syllabusData.SubjectCode);
-
-            // ⭐ BUILD SUBJECT CONTEXT AND DETECT CATEGORY
+            _logger.LogInformation("🔍 Starting URL enrichment for {Count} sessions in syllabus '{SubjectCode}'", syllabusData.Content.SessionSchedule.Count, syllabusData.SubjectCode);
             var subjectContext = BuildSubjectContext(syllabusData);
             var subjectCategory = DetectSubjectCategory(syllabusData);
-
-            _logger.LogInformation("📋 Subject context: '{Context}' | Category: {Category}",
-                subjectContext, subjectCategory);
+            _logger.LogInformation("📋 Subject context: '{Context}' | Category: {Category}", subjectContext, subjectCategory);
 
             int successCount = 0;
             int failureCount = 0;
 
             foreach (var session in syllabusData.Content.SessionSchedule)
             {
-                _logger.LogDebug("Processing session {SessionNumber}: '{Topic}'",
-                    session.SessionNumber, session.Topic);
-
+                _logger.LogDebug("Processing session {SessionNumber}: '{Topic}'", session.SessionNumber, session.Topic);
                 var existingReadings = session.Readings ?? new List<string>();
 
                 try
                 {
-                    // ⭐ PASS SUBJECT CONTEXT AND CATEGORY (4 parameters)
                     var foundUrl = await _readingUrlService.GetValidUrlForTopicAsync(
                         session.Topic,
                         existingReadings,
@@ -164,16 +149,14 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                     {
                         session.SuggestedUrl = foundUrl;
                         successCount++;
-                        _logger.LogInformation("✅ Session {SessionNumber} enriched with URL: {Url}",
-                            session.SessionNumber, foundUrl);
+                        _logger.LogInformation("✅ Session {SessionNumber} enriched with URL: {Url}", session.SessionNumber, foundUrl);
                     }
                     else
                     {
                         // ⭐ SET TO EMPTY STRING to avoid JsonElement serialization bug
                         session.SuggestedUrl = string.Empty;
                         failureCount++;
-                        _logger.LogWarning("⚠️ Session {SessionNumber} ('{Topic}') - No valid URL found",
-                            session.SessionNumber, session.Topic);
+                        _logger.LogWarning("⚠️ Session {SessionNumber} ('{Topic}') - No valid URL found", session.SessionNumber, session.Topic);
                     }
                 }
                 catch (Exception ex)
@@ -185,18 +168,14 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 }
             }
 
-            _logger.LogInformation(
-                "URL enrichment complete for '{SubjectCode}': {SuccessCount} URLs found, {FailureCount} failed",
-                syllabusData.SubjectCode, successCount, failureCount);
+            _logger.LogInformation("URL enrichment complete for '{SubjectCode}': {SuccessCount} URLs found, {FailureCount} failed", syllabusData.SubjectCode, successCount, failureCount);
 
             if (failureCount > syllabusData.Content.SessionSchedule.Count / 2)
             {
-                _logger.LogWarning(
-                    "⚠️ More than 50% of sessions failed URL enrichment. Check web search configuration or syllabus content quality.");
+                _logger.LogWarning("⚠️ More than 50% of sessions failed URL enrichment. Check web search configuration or syllabus content quality.");
             }
         }
 
-        // Serialize the enriched data for caching
         var finalJsonToCache = JsonSerializer.Serialize(syllabusData, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
@@ -207,42 +186,20 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         // Cache the enriched data if this was a fresh extraction
         if (!isCacheHit)
         {
-            await _storage.SaveSyllabusDataAsync(
-                syllabusData.SubjectCode,
-                syllabusData.VersionNumber,
-                syllabusData,
-                finalJsonToCache,
-                rawTextHash,
-                cancellationToken);
+            await _storage.SaveSyllabusDataAsync(syllabusData.SubjectCode, syllabusData.VersionNumber, syllabusData, finalJsonToCache, rawTextHash, cancellationToken);
             _logger.LogInformation("💾 Cached enriched syllabus data with hash {Hash}.", rawTextHash);
         }
 
-        // Check if subject already exists in user's context
-        var existingSubject = await _subjectRepository.GetSubjectForUserContextAsync(
-            syllabusData.SubjectCode,
-            request.AuthUserId,
-            cancellationToken);
+        var existingSubject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == syllabusData.SubjectCode, cancellationToken);
 
         if (existingSubject != null)
         {
-            _logger.LogInformation("Found existing subject {SubjectId} within user's context. Updating content.",
-                existingSubject.Id);
-            return await UpdateExistingSubjectContent(existingSubject, syllabusData, cancellationToken);
+            _logger.LogInformation("Found existing subject {SubjectId} with code {SubjectCode}. Updating its content.", existingSubject.Id, syllabusData.SubjectCode);
+            return await UpdateExistingSubjectContent(existingSubject, syllabusData, request.Semester, cancellationToken);
         }
         else
         {
-            _logger.LogWarning(
-                "Subject with code {SubjectCode} not found within user's context. Creating a new subject shell and linking it to the user's program.",
-                syllabusData.SubjectCode);
-
-            var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
-                ?? throw new NotFoundException("UserProfile", request.AuthUserId);
-
-            if (userProfile.RouteId == null)
-            {
-                throw new BadRequestException("Cannot create a new subject because the user has not selected a curriculum program (route).");
-            }
-
+            _logger.LogInformation("No subject with code {SubjectCode} found. Creating a new subject in the master catalog.", syllabusData.SubjectCode);
             var newSubject = new Subject
             {
                 SubjectCode = syllabusData.SubjectCode,
@@ -252,7 +209,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 PrerequisiteSubjectIds = await ResolvePrerequisiteIdsAsync(syllabusData.PreRequisite, cancellationToken)
             };
 
-            // Serialize the enriched content (which now includes SuggestedUrl for each session)
             var contentJson = JsonSerializer.Serialize(syllabusData.Content);
             var serializerOptions = new JsonSerializerOptions
             {
@@ -269,26 +225,12 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             }
 
             var createdSubjectEntity = await _subjectRepository.AddAsync(newSubject, cancellationToken);
-            _logger.LogInformation("Successfully created new subject {SubjectId} with enriched syllabus content.",
-                createdSubjectEntity.Id);
-
-            var programSubjectLink = new CurriculumProgramSubject
-            {
-                ProgramId = userProfile.RouteId.Value,
-                SubjectId = createdSubjectEntity.Id
-            };
-            await _programSubjectRepository.AddAsync(programSubjectLink, cancellationToken);
-            _logger.LogInformation("Linked new subject {SubjectId} to program {ProgramId}",
-                createdSubjectEntity.Id, userProfile.RouteId.Value);
+            _logger.LogInformation("Successfully created new subject {SubjectId} with enriched syllabus content.", createdSubjectEntity.Id);
 
             return _mapper.Map<CreateSubjectResponse>(createdSubjectEntity);
         }
     }
 
-    /// <summary>
-    /// Build subject context string from syllabus data for relevance filtering.
-    /// Extracts technology stack from TechnologyStack field, subject name, and subject code.
-    /// </summary>
     private string BuildSubjectContext(SyllabusData syllabusData)
     {
         var contextParts = new List<string>();
@@ -303,14 +245,11 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         // Priority 2: Extract from subject name
         var subjectNameLower = syllabusData.SubjectName?.ToLowerInvariant() ?? "";
 
-        // Mobile/Android
         if (subjectNameLower.Contains("android") || subjectNameLower.Contains("mobile"))
         {
             if (!contextParts.Any(c => c.Contains("Android", StringComparison.OrdinalIgnoreCase)))
                 contextParts.Add("Android Mobile");
         }
-
-        // .NET/ASP.NET
         if (subjectNameLower.Contains("asp.net") || subjectNameLower.Contains(".net") || subjectNameLower.Contains("c#"))
         {
             if (!contextParts.Any(c => c.Contains("ASP.NET", StringComparison.OrdinalIgnoreCase)))
@@ -384,7 +323,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         var subjectNameLower = syllabusData.SubjectName?.ToLowerInvariant() ?? "";
         var subjectCodeLower = syllabusData.SubjectCode?.ToLowerInvariant() ?? "";
         var descriptionLower = syllabusData.Description?.ToLowerInvariant() ?? "";
-
         var combinedText = $"{subjectNameLower} {subjectCodeLower} {descriptionLower}";
 
         // Vietnamese Political/Ideological subjects
@@ -442,27 +380,28 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         {
             return SubjectCategory.Programming;
         }
-
         return SubjectCategory.General;
     }
 
     private async Task<CreateSubjectResponse> UpdateExistingSubjectContent(
         Subject subjectToUpdate,
         SyllabusData syllabusData,
+         int? semesterOverride, 
         CancellationToken cancellationToken)
     {
         var contentJson = JsonSerializer.Serialize(syllabusData.Content);
-
         var serializerOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
             Converters = { new ObjectToInferredTypesConverter() }
         };
         subjectToUpdate.Content = JsonSerializer.Deserialize<Dictionary<string, object>>(contentJson, serializerOptions);
-
         subjectToUpdate.SubjectName = syllabusData.SubjectName;
         subjectToUpdate.Description = syllabusData.Description;
         subjectToUpdate.Credits = syllabusData.Credits;
+        // --- MODIFICATION: Apply the semester override logic ---
+        // Prioritize the admin-provided value, otherwise use the one from the AI.
+        subjectToUpdate.Semester = semesterOverride ?? syllabusData.Semester;
 
         // Only update semester if provided
         if (syllabusData.Semester.HasValue)
@@ -473,10 +412,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         // Only update prerequisites if provided
         if (!string.IsNullOrWhiteSpace(syllabusData.PreRequisite))
         {
-            subjectToUpdate.PrerequisiteSubjectIds = await ResolvePrerequisiteIdsAsync(
-                syllabusData.PreRequisite, cancellationToken);
+            subjectToUpdate.PrerequisiteSubjectIds = await ResolvePrerequisiteIdsAsync(syllabusData.PreRequisite, cancellationToken);
         }
-
         if (syllabusData.ApprovedDate.HasValue)
         {
             subjectToUpdate.UpdatedAt = new DateTimeOffset(syllabusData.ApprovedDate.Value.ToDateTime(TimeOnly.MinValue));
@@ -487,10 +424,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         }
 
         var resultSubject = await _subjectRepository.UpdateAsync(subjectToUpdate, cancellationToken);
-
-        _logger.LogInformation("Successfully updated subject {SubjectId} with new enriched syllabus content.",
-            resultSubject.Id);
-
+        _logger.LogInformation("Successfully updated subject {SubjectId} with new enriched syllabus content.", resultSubject.Id);
         return _mapper.Map<CreateSubjectResponse>(resultSubject);
     }
 
@@ -523,7 +457,6 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 _logger.LogWarning("Could not resolve prerequisite subject code '{SubjectCode}' to a valid subject ID.", code);
             }
         }
-
         return prereqIds.ToArray();
     }
 
