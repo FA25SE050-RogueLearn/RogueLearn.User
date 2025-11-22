@@ -165,10 +165,14 @@ public class AchievementsGrpcService : AchievementsService.AchievementsServiceBa
         var cmd = new Application.Features.Achievements.Commands.GrantAchievements.GrantAchievementsCommand
         {
             Entries = request.UserAchievements
-                .Select(x => new Application.Features.Achievements.Commands.GrantAchievements.GrantAchievementEntry
+                .Select(x =>
                 {
-                    UserId = x.UserId,
-                    AchievementKey = x.AchievementKey
+                    Guid.TryParse(x.UserId, out var authUserId);
+                    return new Application.Features.Achievements.Commands.GrantAchievements.GrantAchievementEntry
+                    {
+                        AuthUserId = authUserId,
+                        AchievementKey = x.AchievementKey
+                    };
                 })
                 .ToList()
         };
