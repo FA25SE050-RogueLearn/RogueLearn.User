@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/UpdateQuestActivityProgress/UpdateQuestActivityProgressCommandHandler.cs
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
@@ -9,12 +8,10 @@ using System.Text.Json;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 using RogueLearn.User.Application.Common;
 
-// MODIFIED: The namespace is updated to match the new command structure.
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 
 public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQuestActivityProgressCommand>
 {
-    // Private record to help deserialize the activity payload for validation.
     private record ActivityPayload(JsonElement SkillId, JsonElement ExperiencePoints);
 
     private readonly IUserQuestAttemptRepository _attemptRepository;
@@ -52,35 +49,28 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             throw new NotFoundException("QuestStep (weekly module)", request.StepId);
         }
 
-        // Find or create the overarching quest attempt.
         var attempt = await _attemptRepository.FirstOrDefaultAsync(
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken) ?? await CreateNewAttemptAsync(request.AuthUserId, request.QuestId, cancellationToken);
 
-        // Ensure the parent quest is marked as "InProgress" if this is the first action.
         await MarkParentQuestAsInProgressAsync(request.QuestId, cancellationToken);
 
-        // Find or create the progress record for the entire weekly module (the quest_step).
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
             sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
             cancellationToken) ?? await CreateNewStepProgressAsync(attempt.Id, request.StepId, cancellationToken);
 
-        // Check for idempotency: if this specific activity is already complete, do nothing.
         if (stepProgress.CompletedActivityIds?.Contains(request.ActivityId) == true && request.Status == StepCompletionStatus.Completed)
         {
             _logger.LogInformation("Activity {ActivityId} is already completed for Step {StepId}. No action taken.", request.ActivityId, request.StepId);
             return;
         }
 
-        // If the request is to mark the activity as completed, trigger the reward and check for module completion.
         if (request.Status == StepCompletionStatus.Completed)
         {
-            // MODIFICATION: Pass the parent 'attempt' object which contains the correct AuthUserId.
             await CompleteActivityAndCheckForModuleCompletion(questStep, stepProgress, attempt, request.ActivityId, cancellationToken);
         }
         else
         {
-            // For other statuses like "InProgress", just update the module's overall status.
             stepProgress.Status = request.Status;
             stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
             await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
@@ -131,59 +121,334 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         return newStepProgress;
     }
 
-    // MODIFICATION: The method now accepts the 'UserQuestAttempt' object to get the correct AuthUserId.
+    // ⭐ FIXED: Now handles both JSON string and Dictionary content formats
     private async Task CompleteActivityAndCheckForModuleCompletion(QuestStep questStep, UserQuestStepProgress stepProgress, UserQuestAttempt attempt, Guid activityIdToComplete, CancellationToken cancellationToken)
     {
-        // 1. Deserialize the module's content to access the activities.
-        var contentDict = questStep.Content as Dictionary<string, object>;
-        if (contentDict == null || !contentDict.TryGetValue("activities", out var activitiesObj) || activitiesObj is not List<object> activities)
-        {
-            _logger.LogError("QuestStep {StepId} has malformed content and does not contain an 'activities' array.", questStep.Id);
-            throw new InvalidOperationException("Quest step content is invalid.");
-        }
+        // 1. Parse the content - it might be a JSON string or Dictionary
+        List<object> activities = null;
 
-        // 2. Find the specific activity being completed.
-        var activityToComplete = activities
-            .OfType<Dictionary<string, object>>()
-            .FirstOrDefault(act => act.TryGetValue("activityId", out var idObj) && idObj is string idStr && Guid.TryParse(idStr, out var id) && id == activityIdToComplete);
+        _logger.LogInformation("🔍 Content type: {ContentType}", questStep.Content?.GetType().Name ?? "null");
+        _logger.LogInformation("🔍 Content value: {Content}", questStep.Content?.ToString() ?? "null");
 
-        if (activityToComplete == null)
+        try
         {
-            throw new NotFoundException("Activity", activityIdToComplete);
-        }
-
-        // 3. Dispatch the XP event for this specific activity.
-        if (activityToComplete.TryGetValue("payload", out var payloadObj) && payloadObj is Dictionary<string, object> payload)
-        {
-            if (payload.TryGetValue("skillId", out var skillIdObj) && Guid.TryParse(skillIdObj.ToString(), out var skillId) &&
-                payload.TryGetValue("experiencePoints", out var xpObj) && int.TryParse(xpObj.ToString(), out var xp))
+            // ⭐ CRITICAL: Handle case when Content is a string stored in JSONB
+            if (questStep.Content is string jsonString)
             {
-                var xpEvent = new IngestXpEventCommand
+                _logger.LogInformation("📄 Content detected as string, length: {Length}", jsonString.Length);
+
+                if (string.IsNullOrWhiteSpace(jsonString))
                 {
-                    // MODIFICATION: This now correctly uses the AuthUserId from the parent 'attempt' object.
-                    AuthUserId = attempt.AuthUserId,
-                    SourceService = "QuestsService",
-                    SourceType = SkillRewardSourceType.QuestComplete.ToString(),
-                    SourceId = activityIdToComplete, // The source is now the activity itself.
-                    SkillId = skillId,
-                    Points = xp,
-                    Reason = $"Completed activity in quest: {questStep.Title}"
-                };
-                await _mediator.Send(xpEvent, cancellationToken);
-                _logger.LogInformation("Dispatched IngestXpEvent for SkillId '{SkillId}' from Activity '{ActivityId}'", skillId, activityIdToComplete);
+                    throw new InvalidOperationException("Quest step content JSON string is empty");
+                }
+
+                // Try to parse the JSON string
+                using (JsonDocument doc = JsonDocument.Parse(jsonString))
+                {
+                    var root = doc.RootElement;
+                    _logger.LogInformation("✅ Parsed JSON root type: {Type}", root.ValueKind);
+
+                    if (root.TryGetProperty("activities", out var activitiesElement))
+                    {
+                        _logger.LogInformation("📄 Found 'activities' property, type: {Type}", activitiesElement.ValueKind);
+
+                        if (activitiesElement.ValueKind == JsonValueKind.Array)
+                        {
+                            var count = activitiesElement.GetArrayLength();
+                            _logger.LogInformation("✅ Activities is array with {Count} items", count);
+
+                            activities = activitiesElement
+                                .EnumerateArray()
+                                .Select(item => (object)item.GetRawText())
+                                .ToList();
+                        }
+                        else
+                        {
+                            _logger.LogWarning("⚠️ 'activities' property is not an array, it's: {Type}", activitiesElement.ValueKind);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("⚠️ 'activities' property not found in root");
+                        // Log available properties
+                        var properties = string.Join(", ", root.EnumerateObject().Select(p => p.Name));
+                        _logger.LogWarning("📋 Available properties: {Properties}", properties);
+                    }
+                }
+            }
+            else if (questStep.Content is Dictionary<string, object> contentDict)
+            {
+                _logger.LogInformation("📄 Content is Dictionary, extracting activities...");
+
+                if (contentDict.TryGetValue("activities", out var activitiesObj))
+                {
+                    _logger.LogInformation("✅ Found 'activities' in Dictionary, type: {Type}", activitiesObj?.GetType().Name ?? "null");
+
+                    if (activitiesObj is List<object> activitiesList)
+                    {
+                        activities = activitiesList;
+                        _logger.LogInformation("✅ Extracted {Count} activities from Dictionary", activities.Count);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("⚠️ 'activities' is not List<object>, it's: {Type}", activitiesObj?.GetType().Name ?? "null");
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ 'activities' key not found in Dictionary");
+                    var keys = string.Join(", ", contentDict.Keys);
+                    _logger.LogWarning("📋 Available keys: {Keys}", keys);
+                }
+            }
+            // ⭐ NEW: Handle Newtonsoft JObject (from JSONB storage)
+            else if (questStep.Content != null && questStep.Content.GetType().Name == "JObject")
+            {
+                _logger.LogInformation("📄 Content is JObject (Newtonsoft), converting to Dictionary...");
+
+                try
+                {
+                    // Convert JObject to JSON string first
+                    var jObjectJson = questStep.Content.ToString();
+                    _logger.LogInformation("✅ Converted JObject to string");
+
+                    // Parse as JSON
+                    using (JsonDocument doc = JsonDocument.Parse(jObjectJson))
+                    {
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("activities", out var activitiesElement) &&
+                            activitiesElement.ValueKind == JsonValueKind.Array)
+                        {
+                            var count = activitiesElement.GetArrayLength();
+                            _logger.LogInformation("✅ Found 'activities' array with {Count} items", count);
+
+                            activities = activitiesElement
+                                .EnumerateArray()
+                                .Select(item => (object)item.GetRawText())
+                                .ToList();
+
+                            _logger.LogInformation("✅ Extracted {Count} activities from JObject", activities.Count);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("⚠️ 'activities' property not found in JObject");
+                            var properties = string.Join(", ", root.EnumerateObject().Select(p => p.Name));
+                            _logger.LogWarning("📋 Available properties: {Properties}", properties);
+                        }
+                    }
+                }
+                catch (Exception jEx)
+                {
+                    _logger.LogError(jEx, "❌ Failed to parse JObject content");
+                    throw;
+                }
+            }
+            else
+            {
+                _logger.LogError("❌ Content is unsupported type: {Type}", questStep.Content?.GetType().FullName ?? "null");
+            }
+
+            if (activities == null || activities.Count == 0)
+            {
+                _logger.LogError("❌ QuestStep {StepId} - activities is null or empty after parsing", questStep.Id);
+                throw new InvalidOperationException("Quest step content is invalid - no activities found.");
+            }
+
+            _logger.LogInformation("✅ Successfully prepared {Count} activities for processing", activities.Count);
+        }
+        catch (JsonException jsonEx)
+        {
+            _logger.LogError(jsonEx, "❌ Failed to parse quest step content as JSON");
+            throw new InvalidOperationException("Failed to parse quest step content", jsonEx);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Unexpected error parsing quest step content");
+            throw;
+        }
+
+        // 2. Find the specific activity being completed
+        Dictionary<string, object> activityToComplete = null;
+
+        foreach (var activityObj in activities)
+        {
+            if (activityObj is Dictionary<string, object> dict)
+            {
+                // Already a dictionary
+                if (dict.TryGetValue("activityId", out var idObj) &&
+                    idObj is string idStr &&
+                    Guid.TryParse(idStr, out var id) &&
+                    id == activityIdToComplete)
+                {
+                    activityToComplete = dict;
+                    break;
+                }
+            }
+            else if (activityObj is string jsonStr)
+            {
+                // Parse JSON string
+                using (JsonDocument doc = JsonDocument.Parse(jsonStr))
+                {
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("activityId", out var idElement) &&
+                        idElement.ValueKind != JsonValueKind.Null &&
+                        Guid.TryParse(idElement.GetString(), out var id) &&
+                        id == activityIdToComplete)
+                    {
+                        // Convert to Dictionary for further processing
+                        activityToComplete = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonStr);
+                        break;
+                    }
+                }
             }
         }
 
-        // 4. Update the progress record by adding the completed activity's ID.
+        if (activityToComplete == null)
+        {
+            _logger.LogError("❌ Activity {ActivityId} not found in quest step {StepId}", activityIdToComplete, questStep.Id);
+            throw new NotFoundException("Activity", activityIdToComplete);
+        }
+        // 3. Dispatch the XP event for this specific activity
+        if (activityToComplete.TryGetValue("payload", out var payloadObj))
+        {
+            _logger.LogInformation("📦 Payload type: {Type}", payloadObj?.GetType().Name ?? "null");
+
+            Dictionary<string, object> payload = null;
+
+            // Handle different payload types
+            if (payloadObj is Dictionary<string, object> dictPayload)
+            {
+                payload = dictPayload;
+                _logger.LogInformation("✅ Payload is Dictionary");
+            }
+            else if (payloadObj is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Object)
+            {
+                // Convert JsonElement to Dictionary
+                var payloadJson = jsonElement.GetRawText();
+                payload = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadJson);
+                _logger.LogInformation("✅ Converted JsonElement payload to Dictionary");
+            }
+            else if (payloadObj is string payloadStr)
+            {
+                // Parse string as JSON
+                payload = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadStr);
+                _logger.LogInformation("✅ Parsed string payload as Dictionary");
+            }
+
+            if (payload != null)
+            {
+                _logger.LogInformation("💰 Extracting skillId and experiencePoints from payload...");
+
+                // Extract skillId
+                Guid? skillId = null;
+                if (payload.TryGetValue("skillId", out var skillIdObj))
+                {
+                    var skillIdStr = skillIdObj?.ToString();
+                    if (Guid.TryParse(skillIdStr, out var parsedSkillId))
+                    {
+                        skillId = parsedSkillId;
+                        _logger.LogInformation("✅ Extracted skillId: {SkillId}", skillId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("⚠️ Failed to parse skillId: {SkillId}", skillIdStr);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ skillId not found in payload");
+                }
+
+                // Extract experiencePoints
+                int? xp = null;
+                if (payload.TryGetValue("experiencePoints", out var xpObj))
+                {
+                    var xpStr = xpObj?.ToString();
+                    if (int.TryParse(xpStr, out var parsedXp))
+                    {
+                        xp = parsedXp;
+                        _logger.LogInformation("✅ Extracted XP: {XP}", xp);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("⚠️ Failed to parse experiencePoints: {XP}", xpStr);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ experiencePoints not found in payload");
+                }
+
+                // Only dispatch if both skillId and XP extracted successfully
+                if (skillId.HasValue && xp.HasValue)
+                {
+                    var xpEvent = new IngestXpEventCommand
+                    {
+                        AuthUserId = attempt.AuthUserId,
+                        SourceService = "QuestsService",
+                        SourceType = SkillRewardSourceType.QuestComplete.ToString(),
+                        SourceId = activityIdToComplete,
+                        SkillId = skillId.Value,
+                        Points = xp.Value,
+                        Reason = $"Completed activity in quest: {questStep.Title}"
+                    };
+                    await _mediator.Send(xpEvent, cancellationToken);
+                    _logger.LogInformation("✅ DISPATCHED IngestXpEvent for SkillId '{SkillId}' with {XP} XP from Activity '{ActivityId}'", skillId, xp, activityIdToComplete);
+                }
+                else
+                {
+                    _logger.LogError("❌ Cannot dispatch XP event: skillId={SkillId}, xp={XP}", skillId, xp);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ Could not convert payload to Dictionary");
+            }
+        }
+        else
+        {
+            _logger.LogWarning("⚠️ 'payload' property not found in activity");
+        }
+
+
+        // 4. Update the progress record by adding the completed activity's ID
         stepProgress.CompletedActivityIds = (stepProgress.CompletedActivityIds ?? Array.Empty<Guid>()).Append(activityIdToComplete).ToArray();
         stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
 
-        // 5. Check if the entire module (quest_step) is now complete.
-        var allActivityIds = activities
-            .OfType<Dictionary<string, object>>()
-            .Select(act => act.TryGetValue("activityId", out var idObj) && idObj is string idStr && Guid.TryParse(idStr, out var id) ? id : Guid.Empty)
-            .Where(id => id != Guid.Empty)
-            .ToHashSet();
+        // 5. Check if the entire module (quest_step) is now complete
+        var allActivityIds = new HashSet<Guid>();
+
+        foreach (var activityObj in activities)
+        {
+            Guid activityId = Guid.Empty;
+
+            if (activityObj is Dictionary<string, object> dict)
+            {
+                if (dict.TryGetValue("activityId", out var idObj) && idObj is string idStr && Guid.TryParse(idStr, out var id))
+                {
+                    activityId = id;
+                }
+            }
+            else if (activityObj is string jsonStr)
+            {
+                using (JsonDocument doc = JsonDocument.Parse(jsonStr))
+                {
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("activityId", out var idElement) &&
+                        idElement.ValueKind != JsonValueKind.Null &&
+                        Guid.TryParse(idElement.GetString(), out var id))
+                    {
+                        activityId = id;
+                    }
+                }
+            }
+
+            if (activityId != Guid.Empty)
+            {
+                allActivityIds.Add(activityId);
+            }
+        }
 
         if (allActivityIds.IsSubsetOf(stepProgress.CompletedActivityIds.ToHashSet()))
         {
@@ -191,7 +456,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             stepProgress.CompletedAt = DateTimeOffset.UtcNow;
             _logger.LogInformation("All activities for Step {StepId} are complete. Marking step as 'Completed'.", questStep.Id);
 
-            // This is a good place to also check for overall quest completion.
             await CheckForOverallQuestCompletion(stepProgress.AttemptId, cancellationToken);
         }
 
