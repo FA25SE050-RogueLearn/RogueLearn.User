@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Moq;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.CreateGuildPost;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.EditGuildPost;
 using RogueLearn.User.Application.Features.GuildPosts.DTOs;
@@ -27,12 +28,14 @@ public class GuildPostsControllerTests : IClassFixture<WebApplicationFactory<Pro
     private readonly Mock<IGuildPostRepository> _mockPostRepository;
     private readonly Mock<IGuildMemberRepository> _mockMemberRepository;
     private readonly Mock<IGuildRepository> _mockGuildRepository;
+    private readonly Mock<IGuildPostImageStorage> _mockImageStorage;
 
     public GuildPostsControllerTests(WebApplicationFactory<Program> factory)
     {
         _mockPostRepository = new Mock<IGuildPostRepository>();
         _mockMemberRepository = new Mock<IGuildMemberRepository>();
         _mockGuildRepository = new Mock<IGuildRepository>();
+        _mockImageStorage = new Mock<IGuildPostImageStorage>();
 
         _factory = factory.WithWebHostBuilder(builder =>
         {
@@ -42,7 +45,10 @@ public class GuildPostsControllerTests : IClassFixture<WebApplicationFactory<Pro
                 {
                     ["Supabase:Url"] = "https://test.supabase.co",
                     ["Supabase:ApiKey"] = "test-api-key",
-                    ["Supabase:JwtSecret"] = "test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"
+                    ["Supabase:JwtSecret"] = "test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes",
+                    ["AI:Provider"] = "Google",
+                    ["AI:Google:Model"] = "gemini-1.5-flash",
+                    ["AI:Google:ApiKey"] = "dummy-test-key"
                 });
             });
 
@@ -61,6 +67,7 @@ public class GuildPostsControllerTests : IClassFixture<WebApplicationFactory<Pro
                 services.AddScoped(_ => _mockPostRepository.Object);
                 services.AddScoped(_ => _mockMemberRepository.Object);
                 services.AddScoped(_ => _mockGuildRepository.Object);
+                services.AddScoped(_ => _mockImageStorage.Object);
 
                 // Relax JWT validation and use local key
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
@@ -330,5 +337,30 @@ public class GuildPostsControllerTests : IClassFixture<WebApplicationFactory<Pro
 
         var token = tokenHandler.CreateToken(tokenDescriptor);
         return tokenHandler.WriteToken(token);
+    }
+    [Fact]
+    public async Task UploadGuildPostImages_AsAuthor_ShouldReturnCreated()
+    {
+        var authUserId = Guid.NewGuid();
+        var token = GenerateJwtToken(authUserId, roles: new[] { "User" });
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var guildId = Guid.NewGuid();
+        var postId = Guid.NewGuid();
+        var post = new GuildPost { Id = postId, GuildId = guildId, AuthorId = authUserId, IsLocked = false };
+        _mockPostRepository.Setup(x => x.GetByIdAsync(guildId, postId, It.IsAny<CancellationToken>())).ReturnsAsync(post);
+        _mockMemberRepository.Setup(x => x.GetMemberAsync(guildId, authUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GuildMember { GuildId = guildId, AuthUserId = authUserId, Status = MemberStatus.Active, Role = GuildRole.Member });
+        _mockPostRepository.Setup(x => x.UpdateAsync(It.IsAny<GuildPost>(), It.IsAny<CancellationToken>())).ReturnsAsync((GuildPost p, CancellationToken _) => p);
+        _mockImageStorage.Setup(x => x.SaveImagesAsync(guildId, postId, It.IsAny<IEnumerable<(byte[] Content, string? ContentType, string? FileName)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<string> { "https://example.com/a.jpg" });
+
+        var form = new MultipartFormDataContent();
+        var imageContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake"));
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        form.Add(imageContent, "files", "a.jpg");
+
+        var response = await _client.PostAsync($"/api/guilds/{guildId}/posts/{postId}/images", form);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 }

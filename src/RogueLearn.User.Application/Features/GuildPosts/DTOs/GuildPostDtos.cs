@@ -27,6 +27,7 @@ public record CreateGuildPostRequest
     public string Content { get; init; } = string.Empty;
     public string[]? Tags { get; init; }
     public Dictionary<string, object>? Attachments { get; init; }
+    public IReadOnlyList<GuildPostImageUpload>? Images { get; init; }
 }
 
 public record CreateGuildPostResponse
@@ -40,4 +41,5 @@ public record EditGuildPostRequest
     public string Content { get; init; } = string.Empty;
     public string[]? Tags { get; init; }
     public Dictionary<string, object>? Attachments { get; init; }
+    public IReadOnlyList<GuildPostImageUpload>? Images { get; init; }
 }

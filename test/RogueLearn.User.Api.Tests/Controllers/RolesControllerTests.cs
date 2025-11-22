@@ -41,7 +41,10 @@ public class RolesControllerTests : IClassFixture<WebApplicationFactory<Program>
                 {
                     ["Supabase:Url"] = "https://test.supabase.co",
                     ["Supabase:ApiKey"] = "test-api-key",
-                    ["Supabase:JwtSecret"] = "test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes"
+                    ["Supabase:JwtSecret"] = "test-jwt-secret-that-is-at-least-256-bits-long-for-testing-purposes",
+                    ["AI:Provider"] = "Google",
+                    ["AI:Google:Model"] = "gemini-1.5-flash",
+                    ["AI:Google:ApiKey"] = "dummy-test-key"
                 });
             });
 

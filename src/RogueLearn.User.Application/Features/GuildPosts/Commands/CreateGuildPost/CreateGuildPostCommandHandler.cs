@@ -1,6 +1,7 @@
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.GuildPosts.DTOs;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -12,12 +13,14 @@ public class CreateGuildPostCommandHandler : IRequestHandler<CreateGuildPostComm
     private readonly IGuildPostRepository _postRepository;
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildRepository _guildRepository;
+    private readonly IGuildPostImageStorage _imageStorage;
 
-    public CreateGuildPostCommandHandler(IGuildPostRepository postRepository, IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
+    public CreateGuildPostCommandHandler(IGuildPostRepository postRepository, IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IGuildPostImageStorage imageStorage)
     {
         _postRepository = postRepository;
         _memberRepository = memberRepository;
         _guildRepository = guildRepository;
+        _imageStorage = imageStorage;
     }
 
     public async Task<CreateGuildPostResponse> Handle(CreateGuildPostCommand request, CancellationToken cancellationToken)
@@ -50,6 +53,25 @@ public class CreateGuildPostCommandHandler : IRequestHandler<CreateGuildPostComm
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
+
+        if (request.Request.Images is not null && request.Request.Images.Count > 0)
+        {
+            var files = request.Request.Images.Select(i => (i.Content, i.ContentType, i.FileName));
+            var urls = await _imageStorage.SaveImagesAsync(request.GuildId, post.Id, files, cancellationToken);
+            var attachments = post.Attachments ?? new Dictionary<string, object>();
+            var images = new List<object>();
+            if (attachments.TryGetValue("images", out var existing) && existing is IEnumerable<object> e)
+            {
+                images = e.ToList();
+            }
+            foreach (var url in urls)
+            {
+                images.Add(url);
+            }
+            attachments["images"] = images;
+            post.Attachments = attachments;
+            post.UpdatedAt = DateTimeOffset.UtcNow;
+        }
 
         await _postRepository.AddAsync(post, cancellationToken);
 

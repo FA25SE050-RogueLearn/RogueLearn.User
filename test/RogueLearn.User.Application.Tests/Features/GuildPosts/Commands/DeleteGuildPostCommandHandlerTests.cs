@@ -25,7 +25,8 @@ public class DeleteGuildPostCommandHandlerTests
         repo.Setup(r => r.DeleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var handler = new DeleteGuildPostCommandHandler(repo.Object);
+        var imageStorage = new Mock<RogueLearn.User.Application.Interfaces.IGuildPostImageStorage>();
+        var handler = new DeleteGuildPostCommandHandler(repo.Object, imageStorage.Object);
         await handler.Handle(new DeleteGuildPostCommand(guildId, postId, authorId, false), CancellationToken.None);
 
         repo.Verify(r => r.DeleteAsync(It.Is<Guid>(id => id == postId), It.IsAny<CancellationToken>()), Times.Once);
@@ -43,7 +44,8 @@ public class DeleteGuildPostCommandHandlerTests
         repo.Setup(r => r.GetByIdAsync(guildId, postId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GuildPost { Id = postId, GuildId = guildId, AuthorId = authorId });
 
-        var handler = new DeleteGuildPostCommandHandler(repo.Object);
+        var imageStorage = new Mock<RogueLearn.User.Application.Interfaces.IGuildPostImageStorage>();
+        var handler = new DeleteGuildPostCommandHandler(repo.Object, imageStorage.Object);
         await Assert.ThrowsAsync<ForbiddenException>(() => handler.Handle(new DeleteGuildPostCommand(guildId, postId, requester, false), CancellationToken.None));
     }
 }
