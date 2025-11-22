@@ -12,6 +12,12 @@ using RogueLearn.User.Application.Features.GuildPosts.DTOs;
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPosts;
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPostById;
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetPinnedGuildPosts;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.Comments.CreateGuildPostComment;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.Comments.EditGuildPostComment;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.Comments.DeleteGuildPostComment;
+using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPostComments;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.Likes.LikeGuildPost;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.Likes.UnlikeGuildPost;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -112,11 +118,82 @@ public class GuildPostsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Create a comment on a guild post.
+    /// </summary>
+    [HttpPost("api/guilds/{guildId:guid}/posts/{postId:guid}/comments")]
+    [ProducesResponseType(typeof(CreateGuildPostCommentResponse), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromBody] CreateGuildPostCommentRequest request, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var result = await _mediator.Send(new CreateGuildPostCommentCommand(guildId, postId, authUserId, request), cancellationToken);
+        return Created($"/api/guilds/{guildId}/posts/{postId}/comments/{result.CommentId}", result);
+    }
+
+    /// <summary>
+    /// Update own comment content.
+    /// </summary>
+    [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}/comments/{commentId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> EditGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromRoute] Guid commentId, [FromBody] EditGuildPostCommentRequest request, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        await _mediator.Send(new EditGuildPostCommentCommand(guildId, postId, commentId, authUserId, request), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Soft-delete own comment.
+    /// </summary>
+    [HttpDelete("api/guilds/{guildId:guid}/posts/{postId:guid}/comments/{commentId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> DeleteGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromRoute] Guid commentId, CancellationToken cancellationToken)
+    {
+        var requesterId = User.GetAuthUserId();
+        await _mediator.Send(new DeleteGuildPostCommentCommand(guildId, postId, commentId, requesterId, false), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Get comments for a guild post.
+    /// </summary>
+    [HttpGet("api/guilds/{guildId:guid}/posts/{postId:guid}/comments")]
+    [ProducesResponseType(typeof(IEnumerable<GuildPostCommentDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetGuildPostComments([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromQuery] int page = 1, [FromQuery] int size = 20, [FromQuery] string? sort = null, CancellationToken cancellationToken = default)
+    {
+        var list = await _mediator.Send(new GetGuildPostCommentsQuery(guildId, postId, page, size, sort), cancellationToken);
+        return Ok(list);
+    }
+
+    /// <summary>
+    /// Idempotently like a guild post.
+    /// </summary>
+    [HttpPost("api/guilds/{guildId:guid}/posts/{postId:guid}/like")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> LikeGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetAuthUserId();
+        await _mediator.Send(new LikeGuildPostCommand(guildId, postId, userId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Remove like from a guild post.
+    /// </summary>
+    [HttpDelete("api/guilds/{guildId:guid}/posts/{postId:guid}/like")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> UnlikeGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
+    {
+        var userId = User.GetAuthUserId();
+        await _mediator.Send(new UnlikeGuildPostCommand(guildId, postId, userId), cancellationToken);
+        return NoContent();
+    }
+
     // Admin/moderation endpoints under /api/admin/guilds - allow GuildMaster or Officer or Platform Admin
     /// <summary>
     /// Admin/moderation: Pin a guild post.
     /// </summary>
-    [HttpPost("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/pin")]
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/pin")]
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -130,7 +207,7 @@ public class GuildPostsController : ControllerBase
     /// <summary>
     /// Admin/moderation: Unpin a guild post.
     /// </summary>
-    [HttpPost("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/unpin")]
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unpin")] 
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -144,7 +221,7 @@ public class GuildPostsController : ControllerBase
     /// <summary>
     /// Admin/moderation: Lock a guild post.
     /// </summary>
-    [HttpPost("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/lock")]
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/lock")]
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -158,7 +235,7 @@ public class GuildPostsController : ControllerBase
     /// <summary>
     /// Admin/moderation: Unlock a guild post.
     /// </summary>
-    [HttpPost("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/unlock")]
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unlock")]
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -172,7 +249,7 @@ public class GuildPostsController : ControllerBase
     /// <summary>
     /// Admin/moderation: Approve a guild post.
     /// </summary>
-    [HttpPost("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/approve")]
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/approve")]
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -186,7 +263,7 @@ public class GuildPostsController : ControllerBase
     /// <summary>
     /// Admin/moderation: Reject a guild post.
     /// </summary>
-    [HttpPost("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/reject")]
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/reject")]
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -209,6 +286,19 @@ public class GuildPostsController : ControllerBase
     {
         var requesterId = User.GetAuthUserId();
         await _mediator.Send(new DeleteGuildPostCommand(guildId, postId, requesterId, true), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Admin-only: Hard delete a guild post comment.
+    /// </summary>
+    [HttpDelete("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/comments/{commentId:guid}")]
+    [AdminOnly]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ForceDeleteGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromRoute] Guid commentId, CancellationToken cancellationToken)
+    {
+        var requesterId = User.GetAuthUserId();
+        await _mediator.Send(new DeleteGuildPostCommentCommand(guildId, postId, commentId, requesterId, true), cancellationToken);
         return NoContent();
     }
 }

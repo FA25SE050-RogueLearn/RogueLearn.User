@@ -14,6 +14,9 @@ public record GuildPostDto
     public bool IsPinned { get; init; }
     public bool IsLocked { get; init; }
     public GuildPostStatus Status { get; init; }
+    public int CommentCount { get; init; }
+    public int LikeCount { get; init; }
+    public Dictionary<string, int>? EmojiCounts { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 }

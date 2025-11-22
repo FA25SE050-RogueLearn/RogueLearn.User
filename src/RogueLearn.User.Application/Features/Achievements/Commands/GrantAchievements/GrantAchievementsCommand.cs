@@ -9,6 +9,6 @@ public class GrantAchievementsCommand : IRequest<GrantAchievementsResponse>
 
 public class GrantAchievementEntry
 {
-    public string UserId { get; set; } = string.Empty;
+    public Guid AuthUserId { get; set; }
     public string AchievementKey { get; set; } = string.Empty;
 }

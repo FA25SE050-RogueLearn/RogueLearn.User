@@ -30,16 +30,16 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
 
         foreach (var entry in request.Entries)
         {
-            if (!Guid.TryParse(entry.UserId, out var userId))
+            if (entry.AuthUserId == Guid.Empty)
             {
-                result.Errors.Add($"invalid user_id: {entry.UserId}");
+                result.Errors.Add("invalid auth_user_id");
                 continue;
             }
 
-            var user = await _userProfileRepository.GetByIdAsync(userId, cancellationToken);
+            var user = await _userProfileRepository.GetByAuthIdAsync(entry.AuthUserId, cancellationToken);
             if (user is null)
             {
-                result.Errors.Add($"user not found: {entry.UserId}");
+                result.Errors.Add($"user not found: {entry.AuthUserId}");
                 continue;
             }
 
@@ -71,7 +71,7 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
             await _userAchievementRepository.AddAsync(userAchievement, cancellationToken);
 
             result.GrantedCount++;
-            _logger.LogInformation("Granted achievement key={Key} to AuthUserId={AuthUserId}", entry.AchievementKey, user.AuthUserId);
+            _logger.LogInformation("Granted achievement key={Key} to AuthUserId={AuthUserId}", entry.AchievementKey, entry.AuthUserId);
         }
 
         return result;

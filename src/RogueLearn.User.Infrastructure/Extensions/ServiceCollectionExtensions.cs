@@ -123,6 +123,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGuildJoinRequestRepository, GuildJoinRequestRepository>();
         // Guild posts repository
         services.AddScoped<IGuildPostRepository, GuildPostRepository>();
+        services.AddScoped<IGuildPostCommentRepository, GuildPostCommentRepository>();
+        services.AddScoped<IGuildPostLikeRepository, GuildPostLikeRepository>();
 
         // System repositories
         services.AddScoped<INotificationRepository, NotificationRepository>();

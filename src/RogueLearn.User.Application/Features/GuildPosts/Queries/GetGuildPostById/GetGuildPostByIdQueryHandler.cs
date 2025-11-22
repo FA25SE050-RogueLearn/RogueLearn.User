@@ -25,6 +25,9 @@ public class GetGuildPostByIdQueryHandler : IRequestHandler<GetGuildPostByIdQuer
             IsPinned = post.IsPinned,
             IsLocked = post.IsLocked,
             Status = post.Status,
+            CommentCount = post.CommentCount,
+            LikeCount = post.LikeCount,
+            EmojiCounts = new Dictionary<string, int>(),
             CreatedAt = post.CreatedAt,
             UpdatedAt = post.UpdatedAt
         };
