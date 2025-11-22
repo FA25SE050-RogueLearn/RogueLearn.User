@@ -1,5 +1,6 @@
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.GuildPosts.Commands.DeleteGuildPost;
@@ -7,10 +8,12 @@ namespace RogueLearn.User.Application.Features.GuildPosts.Commands.DeleteGuildPo
 public class DeleteGuildPostCommandHandler : IRequestHandler<DeleteGuildPostCommand, Unit>
 {
     private readonly IGuildPostRepository _postRepository;
+    private readonly IGuildPostImageStorage _imageStorage;
 
-    public DeleteGuildPostCommandHandler(IGuildPostRepository postRepository)
+    public DeleteGuildPostCommandHandler(IGuildPostRepository postRepository, IGuildPostImageStorage imageStorage)
     {
         _postRepository = postRepository;
+        _imageStorage = imageStorage;
     }
 
     public async Task<Unit> Handle(DeleteGuildPostCommand request, CancellationToken cancellationToken)
@@ -29,6 +32,12 @@ public class DeleteGuildPostCommandHandler : IRequestHandler<DeleteGuildPostComm
             {
                 throw new ForbiddenException("Post is locked by admin");
             }
+        }
+
+        if (post.Attachments is not null && post.Attachments.TryGetValue("images", out var imgs) && imgs is IEnumerable<object> list)
+        {
+            var urls = list.Select(x => x?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s))!.Cast<string>();
+            await _imageStorage.DeleteByUrlsAsync(urls, cancellationToken);
         }
 
         await _postRepository.DeleteAsync(post.Id, cancellationToken);

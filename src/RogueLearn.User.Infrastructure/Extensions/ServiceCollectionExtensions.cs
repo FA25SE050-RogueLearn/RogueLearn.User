@@ -153,6 +153,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRoadmapImportStorage, RoadmapImportStorage>();
         services.AddScoped<IAvatarStorage, AvatarStorage>();
         services.AddScoped<IAchievementImageStorage, AchievementImageStorage>();
+        services.AddScoped<IGuildPostImageStorage, GuildPostImageStorage>();
 
         services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
 

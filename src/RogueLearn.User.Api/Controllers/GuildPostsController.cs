@@ -2,6 +2,7 @@ using System.Net.Mime;
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.CreateGuildPost;
@@ -18,6 +19,7 @@ using RogueLearn.User.Application.Features.GuildPosts.Commands.Comments.DeleteGu
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPostComments;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.Likes.LikeGuildPost;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.Likes.UnlikeGuildPost;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.Images;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -92,6 +94,47 @@ public class GuildPostsController : ControllerBase
         return CreatedAtAction(nameof(GetGuildPostById), new { guildId, postId = result.PostId }, result);
     }
 
+    [HttpPost("api/guilds/{guildId:guid}/posts")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(CreateGuildPostResponse), StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateGuildPostForm([FromRoute] Guid guildId, [FromForm] string title, [FromForm] string content, [FromForm] string[]? tags, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var list = new List<GuildPostImageUpload>();
+        foreach (var file in files)
+        {
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, cancellationToken);
+            list.Add(new GuildPostImageUpload(ms.ToArray(), file.ContentType, file.FileName));
+        }
+        var req = new CreateGuildPostRequest
+        {
+            Title = title,
+            Content = content,
+            Tags = tags,
+            Attachments = null,
+            Images = list
+        };
+        var result = await _mediator.Send(new CreateGuildPostCommand(guildId, authUserId, req), cancellationToken);
+        return CreatedAtAction(nameof(GetGuildPostById), new { guildId, postId = result.PostId }, result);
+    }
+
+    [HttpPost("api/guilds/{guildId:guid}/posts/{postId:guid}/images")]
+    [ProducesResponseType(typeof(UploadGuildPostImagesResponse), StatusCodes.Status201Created)]
+    public async Task<IActionResult> UploadGuildPostImages([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var list = new List<GuildPostImageUpload>();
+        foreach (var file in files)
+        {
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, cancellationToken);
+            list.Add(new GuildPostImageUpload(ms.ToArray(), file.ContentType, file.FileName));
+        }
+        var result = await _mediator.Send(new UploadGuildPostImagesCommand(guildId, postId, authUserId, list), cancellationToken);
+        return Created($"/api/guilds/{guildId}/posts/{postId}", result);
+    }
+
     /// <summary>
     /// Edit a guild post.
     /// </summary>
@@ -102,6 +145,31 @@ public class GuildPostsController : ControllerBase
     {
         var authUserId = User.GetAuthUserId();
         await _mediator.Send(new EditGuildPostCommand(guildId, postId, authUserId, request), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> EditGuildPostForm([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromForm] string title, [FromForm] string content, [FromForm] string[]? tags, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        var list = new List<GuildPostImageUpload>();
+        foreach (var file in files)
+        {
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, cancellationToken);
+            list.Add(new GuildPostImageUpload(ms.ToArray(), file.ContentType, file.FileName));
+        }
+        var req = new EditGuildPostRequest
+        {
+            Title = title,
+            Content = content,
+            Tags = tags,
+            Attachments = null,
+            Images = list
+        };
+        await _mediator.Send(new EditGuildPostCommand(guildId, postId, authUserId, req), cancellationToken);
         return NoContent();
     }
 
@@ -191,7 +259,7 @@ public class GuildPostsController : ControllerBase
 
     // Admin/moderation endpoints under /api/admin/guilds - allow GuildMaster or Officer or Platform Admin
     /// <summary>
-    /// Admin/moderation: Pin a guild post.
+    /// Pin a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/pin")]
     [GuildMasterOrOfficerOnly("guildId")]
@@ -205,7 +273,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin/moderation: Unpin a guild post.
+    /// Unpin a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unpin")] 
     [GuildMasterOrOfficerOnly("guildId")]
@@ -219,7 +287,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin/moderation: Lock a guild post.
+    /// Lock a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/lock")]
     [GuildMasterOrOfficerOnly("guildId")]
@@ -233,7 +301,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin/moderation: Unlock a guild post.
+    /// Unlock a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unlock")]
     [GuildMasterOrOfficerOnly("guildId")]
@@ -247,7 +315,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin/moderation: Approve a guild post.
+    /// Approve a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/approve")]
     [GuildMasterOrOfficerOnly("guildId")]
@@ -261,7 +329,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Admin/moderation: Reject a guild post.
+    /// Reject a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/reject")]
     [GuildMasterOrOfficerOnly("guildId")]

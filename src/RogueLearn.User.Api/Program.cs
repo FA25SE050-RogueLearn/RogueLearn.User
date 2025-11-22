@@ -8,6 +8,8 @@ using BuildingBlocks.Shared.Authentication;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.SemanticKernel;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
@@ -122,6 +124,7 @@ try
     builder.Services.AddApiServices();
 
     builder.Services.AddGrpc();
+    builder.Services.AddHealthChecks();
     if (builder.Environment.IsDevelopment())
     {
         builder.Services.AddGrpcReflection();
@@ -154,6 +157,14 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        ResponseWriter = async (ctx, report) =>
+        {
+            ctx.Response.ContentType = "text/plain";
+            await ctx.Response.WriteAsync(report.Status == HealthStatus.Healthy ? "OK" : report.Status.ToString());
+        }
+    });
 
     app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserProfilesGrpcService>();
     app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserContextGrpcService>();
