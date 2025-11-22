@@ -459,7 +459,33 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             await CheckForOverallQuestCompletion(stepProgress.AttemptId, cancellationToken);
         }
 
-        await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+        // ⭐ CRITICAL FIX: Check if stepProgress has an ID before updating
+        // If it's a new record (just created in Handle method), it has an ID but might not exist in DB yet
+        // So we need to handle both cases
+        if (stepProgress.Id == Guid.Empty)
+        {
+            // This is a brand new record, add it
+            await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
+            _logger.LogInformation("✅ Added new UserQuestStepProgress {ProgressId} for Step {StepId}",
+                stepProgress.Id, questStep.Id);
+        }
+        else
+        {
+            // Try to update, but catch if it doesn't exist yet
+            try
+            {
+                await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+                _logger.LogInformation("✅ Updated UserQuestStepProgress {ProgressId}", stepProgress.Id);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("no results"))
+            {
+                // Record doesn't exist in DB yet, add it instead
+                _logger.LogWarning("⚠️ StepProgress didn't exist in DB, adding instead: {Error}", ex.Message);
+                await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
+                _logger.LogInformation("✅ Added UserQuestStepProgress {ProgressId} after update attempt failed",
+                    stepProgress.Id);
+            }
+        }
     }
 
     private async Task CheckForOverallQuestCompletion(Guid attemptId, CancellationToken cancellationToken)
