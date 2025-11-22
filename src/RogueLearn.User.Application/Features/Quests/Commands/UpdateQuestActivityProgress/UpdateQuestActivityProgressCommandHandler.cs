@@ -464,31 +464,68 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
     private async Task CheckForOverallQuestCompletion(Guid attemptId, CancellationToken cancellationToken)
     {
-        var attempt = await _attemptRepository.GetByIdAsync(attemptId, cancellationToken)
-            ?? throw new NotFoundException("UserQuestAttempt", attemptId);
+        _logger.LogInformation("🔍 Checking for overall quest completion for Attempt {AttemptId}", attemptId);
 
-        var allStepsForQuest = await _questStepRepository.FindByQuestIdAsync(attempt.QuestId, cancellationToken);
-        var allStepIdsForQuest = allStepsForQuest.Select(s => s.Id).ToHashSet();
-
-        var completedStepsForAttempt = (await _stepProgressRepository.FindAsync(
-            sp => sp.AttemptId == attemptId && sp.Status == StepCompletionStatus.Completed,
-            cancellationToken
-        )).Select(sp => sp.StepId).ToHashSet();
-
-        if (allStepIdsForQuest.IsSubsetOf(completedStepsForAttempt))
+        try
         {
-            attempt.Status = QuestAttemptStatus.Completed;
-            attempt.CompletedAt = DateTimeOffset.UtcNow;
-            await _attemptRepository.UpdateAsync(attempt, cancellationToken);
-            _logger.LogInformation("All steps completed. Marked Quest Attempt {AttemptId} as 'Completed'.", attempt.Id);
+            var attempt = await _attemptRepository.GetByIdAsync(attemptId, cancellationToken)
+                ?? throw new NotFoundException("UserQuestAttempt", attemptId);
 
-            var parentQuest = await _questRepository.GetByIdAsync(attempt.QuestId, cancellationToken);
-            if (parentQuest != null && parentQuest.Status != QuestStatus.Completed)
+            var allStepsForQuest = await _questStepRepository.FindByQuestIdAsync(attempt.QuestId, cancellationToken);
+            var allStepIdsForQuest = allStepsForQuest.Select(s => s.Id).ToHashSet();
+
+            // ⭐ FIX: Fetch ALL step progress first (no enum filter), then filter in-memory
+            var allStepProgressForAttempt = (await _stepProgressRepository.FindAsync(
+                sp => sp.AttemptId == attemptId,
+                cancellationToken
+            )).ToList();
+
+            // ✅ Now filter in-memory using enum comparison (this is safe)
+            var completedStepsForAttempt = allStepProgressForAttempt
+                .Where(sp => sp.Status == StepCompletionStatus.Completed)
+                .Select(sp => sp.StepId)
+                .ToHashSet();
+
+            _logger.LogInformation("📊 Quest completion check: {Completed}/{Total} steps completed",
+                completedStepsForAttempt.Count, allStepIdsForQuest.Count);
+
+            // If all steps are completed, mark quest as complete
+            if (allStepIdsForQuest.IsSubsetOf(completedStepsForAttempt))
             {
-                parentQuest.Status = QuestStatus.Completed;
-                await _questRepository.UpdateAsync(parentQuest, cancellationToken);
-                _logger.LogInformation("Parent Quest {QuestId} status updated to 'Completed'.", parentQuest.Id);
+                if (attempt.Status != QuestAttemptStatus.Completed)
+                {
+                    attempt.Status = QuestAttemptStatus.Completed;
+                    attempt.CompletedAt = DateTimeOffset.UtcNow;
+                    await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+                    _logger.LogInformation("🏆 All steps completed. Marked Quest Attempt {AttemptId} as 'Completed'.", attempt.Id);
+                }
+
+                // Update parent quest status
+                var parentQuest = await _questRepository.GetByIdAsync(attempt.QuestId, cancellationToken);
+                if (parentQuest != null && parentQuest.Status != QuestStatus.Completed)
+                {
+                    parentQuest.Status = QuestStatus.Completed;
+                    await _questRepository.UpdateAsync(parentQuest, cancellationToken);
+                    _logger.LogInformation("🏆 Parent Quest {QuestId} status updated to 'Completed'.", parentQuest.Id);
+                }
             }
+            else
+            {
+                // Some steps still pending - keep attempt as InProgress
+                if (attempt.Status != QuestAttemptStatus.InProgress)
+                {
+                    attempt.Status = QuestAttemptStatus.InProgress;
+                    attempt.UpdatedAt = DateTimeOffset.UtcNow;
+                    await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+                }
+                _logger.LogInformation("⏳ Quest {QuestId} remains InProgress ({Completed}/{Total} steps)",
+                    attempt.QuestId, completedStepsForAttempt.Count, allStepIdsForQuest.Count);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error in CheckForOverallQuestCompletion for Attempt {AttemptId}", attemptId);
+            throw;
         }
     }
 }

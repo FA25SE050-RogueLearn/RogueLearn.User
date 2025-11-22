@@ -28,44 +28,72 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
 
     public async Task<CompletedActivitiesDto> Handle(GetCompletedActivitiesQuery request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Fetching completed activities for Step:{StepId}", request.StepId);
+        _logger.LogInformation("🔍 Fetching completed activities for Step:{StepId}", request.StepId);
 
-        // 1. Get quest step
-        var questStep = await _questStepRepository.GetByIdAsync(request.StepId, cancellationToken)
-            ?? throw new NotFoundException("QuestStep", request.StepId);
-
-        if (questStep.QuestId != request.QuestId)
+        try
         {
-            throw new NotFoundException("QuestStep does not belong to this quest");
+            // 1. Get quest step
+            var questStep = await _questStepRepository.GetByIdAsync(request.StepId, cancellationToken)
+                ?? throw new NotFoundException("QuestStep", request.StepId);
+
+            if (questStep.QuestId != request.QuestId)
+            {
+                throw new NotFoundException("QuestStep does not belong to this quest");
+            }
+
+            // 2. Get user's attempt
+            var attempt = await _attemptRepository.FirstOrDefaultAsync(
+                a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
+                cancellationToken)
+                ?? throw new NotFoundException("UserQuestAttempt", request.QuestId);
+
+            // 3. ⭐ FIX: Get step progress - if null, return empty progress (user just started this step)
+            var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
+                sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
+                cancellationToken);
+
+            if (stepProgress is null)
+            {
+                _logger.LogInformation("ℹ️ No progress yet for Step:{StepId} - user just started this step", request.StepId);
+
+                // Return empty progress with all activities marked as incomplete
+                var allActivities = ExtractAndMapActivities(questStep.Content, Array.Empty<Guid>());
+
+                var emptyResult = new CompletedActivitiesDto
+                {
+                    StepId = request.StepId,
+                    Activities = allActivities,
+                    CompletedCount = 0,
+                    TotalCount = allActivities.Count
+                };
+
+                _logger.LogInformation("📊 Returned empty progress: 0/{Total} activities completed",
+                    emptyResult.TotalCount);
+
+                return emptyResult;
+            }
+
+            // 4. Parse activities from content and map with completion status
+            var activities = ExtractAndMapActivities(questStep.Content, stepProgress.CompletedActivityIds ?? Array.Empty<Guid>());
+
+            var result = new CompletedActivitiesDto
+            {
+                StepId = request.StepId,
+                Activities = activities,
+                CompletedCount = activities.Count(a => a.IsCompleted),
+                TotalCount = activities.Count
+            };
+
+            _logger.LogInformation("✅ Completed activities: {Completed}/{Total}",
+                result.CompletedCount, result.TotalCount);
+
+            return result;
         }
-
-        // 2. Get user's attempt
-        var attempt = await _attemptRepository.FirstOrDefaultAsync(
-            a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
-            cancellationToken)
-            ?? throw new NotFoundException("UserQuestAttempt", request.QuestId);
-
-        // 3. Get step progress
-        var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
-            sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
-            cancellationToken)
-            ?? throw new NotFoundException("UserQuestStepProgress", request.StepId);
-
-        // 4. Parse activities from content and map with completion status
-        var activities = ExtractAndMapActivities(questStep.Content, stepProgress.CompletedActivityIds ?? Array.Empty<Guid>());
-
-        var result = new CompletedActivitiesDto
+        catch (Exception ex)
         {
-            StepId = request.StepId,
-            Activities = activities,
-            CompletedCount = activities.Count(a => a.IsCompleted),
-            TotalCount = activities.Count
-        };
-
-        _logger.LogInformation("Completed activities: {Completed}/{Total}",
-            result.CompletedCount, result.TotalCount);
-
-        return result;
+            _logger.LogError(ex, "❌ Error fetching completed activities for Step:{StepId}", request.StepId);
+            throw;
+        }
     }
 
     private List<ActivityProgressDto> ExtractAndMapActivities(object? content, Guid[] completedIds)
@@ -122,7 +150,7 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error extracting activities");
+            _logger.LogError(ex, "❌ Error extracting activities");
         }
 
         return activities;

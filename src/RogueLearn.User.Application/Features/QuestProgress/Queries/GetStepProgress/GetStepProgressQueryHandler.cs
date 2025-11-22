@@ -53,27 +53,47 @@ public class GetStepProgressQueryHandler : IRequestHandler<GetStepProgressQuery,
                 throw new NotFoundException("UserQuestAttempt", request.QuestId);
             }
 
-            // 3. Get step progress
+            // 3. ⭐ FIX: Get step progress - if null, return empty progress (user just started this step)
             var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
                 sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
                 cancellationToken);
 
             if (stepProgress is null)
             {
-                _logger.LogWarning("❌ UserQuestStepProgress not found for Step:{StepId}", request.StepId);
-                throw new NotFoundException("UserQuestStepProgress", request.StepId);
+                _logger.LogInformation("ℹ️ No progress yet for Step:{StepId} - user just started this step", request.StepId);
+
+                // Count total activities in step
+                var totalActivities = ExtractActivityCount(questStep.Content);
+
+                // Return empty progress with 0 completed activities
+                var emptyResponse = new GetStepProgressResponse
+                {
+                    StepId = questStep.Id,
+                    StepTitle = questStep.Title,
+                    Status = "InProgress",
+                    CompletedActivitiesCount = 0,
+                    TotalActivitiesCount = totalActivities,
+                    StartedAt = null,
+                    CompletedAt = null,
+                    CompletedActivityIds = Array.Empty<Guid>(),
+                    ProgressPercentage = 0
+                };
+
+                _logger.LogInformation("📊 Returned empty progress: 0/{Total} activities", totalActivities);
+
+                return emptyResponse;
             }
 
             // 4. Count total activities in step
-            var totalActivities = ExtractActivityCount(questStep.Content);
+            var totalActivitiesCount = ExtractActivityCount(questStep.Content);
             var completedCount = stepProgress.CompletedActivityIds?.Length ?? 0;
 
-            var progressPercentage = totalActivities > 0
-                ? Math.Round((decimal)completedCount / totalActivities * 100, 2)
+            var progressPercentage = totalActivitiesCount > 0
+                ? Math.Round((decimal)completedCount / totalActivitiesCount * 100, 2)
                 : 0;
 
             _logger.LogInformation("✅ Step progress: {Completed}/{Total} activities ({Percentage}%)",
-                completedCount, totalActivities, progressPercentage);
+                completedCount, totalActivitiesCount, progressPercentage);
 
             return new GetStepProgressResponse
             {
@@ -81,7 +101,7 @@ public class GetStepProgressQueryHandler : IRequestHandler<GetStepProgressQuery,
                 StepTitle = questStep.Title,
                 Status = stepProgress.Status.ToString(),
                 CompletedActivitiesCount = completedCount,
-                TotalActivitiesCount = totalActivities,
+                TotalActivitiesCount = totalActivitiesCount,
                 StartedAt = stepProgress.StartedAt?.DateTime,
                 CompletedAt = stepProgress.CompletedAt?.DateTime,
                 CompletedActivityIds = stepProgress.CompletedActivityIds ?? Array.Empty<Guid>(),
