@@ -1,3 +1,6 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 
@@ -35,6 +38,16 @@ public class Meeting : BaseModel
 
     [Column("meeting_link")]
     public string? MeetingLink { get; set; }
+
+    [Column("meeting_code")]
+    public string? MeetingCode { get; set; }
+
+    [Column("space_name")]
+    public string? SpaceName { get; set; }
+
+    [Column("meeting_status")]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public MeetingStatus Status { get; set; } = MeetingStatus.Scheduled;
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

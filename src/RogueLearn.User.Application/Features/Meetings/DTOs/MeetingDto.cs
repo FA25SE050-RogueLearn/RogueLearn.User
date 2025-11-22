@@ -1,3 +1,4 @@
+using RogueLearn.User.Domain.Enums;
 namespace RogueLearn.User.Application.Features.Meetings.DTOs;
 
 public class MeetingDto
@@ -12,4 +13,7 @@ public class MeetingDto
     public DateTimeOffset? ActualEndTime { get; set; }
     public Guid OrganizerId { get; set; }
     public string? MeetingLink { get; set; }
+    public string? MeetingCode { get; set; }
+    public string? SpaceName { get; set; }
+    public MeetingStatus Status { get; set; }
 }
