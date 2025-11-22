@@ -1,5 +1,6 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestLineFromCurriculum/GenerateQuestLineCommandHandler.cs
-using Hangfire;
+// ⭐ FIXED: Use class_specialization_subjects.semester for class subjects
+
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -12,16 +13,15 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLine
 public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine, GenerateQuestLineResponse>
 {
     private static readonly HashSet<string> ExcludedSubjectCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-{
-    "VOV114",
-    "VOV124",
-    "VOV134",  // Vovinam
-    "TMI101",  // Musical instruments
-    "OTP101",  // Orientation
-    "TRS601",  // English 6
-    "PEN"      // if you actually use this code; adjust as needed
-};
-
+    {
+        "VOV114",
+        "VOV124",
+        "VOV134",  // Vovinam
+        "TMI101",  // Musical instruments
+        "OTP101",  // Orientation
+        "TRS601",  // English 6
+        "PEN"      // if you actually use this code; adjust as needed
+    };
 
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly ISubjectRepository _subjectRepository;
@@ -92,29 +92,72 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
 
         // --- Start Reconciliation Logic ---
 
-        // 1. Get the "ideal" state from the curriculum
-        var routeSubjects = await _subjectRepository.GetSubjectsByRoute(userProfile.RouteId.Value, cancellationToken);
-        var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(userProfile.ClassId.Value, cancellationToken);
+        // ⭐ FIX: Phase 1 - Get curriculum program subjects
+        var routeSubjects = (await _subjectRepository.GetSubjectsByRoute(userProfile.RouteId.Value, cancellationToken)).ToList();
+        _logger.LogInformation("Retrieved {Count} subjects from curriculum program", routeSubjects.Count);
 
-        // 1. Create ideal subjects list
-        var idealSubjects = routeSubjects.Concat(classSubjects).DistinctBy(s => s.Id).ToList();
+        // ⭐ FIX: Phase 2 - Get class specialization subjects WITH their semester values
+        var classSpecializationRecords = (await _classSpecializationSubjectRepository.FindAsync(
+            css => css.ClassId == userProfile.ClassId.Value, cancellationToken)).ToList();
 
-        // 2. Filter out excluded subjects
+        _logger.LogInformation("Found {Count} class specialization records", classSpecializationRecords.Count);
+
+        // ⭐ IMPORTANT: Extract subject IDs and create a mapping of SubjectId -> Semester
+        var classSpecializationSubjectIds = classSpecializationRecords
+            .Select(css => css.SubjectId)
+            .ToHashSet();
+
+        // Create a dictionary: SubjectId -> Semester (from class_specialization_subjects table)
+        var classSpecializationSemesterMap = classSpecializationRecords
+            .ToDictionary(css => css.SubjectId, css => css.Semester);
+
+        _logger.LogInformation("Mapped {Count} class specialization subjects to semesters", classSpecializationSemesterMap.Count);
+
+        // Fetch full Subject entities for class specialization
+        var allSubjects = (await _subjectRepository.GetAllAsync(cancellationToken)).ToList();
+        var classSpecializationSubjects = allSubjects
+            .Where(s => classSpecializationSubjectIds.Contains(s.Id))
+            .ToList();
+
+        _logger.LogInformation("Retrieved {Count} class specialization subjects with full details", classSpecializationSubjects.Count);
+
+        // ⭐ CRITICAL FIX: Combine both sources and OVERRIDE semester for class subjects
+        var idealSubjects = routeSubjects
+            .Concat(classSpecializationSubjects)
+            .DistinctBy(s => s.Id)
+            .ToList();
+
+        // ⭐ NEW: For class specialization subjects, use their semester from the CSS table
+        foreach (var subject in idealSubjects.Where(s => classSpecializationSubjectIds.Contains(s.Id)))
+        {
+            if (classSpecializationSemesterMap.TryGetValue(subject.Id, out var cssEsemester))
+            {
+                // Override the subject's semester with the class specialization semester
+                subject.Semester = cssEsemester;
+                _logger.LogInformation("Overriding semester for class subject {SubjectCode}: {Semester}", subject.SubjectCode, cssEsemester);
+            }
+        }
+
+        _logger.LogInformation("Combined ideal subject list: {Count} total subjects (Program + Class Specialization)", idealSubjects.Count);
+
+        // Filter out excluded subjects
         var filteredIdealSubjects = idealSubjects
             .Where(s => !IsExcludedSubject(s))
             .ToList();
 
-        // 3. Get IDs from filtered list (only once)
+        _logger.LogInformation("After filtering excluded subjects: {Count} subjects remain", filteredIdealSubjects.Count);
+
+        // Get IDs from filtered list
         var idealSubjectIds = filteredIdealSubjects.Select(s => s.Id).ToHashSet();
 
-        // 2. Get the "current" state from the user's learning path
+        // Get the "current" state from the user's learning path
         var currentChapters = (await _questChapterRepository.FindAsync(c => c.LearningPathId == learningPath.Id, cancellationToken)).ToList();
         var currentQuests = (await _questRepository.GetAllAsync(cancellationToken))
             .Where(q => q.QuestChapterId.HasValue && currentChapters.Select(c => c.Id).Contains(q.QuestChapterId.Value))
             .ToList();
         var currentSubjectIdsWithQuests = currentQuests.Where(q => q.SubjectId.HasValue).Select(q => q.SubjectId!.Value).ToHashSet();
 
-        // 3. Identify quests to archive (subjects that are no longer in the curriculum)
+        // Identify quests to archive (subjects that are no longer in the curriculum)
         var questsToArchive = currentQuests
             .Where(q => q.SubjectId.HasValue && !idealSubjectIds.Contains(q.SubjectId.Value) && q.IsActive)
             .ToList();
@@ -129,8 +172,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             }
         }
 
-        // 4. Group ideal subjects by semester to create/update chapters and quests
-        // ⭐ FIXED: Use filteredIdealSubjects instead of idealSubjects
+        // ⭐ FIXED: Now includes subjects with semesters from class_specialization_subjects
         var idealSemesterMap = filteredIdealSubjects
             .Where(subject => subject.Semester.HasValue)
             .GroupBy(subject => subject.Semester!.Value)
@@ -139,8 +181,15 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 group => group.ToList()
             );
 
-        foreach (var (semesterNumber, subjectsInSemester) in idealSemesterMap.OrderBy(kvp => kvp.Key))
+        _logger.LogInformation("Created semester map with {Count} semesters", idealSemesterMap.Count);
+
+        foreach (var kvp in idealSemesterMap.OrderBy(x => x.Key))
         {
+            var semesterNumber = kvp.Key;
+            var subjectsInSemester = kvp.Value;
+
+            _logger.LogInformation("Processing Semester {SemesterNumber} with {SubjectCount} subjects", semesterNumber, subjectsInSemester.Count);
+
             // Find or create the chapter for this semester
             var chapterTitle = $"Semester {semesterNumber}";
             var chapter = currentChapters.FirstOrDefault(c => c.Title == chapterTitle);
@@ -157,21 +206,22 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 _logger.LogInformation("Created new QuestChapter: {Title}", chapter.Title);
             }
 
-            // ⭐ NEW: Get all student semester subjects for this user to determine recommendation reason
+            // Get all student semester subjects for this user to determine recommendation reason
             var userSemesterSubjects = (await _studentSemesterSubjectRepository.FindAsync(
                 ss => ss.AuthUserId == request.AuthUserId, cancellationToken)).ToList();
 
-            // 5. Identify new quests to create for this chapter
+            // Identify new quests to create for this chapter
             int questSequence = 1;
             foreach (var subject in subjectsInSemester.OrderBy(s => s.SubjectCode))
             {
                 if (!currentSubjectIdsWithQuests.Contains(subject.Id))
                 {
-                    // ⭐ NEW: Get recommendation reason based on student's status for this subject
+                    // Get recommendation reason based on student's status for this subject
                     var recommendationReason = DetermineRecommendationReason(userSemesterSubjects, subject.Id);
 
                     // This subject is in the ideal curriculum but doesn't have a quest yet. Create one.
-                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} with recommendation: {Reason}", subject.SubjectCode, recommendationReason);
+                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} ({SubjectName}) - Semester {Semester} - with recommendation: {Reason}",
+                        subject.SubjectCode, subject.SubjectName, semesterNumber, recommendationReason);
                     var newQuest = new Quest
                     {
                         Title = subject.SubjectCode + ": " + subject.SubjectName,
@@ -184,15 +234,14 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                         Status = QuestStatus.NotStarted,
                         IsActive = true, // New quests are active by default
                         CreatedBy = userProfile.AuthUserId,
-                        IsRecommended = true,  // ⭐ NEW: Mark as recommended
-                        RecommendationReason = recommendationReason  // ⭐ NEW: Set reason
+                        IsRecommended = true,
+                        RecommendationReason = recommendationReason
                     };
                     await _questRepository.AddAsync(newQuest, cancellationToken);
                 }
                 else
                 {
-                    // If the quest already exists, we could update its details here if needed (e.g., name change).
-                    // For now, we just ensure its sequence is correct.
+                    // If the quest already exists, ensure its sequence is correct
                     var existingQuest = currentQuests.First(q => q.SubjectId == subject.Id);
                     if (existingQuest.Sequence != questSequence || !existingQuest.IsActive)
                     {
@@ -205,13 +254,15 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             }
         }
 
-        _logger.LogInformation("Successfully reconciled QuestLine structure {LearningPathId}", learningPath.Id);
+        _logger.LogInformation("Successfully reconciled QuestLine structure {LearningPathId} with {SubjectCount} ideal subjects",
+            learningPath.Id, idealSubjects.Count);
 
         return new GenerateQuestLineResponse
         {
             LearningPathId = learningPath.Id,
         };
     }
+
     private static bool IsExcludedSubject(Subject subject)
     {
         // Check by code
@@ -230,7 +281,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         return false;
     }
 
-    // ⭐ NEW: Helper method to determine recommendation reason
+    // Helper method to determine recommendation reason
     private string DetermineRecommendationReason(List<StudentSemesterSubject> userSemesterSubjects, Guid subjectId)
     {
         var studentSubject = userSemesterSubjects.FirstOrDefault(ss => ss.SubjectId == subjectId);
