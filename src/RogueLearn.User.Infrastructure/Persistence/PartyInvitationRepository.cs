@@ -46,4 +46,15 @@ public class PartyInvitationRepository : GenericRepository<PartyInvitation>, IPa
 
         return response.Models;
     }
+
+    public async Task<PartyInvitation?> GetByPartyAndInviteeAsync(Guid partyId, Guid inviteeAuthUserId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<PartyInvitation>()
+            .Filter("party_id", Supabase.Postgrest.Constants.Operator.Equals, partyId.ToString())
+            .Filter("invitee_id", Supabase.Postgrest.Constants.Operator.Equals, inviteeAuthUserId.ToString())
+            .Get(cancellationToken);
+
+        return response.Models.FirstOrDefault();
+    }
 }

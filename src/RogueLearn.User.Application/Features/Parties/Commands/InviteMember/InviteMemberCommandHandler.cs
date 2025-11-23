@@ -58,26 +58,40 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
                 throw new Exceptions.BadRequestException("Cannot invite yourself to the party.");
             }
 
-            var pending = await _invitationRepository.GetPendingInvitationsByPartyAsync(request.PartyId, cancellationToken);
-            if (pending.Any(i => i.InviteeId == inviteeId.Value))
+            var existing = await _invitationRepository.GetByPartyAndInviteeAsync(request.PartyId, inviteeId.Value, cancellationToken);
+            if (existing is not null)
             {
-                throw new Exceptions.BadRequestException("An invitation is already pending for this user.");
+                if (existing.Status == InvitationStatus.Pending && existing.ExpiresAt > DateTimeOffset.UtcNow)
+                {
+                    throw new Exceptions.BadRequestException("An invitation is already pending for this user.");
+                }
+
+                existing.InviterId = request.InviterAuthUserId;
+                existing.Message = request.Message;
+                existing.Status = InvitationStatus.Pending;
+                existing.InvitedAt = DateTimeOffset.UtcNow;
+                existing.RespondedAt = null;
+                existing.ExpiresAt = request.ExpiresAt;
+
+                var updated = await _invitationRepository.UpdateAsync(existing, cancellationToken);
+                await _notificationService.SendInvitationNotificationAsync(updated, cancellationToken);
             }
-
-            var invitation = new PartyInvitation
+            else
             {
-                PartyId = request.PartyId,
-                InviterId = request.InviterAuthUserId,
-                InviteeId = inviteeId.Value,
-                Message = request.Message,
-                Status = InvitationStatus.Pending,
-                ExpiresAt = request.ExpiresAt,
-                InvitedAt = DateTimeOffset.UtcNow
-            };
+                var invitation = new PartyInvitation
+                {
+                    PartyId = request.PartyId,
+                    InviterId = request.InviterAuthUserId,
+                    InviteeId = inviteeId.Value,
+                    Message = request.Message,
+                    Status = InvitationStatus.Pending,
+                    ExpiresAt = request.ExpiresAt,
+                    InvitedAt = DateTimeOffset.UtcNow
+                };
 
-            invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
-
-            await _notificationService.SendInvitationNotificationAsync(invitation, cancellationToken);
+                invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
+                await _notificationService.SendInvitationNotificationAsync(invitation, cancellationToken);
+            }
         }
 
         return Unit.Value;
