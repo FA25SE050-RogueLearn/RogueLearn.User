@@ -6,7 +6,6 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums;
 using System.Text.Json;
-using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepProgress;
 
@@ -16,44 +15,37 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
     private readonly IQuestStepRepository _questStepRepository;
     private readonly IQuestRepository _questRepository;
-    private readonly IMediator _mediator;
     private readonly ILogger<UpdateQuestStepProgressCommandHandler> _logger;
-
-    // Helper record to deserialize an activity from the quest_step's content JSON
-    private record ActivityPayload(JsonElement Payload);
 
     public UpdateQuestStepProgressCommandHandler(
         IUserQuestAttemptRepository attemptRepository,
         IUserQuestStepProgressRepository stepProgressRepository,
         IQuestStepRepository questStepRepository,
         IQuestRepository questRepository,
-        IMediator mediator,
         ILogger<UpdateQuestStepProgressCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
         _stepProgressRepository = stepProgressRepository;
         _questStepRepository = questStepRepository;
         _questRepository = questRepository;
-        _mediator = mediator;
         _logger = logger;
     }
 
     public async Task Handle(UpdateQuestStepProgressCommand request, CancellationToken cancellationToken)
     {
-        // MODIFICATION: The 'StepId' in the request now refers to the weekly module (the QuestStep).
-        // The 'ActivityId' is the specific task within that module being updated.
         _logger.LogInformation(
-            "Updating activity progress for User:{AuthUserId}, Quest:{QuestId}, Module (Step):{StepId}, Activity:{ActivityId} to Status:{Status}",
-            request.AuthUserId, request.QuestId, request.StepId, request.ActivityId, request.Status);
+            "🎯 UpdateQuestStepProgress: Checking step completion for User:{AuthUserId}, Quest:{QuestId}, Step:{StepId}",
+            request.AuthUserId, request.QuestId, request.StepId);
 
-        // 1. Find the parent QuestStep (the weekly module)
+        // 1. Fetch the QuestStep
         var questStep = await _questStepRepository.GetByIdAsync(request.StepId, cancellationToken);
         if (questStep is null || questStep.QuestId != request.QuestId)
         {
-            throw new NotFoundException("QuestStep (Module)", request.StepId);
+            _logger.LogError("❌ QuestStep {StepId} not found or belongs to different quest", request.StepId);
+            throw new NotFoundException("QuestStep", request.StepId);
         }
 
-        // 2. Find or create the UserQuestAttempt (tracks attempt on the overall quest)
+        // 2. Fetch or create UserQuestAttempt
         var attempt = await _attemptRepository.FirstOrDefaultAsync(
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
@@ -68,10 +60,11 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
                 StartedAt = DateTimeOffset.UtcNow
             };
             attempt = await _attemptRepository.AddAsync(attempt, cancellationToken);
-            _logger.LogInformation("Created new UserQuestAttempt {AttemptId} for Quest {QuestId}", attempt.Id, request.QuestId);
+            _logger.LogInformation("✅ Created new UserQuestAttempt {AttemptId} for Quest {QuestId}",
+                attempt.Id, request.QuestId);
         }
 
-        // 3. Mark the parent Quest as InProgress if it's the first action
+        // 3. Mark parent Quest as InProgress if needed
         var parentQuest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
             ?? throw new NotFoundException("Quest", request.QuestId);
 
@@ -79,10 +72,10 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
         {
             parentQuest.Status = QuestStatus.InProgress;
             await _questRepository.UpdateAsync(parentQuest, cancellationToken);
-            _logger.LogInformation("Parent Quest {QuestId} status updated to 'InProgress'.", parentQuest.Id);
+            _logger.LogInformation("✅ Parent Quest {QuestId} status updated to InProgress", parentQuest.Id);
         }
 
-        // 4. Find or create the UserQuestStepProgress (tracks progress on the weekly module)
+        // 4. Fetch or create UserQuestStepProgress for this step
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
             sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
             cancellationToken);
@@ -93,159 +86,248 @@ public class UpdateQuestStepProgressCommandHandler : IRequestHandler<UpdateQuest
             {
                 AttemptId = attempt.Id,
                 StepId = request.StepId,
-                Status = StepCompletionStatus.InProgress, // Start as InProgress
+                Status = StepCompletionStatus.InProgress,
                 StartedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
                 AttemptsCount = 1,
-                CompletedActivityIds = Array.Empty<Guid>() // Initialize empty array
+                CompletedActivityIds = Array.Empty<Guid>()
             };
             stepProgress = await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
+            _logger.LogInformation("✅ Created new UserQuestStepProgress {ProgressId} for Step {StepId}",
+                stepProgress.Id, request.StepId);
         }
 
-        // 5. Core Logic: Process the specific activity completion
-        if (request.Status == StepCompletionStatus.Completed)
+        // 5. ⭐ CRITICAL: DO NOT AWARD XP HERE!
+        // XP is awarded by UpdateQuestActivityProgressCommandHandler when activity is completed
+        // This handler ONLY updates step/quest status based on activity completion
+
+        _logger.LogInformation("🔍 Checking step completion status for Step {StepId}", request.StepId);
+
+        // Check if all activities in this step are now completed
+        await CheckAndUpdateStepCompletion(questStep, stepProgress, attempt, cancellationToken);
+
+        _logger.LogInformation("✅ Successfully updated step progress for Step:{StepId}", request.StepId);
+    }
+
+    /// <summary>
+    /// Checks if all activities in a step are completed and updates the step/quest status accordingly.
+    /// Called after an activity is completed (by UpdateQuestActivityProgressCommandHandler).
+    /// </summary>
+    private async Task CheckAndUpdateStepCompletion(
+        QuestStep questStep,
+        UserQuestStepProgress stepProgress,
+        UserQuestAttempt attempt,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("📊 Step progress: {Completed}/{Total} activities completed",
+            stepProgress.CompletedActivityIds?.Length ?? 0,
+            CountActivitiesInContent(questStep.Content));
+
+        // Extract all activity IDs from the step content
+        var allActivityIds = ExtractActivityIdsFromContent(questStep.Content);
+        var completedActivityIds = stepProgress.CompletedActivityIds?.ToHashSet() ?? new HashSet<Guid>();
+
+        _logger.LogInformation("📋 Total activities in step: {Total}, Completed: {Completed}",
+            allActivityIds.Count, completedActivityIds.Count);
+
+        // If all activities are completed, mark step as complete
+        if (allActivityIds.Count > 0 && allActivityIds.IsSubsetOf(completedActivityIds))
         {
-            await CompleteActivityAndCheckForModuleCompletion(questStep, attempt, stepProgress, request.ActivityId, cancellationToken);
+            if (stepProgress.Status != StepCompletionStatus.Completed)
+            {
+                stepProgress.Status = StepCompletionStatus.Completed;
+                stepProgress.CompletedAt = DateTimeOffset.UtcNow;
+                stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
+                await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+                _logger.LogInformation("🎉 Step {StepId} marked as COMPLETED ({Completed}/{Total} activities)",
+                    questStep.Id, completedActivityIds.Count, allActivityIds.Count);
+            }
+
+            // Now check if the entire quest is complete
+            await CheckAndUpdateQuestCompletion(attempt, cancellationToken);
         }
         else
         {
-            // Logic for other statuses (e.g., InProgress, Skipped) can be handled here if needed.
-            // For now, we only focus on completion.
-            stepProgress.Status = StepCompletionStatus.InProgress; // Ensure module is InProgress
-            stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
-            await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+            // Some activities still pending
+            if (stepProgress.Status != StepCompletionStatus.InProgress)
+            {
+                stepProgress.Status = StepCompletionStatus.InProgress;
+                stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
+                await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+            }
+            _logger.LogInformation("⏳ Step {StepId} remains InProgress ({Completed}/{Total} activities)",
+                questStep.Id, completedActivityIds.Count, allActivityIds.Count);
         }
-
-        _logger.LogInformation("Successfully processed progress update for Activity:{ActivityId}", request.ActivityId);
     }
 
-    private async Task CompleteActivityAndCheckForModuleCompletion(QuestStep questStep, UserQuestAttempt attempt, UserQuestStepProgress stepProgress, Guid activityId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Checks if all steps in a quest are completed and updates the quest status accordingly.
+    /// </summary>
+    private async Task CheckAndUpdateQuestCompletion(
+        UserQuestAttempt attempt,
+        CancellationToken cancellationToken)
     {
-        // Ensure the activity isn't already completed to prevent duplicate XP awards.
-        if (stepProgress.CompletedActivityIds?.Contains(activityId) == true)
+        _logger.LogInformation("🔍 Checking quest completion for Attempt {AttemptId}", attempt.Id);
+
+        // Fetch all steps in this quest
+        var allStepsInQuest = (await _questStepRepository.FindByQuestIdAsync(attempt.QuestId, cancellationToken))
+            .ToList();
+        var totalStepsInQuest = allStepsInQuest.Count;
+
+        if (totalStepsInQuest == 0)
         {
-            _logger.LogInformation("Activity {ActivityId} is already completed for this step progress. No action taken.", activityId);
+            _logger.LogWarning("⚠️ Quest {QuestId} has no steps", attempt.QuestId);
             return;
         }
 
-        // Extract the specific activity and its payload from the module's content.
-        var (activity, totalActivities) = FindActivityInContent(questStep.Content, activityId);
+        // Fetch all step progress records for this attempt
+        var progressForQuestSteps = (await _stepProgressRepository.FindAsync(
+            sp => sp.AttemptId == attempt.Id,
+            cancellationToken
+        )).ToList();
 
-        if (activity == null)
-        {
-            _logger.LogWarning("Activity {ActivityId} not found within QuestStep {StepId}. Cannot process completion.", activityId, questStep.Id);
-            throw new NotFoundException("Activity", activityId);
-        }
+        // Count completed steps (in-memory filtering to avoid enum serialization issues)
+        var completedStepsInAttempt = progressForQuestSteps
+            .Count(sp => sp.Status == StepCompletionStatus.Completed);
 
-        // Dispatch XP event for this specific activity
-        if (activity.Payload.TryGetProperty("skillId", out var skillIdElement) &&
-            Guid.TryParse(skillIdElement.GetString(), out var skillId) &&
-            activity.Payload.TryGetProperty("experiencePoints", out var xpElement) &&
-            xpElement.TryGetInt32(out var experiencePoints))
-        {
-            var xpEvent = new IngestXpEventCommand
-            {
-                AuthUserId = attempt.AuthUserId,
-                SourceService = "QuestsService",
-                SourceType = SkillRewardSourceType.QuestComplete.ToString(), // Or a new "ActivityComplete" type
-                SourceId = activityId, // Idempotency key is now the activityId
-                SkillId = skillId,
-                SkillName = "", // Handler will look this up
-                Points = experiencePoints,
-                Reason = $"Completed activity in quest: {questStep.Title}"
-            };
+        _logger.LogInformation("📊 Quest completion check: {Completed}/{Total} steps completed",
+            completedStepsInAttempt, totalStepsInQuest);
 
-            await _mediator.Send(xpEvent, cancellationToken);
-            _logger.LogInformation("Dispatched IngestXpEvent for Activity {ActivityId} with SkillId {SkillId}", activityId, skillId);
-        }
-
-        // Update the progress record by adding the completed activity's ID to the array.
-        var completedIds = stepProgress.CompletedActivityIds?.ToList() ?? new List<Guid>();
-        if (!completedIds.Contains(activityId))
-        {
-            completedIds.Add(activityId);
-        }
-        stepProgress.CompletedActivityIds = completedIds.ToArray();
-        stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
-
-        // Check if all activities in the module are now complete.
-        if (totalActivities > 0 && completedIds.Count >= totalActivities)
-        {
-            stepProgress.Status = StepCompletionStatus.Completed;
-            stepProgress.CompletedAt = DateTimeOffset.UtcNow;
-            _logger.LogInformation("All activities complete for Module (Step) {StepId}. Marking as 'Completed'.", questStep.Id);
-
-            // After completing the module, check if the entire quest is now complete.
-            await CheckForOverallQuestCompletion(attempt, cancellationToken);
-        }
-        else
-        {
-            stepProgress.Status = StepCompletionStatus.InProgress;
-        }
-
-        await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
-    }
-
-    private (ActivityPayload? activity, int totalCount) FindActivityInContent(object? content, Guid activityId)
-    {
-        if (content is not Dictionary<string, object> contentDict ||
-            !contentDict.TryGetValue("activities", out var activitiesObj) ||
-            activitiesObj is not List<object> activitiesList)
-        {
-            return (null, 0);
-        }
-
-        foreach (var activityObj in activitiesList)
-        {
-            if (activityObj is Dictionary<string, object> activityDict &&
-                activityDict.TryGetValue("activityId", out var idObj) &&
-                Guid.TryParse(idObj.ToString(), out var currentActivityId) &&
-                currentActivityId == activityId)
-            {
-                // Found it. Now properly deserialize its payload.
-                if (activityDict.TryGetValue("payload", out var payloadObj))
-                {
-                    // Reserialize and parse to get a JsonElement, which is what AiActivity expects
-                    var payloadJson = JsonSerializer.Serialize(payloadObj);
-                    var payloadElement = JsonDocument.Parse(payloadJson).RootElement;
-                    return (new ActivityPayload(payloadElement), activitiesList.Count);
-                }
-            }
-        }
-
-        return (null, activitiesList.Count);
-    }
-
-    private async Task CheckForOverallQuestCompletion(UserQuestAttempt attempt, CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Checking for overall quest completion for Quest {QuestId}", attempt.QuestId);
-
-        var allStepsInQuest = (await _questStepRepository.FindByQuestIdAsync(attempt.QuestId, cancellationToken)).ToList();
-        var totalStepsInQuest = allStepsInQuest.Count;
-
-        var progressForQuestSteps = (await _stepProgressRepository.FindAsync(sp => sp.AttemptId == attempt.Id, cancellationToken)).ToList();
-        var completedStepsInAttempt = progressForQuestSteps.Count(sp => sp.Status == StepCompletionStatus.Completed);
-
-        _logger.LogInformation("Quest completion check: {CompletedSteps} of {TotalSteps} modules (steps) are complete for Attempt {AttemptId}",
-            completedStepsInAttempt, totalStepsInQuest, attempt.Id);
-
-        if (totalStepsInQuest > 0 && completedStepsInAttempt >= totalStepsInQuest)
+        // If all steps are complete, mark quest and attempt as complete
+        if (completedStepsInAttempt >= totalStepsInQuest)
         {
             if (attempt.Status != QuestAttemptStatus.Completed)
             {
                 attempt.Status = QuestAttemptStatus.Completed;
                 attempt.CompletedAt = DateTimeOffset.UtcNow;
                 await _attemptRepository.UpdateAsync(attempt, cancellationToken);
-                _logger.LogInformation("All modules completed. Marked Quest Attempt {AttemptId} as 'Completed'.", attempt.Id);
+                _logger.LogInformation("🏆 UserQuestAttempt {AttemptId} marked as COMPLETED", attempt.Id);
+            }
 
-                var parentQuest = await _questRepository.GetByIdAsync(attempt.QuestId, cancellationToken);
-                if (parentQuest != null && parentQuest.Status != QuestStatus.Completed)
+            // Update parent quest status
+            var parentQuest = await _questRepository.GetByIdAsync(attempt.QuestId, cancellationToken);
+            if (parentQuest != null && parentQuest.Status != QuestStatus.Completed)
+            {
+                parentQuest.Status = QuestStatus.Completed;
+                await _questRepository.UpdateAsync(parentQuest, cancellationToken);
+                _logger.LogInformation("🏆 Parent Quest {QuestId} marked as COMPLETED", parentQuest.Id);
+            }
+        }
+        else
+        {
+            // Some steps still pending - keep quest as InProgress
+            if (attempt.Status != QuestAttemptStatus.InProgress)
+            {
+                attempt.Status = QuestAttemptStatus.InProgress;
+                attempt.UpdatedAt = DateTimeOffset.UtcNow;
+                await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+            }
+            _logger.LogInformation("⏳ Quest {QuestId} remains InProgress ({Completed}/{Total} steps)",
+                attempt.QuestId, completedStepsInAttempt, totalStepsInQuest);
+        }
+    }
+
+    /// <summary>
+    /// Extracts all activity IDs from the quest step's JSON content.
+    /// Handles both Dictionary and JObject content types.
+    /// </summary>
+    private HashSet<Guid> ExtractActivityIdsFromContent(object? content)
+    {
+        var activityIds = new HashSet<Guid>();
+
+        if (content == null)
+        {
+            _logger.LogWarning("⚠️ Content is null");
+            return activityIds;
+        }
+
+        try
+        {
+            // Handle JObject from EF Core JSONB
+            if (content.GetType().Name == "JObject")
+            {
+                var jObjectJson = content.ToString();
+                using (var doc = JsonDocument.Parse(jObjectJson))
                 {
-                    parentQuest.Status = QuestStatus.Completed;
-                    await _questRepository.UpdateAsync(parentQuest, cancellationToken);
-                    _logger.LogInformation("Parent Quest {QuestId} status updated to 'Completed'.", parentQuest.Id);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("activities", out var activitiesElement) &&
+                        activitiesElement.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var activityElement in activitiesElement.EnumerateArray())
+                        {
+                            if (activityElement.TryGetProperty("activityId", out var idElement) &&
+                                Guid.TryParse(idElement.GetString(), out var id))
+                            {
+                                activityIds.Add(id);
+                            }
+                        }
+                    }
+                }
+                return activityIds;
+            }
+
+            // Handle Dictionary format
+            if (content is Dictionary<string, object> contentDict &&
+                contentDict.TryGetValue("activities", out var activitiesObj) &&
+                activitiesObj is List<object> activitiesList)
+            {
+                foreach (var activityObj in activitiesList)
+                {
+                    if (activityObj is Dictionary<string, object> activityDict &&
+                        activityDict.TryGetValue("activityId", out var idObj) &&
+                        Guid.TryParse(idObj.ToString(), out var id))
+                    {
+                        activityIds.Add(id);
+                    }
                 }
             }
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error extracting activity IDs from content");
+        }
+
+        return activityIds;
+    }
+
+    /// <summary>
+    /// Counts the number of activities in the quest step's content.
+    /// </summary>
+    private int CountActivitiesInContent(object? content)
+    {
+        if (content == null) return 0;
+
+        try
+        {
+            // Handle JObject
+            if (content.GetType().Name == "JObject")
+            {
+                var jObjectJson = content.ToString();
+                using (var doc = JsonDocument.Parse(jObjectJson))
+                {
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("activities", out var activitiesElement) &&
+                        activitiesElement.ValueKind == JsonValueKind.Array)
+                    {
+                        return activitiesElement.GetArrayLength();
+                    }
+                }
+                return 0;
+            }
+
+            // Handle Dictionary
+            if (content is Dictionary<string, object> contentDict &&
+                contentDict.TryGetValue("activities", out var activitiesObj) &&
+                activitiesObj is List<object> activitiesList)
+            {
+                return activitiesList.Count;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error counting activities");
+        }
+
+        return 0;
     }
 }

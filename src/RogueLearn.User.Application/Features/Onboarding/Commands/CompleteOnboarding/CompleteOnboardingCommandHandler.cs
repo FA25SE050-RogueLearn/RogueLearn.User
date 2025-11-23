@@ -31,7 +31,7 @@ public class CompleteOnboardingCommandHandler : IRequestHandler<CompleteOnboardi
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
             ?? throw new NotFoundException(nameof(UserProfile), request.AuthUserId);
 
-        if (userProfile.OnboardingCompleted)
+        if (userProfile.OnboardingCompleted && userProfile.RouteId.HasValue && userProfile.ClassId.HasValue)
         {
             throw new BadRequestException("User has already completed onboarding.");
         }
