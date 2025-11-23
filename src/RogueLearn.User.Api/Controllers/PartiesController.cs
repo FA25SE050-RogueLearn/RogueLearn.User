@@ -150,6 +150,7 @@ public class PartiesController : ControllerBase
     /// Configure party settings.
     /// </summary>
     [HttpPut("{partyId:guid}")]
+    [PartyLeaderOrCoLeaderOnly("partyId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
