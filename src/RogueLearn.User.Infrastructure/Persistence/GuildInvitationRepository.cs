@@ -32,4 +32,15 @@ public class GuildInvitationRepository : GenericRepository<GuildInvitation>, IGu
 
         return response.Models;
     }
+
+    public async Task<GuildInvitation?> GetByGuildAndInviteeAsync(Guid guildId, Guid inviteeAuthUserId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<GuildInvitation>()
+            .Filter("guild_id", Supabase.Postgrest.Constants.Operator.Equals, guildId.ToString())
+            .Filter("invitee_id", Supabase.Postgrest.Constants.Operator.Equals, inviteeAuthUserId.ToString())
+            .Get(cancellationToken);
+
+        return response.Models.FirstOrDefault();
+    }
 }

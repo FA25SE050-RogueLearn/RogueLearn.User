@@ -54,25 +54,47 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
             {
                 throw new Exceptions.BadRequestException("Cannot invite yourself to the guild.");
             }
-            if (pending.Any(i => i.InviteeId == inviteeId))
+            if (pending.Any(i => i.InviteeId == inviteeId.Value))
             {
                 throw new Exceptions.BadRequestException("An invitation is already pending for this user.");
             }
 
-            var invitation = new GuildInvitation
+            var existing = await _invitationRepository.GetByGuildAndInviteeAsync(request.GuildId, inviteeId.Value, cancellationToken);
+            if (existing is not null)
             {
-                GuildId = request.GuildId,
-                InviterId = request.InviterAuthUserId,
-                InviteeId = inviteeId.Value,
-                InvitationType = InvitationType.Invite,
-                Status = InvitationStatus.Pending,
-                Message = request.Message,
-                CreatedAt = DateTimeOffset.UtcNow,
-                ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
-            };
+                if (existing.Status == InvitationStatus.Pending && existing.ExpiresAt > DateTimeOffset.UtcNow)
+                {
+                    throw new Exceptions.BadRequestException("An invitation is already pending for this user.");
+                }
 
-            invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
-            createdIds.Add(invitation.Id);
+                existing.InviterId = request.InviterAuthUserId;
+                existing.InvitationType = InvitationType.Invite;
+                existing.Status = InvitationStatus.Pending;
+                existing.Message = request.Message;
+                existing.CreatedAt = DateTimeOffset.UtcNow;
+                existing.RespondedAt = null;
+                existing.ExpiresAt = DateTimeOffset.UtcNow.AddDays(7);
+
+                var updated = await _invitationRepository.UpdateAsync(existing, cancellationToken);
+                createdIds.Add(updated.Id);
+            }
+            else
+            {
+                var invitation = new GuildInvitation
+                {
+                    GuildId = request.GuildId,
+                    InviterId = request.InviterAuthUserId,
+                    InviteeId = inviteeId.Value,
+                    InvitationType = InvitationType.Invite,
+                    Status = InvitationStatus.Pending,
+                    Message = request.Message,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
+                };
+
+                invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
+                createdIds.Add(invitation.Id);
+            }
         }
         if (createdIds.Count == 0)
         {

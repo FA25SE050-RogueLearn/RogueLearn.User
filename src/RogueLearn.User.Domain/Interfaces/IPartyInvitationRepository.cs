@@ -9,4 +9,5 @@ public interface IPartyInvitationRepository : IGenericRepository<PartyInvitation
     Task<IEnumerable<PartyInvitation>> GetInvitationsByPartyAsync(Guid partyId, CancellationToken cancellationToken = default);
     Task<IEnumerable<PartyInvitation>> GetPendingInvitationsByPartyAsync(Guid partyId, CancellationToken cancellationToken = default);
     Task<IEnumerable<PartyInvitation>> GetPendingInvitationsByInviteeAsync(Guid inviteeAuthUserId, CancellationToken cancellationToken = default);
+    Task<PartyInvitation?> GetByPartyAndInviteeAsync(Guid partyId, Guid inviteeAuthUserId, CancellationToken cancellationToken = default);
 }
