@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/UpdateQuestActivityProgress/UpdateQuestActivityProgressCommandHandler.cs
+using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
@@ -7,6 +8,7 @@ using RogueLearn.User.Domain.Enums;
 using System.Text.Json;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 using RogueLearn.User.Application.Common;
+using RogueLearn.User.Application.Features.Quests.Services;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 
@@ -18,6 +20,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
     private readonly IQuestStepRepository _questStepRepository;
     private readonly IQuestRepository _questRepository;
+    private readonly IQuestSubmissionRepository _submissionRepository;
+    private readonly ActivityValidationService _activityValidationService;
     private readonly IMediator _mediator;
     private readonly ILogger<UpdateQuestActivityProgressCommandHandler> _logger;
 
@@ -26,6 +30,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         IUserQuestStepProgressRepository stepProgressRepository,
         IQuestStepRepository questStepRepository,
         IQuestRepository questRepository,
+        IQuestSubmissionRepository submissionRepository,
+        ActivityValidationService activityValidationService,
         IMediator mediator,
         ILogger<UpdateQuestActivityProgressCommandHandler> logger)
     {
@@ -33,6 +39,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         _stepProgressRepository = stepProgressRepository;
         _questStepRepository = questStepRepository;
         _questRepository = questRepository;
+        _submissionRepository = submissionRepository;
+        _activityValidationService = activityValidationService;
         _mediator = mediator;
         _logger = logger;
     }
@@ -55,9 +63,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
         await MarkParentQuestAsInProgressAsync(request.QuestId, cancellationToken);
 
-        var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
-            sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
-            cancellationToken) ?? await CreateNewStepProgressAsync(attempt.Id, request.StepId, cancellationToken);
+        // ⭐ FIX: Get or create step progress with proper error handling for race conditions
+        var stepProgress = await GetOrCreateStepProgressAsync(attempt.Id, request.StepId, cancellationToken);
 
         if (stepProgress.CompletedActivityIds?.Contains(request.ActivityId) == true && request.Status == StepCompletionStatus.Completed)
         {
@@ -67,6 +74,29 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
         if (request.Status == StepCompletionStatus.Completed)
         {
+            // ⭐ VALIDATION: Check if activity type requires submission validation (Quiz/KnowledgeCheck)
+            var activityType = ExtractActivityType(questStep.Content, request.ActivityId);
+
+            var (canComplete, validationMessage) = await _activityValidationService.ValidateActivityCompletion(
+                request.ActivityId,
+                request.AuthUserId,
+                activityType,
+                cancellationToken);
+
+            if (!canComplete)
+            {
+                _logger.LogWarning(
+                    "Activity completion validation failed for {ActivityId}: {Message}. " +
+                    "Activity Type: {ActivityType}",
+                    request.ActivityId, validationMessage, activityType);
+
+                // ✅ GRACEFUL: Return early with 400 Bad Request instead of throwing
+                // This allows the controller to handle it properly
+                throw new ValidationException(validationMessage);  // ✅ Use ValidationException instead
+            }
+
+            _logger.LogInformation("Activity {ActivityId} passed completion validation", request.ActivityId);
+
             await CompleteActivityAndCheckForModuleCompletion(questStep, stepProgress, attempt, request.ActivityId, cancellationToken);
         }
         else
@@ -106,23 +136,89 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         }
     }
 
-    private async Task<UserQuestStepProgress> CreateNewStepProgressAsync(Guid attemptId, Guid stepId, CancellationToken cancellationToken)
+    /// <summary>
+    /// ⭐ FIX: Get or create step progress with proper handling of race conditions
+    /// 
+    /// Problem: Two concurrent requests could both try to INSERT the same (attemptId, stepId) record
+    /// causing a unique constraint violation.
+    /// 
+    /// Solution: Use try-catch to handle the race condition gracefully:
+    /// 1. First, try to fetch existing record
+    /// 2. If not found, create new one with assigned ID
+    /// 3. If INSERT fails due to duplicate key, fetch the record that was just created
+    /// </summary>
+    private async Task<UserQuestStepProgress> GetOrCreateStepProgressAsync(
+        Guid attemptId, Guid stepId, CancellationToken cancellationToken)
     {
+        // Step 1: Try to find existing record
+        var existing = await _stepProgressRepository.FirstOrDefaultAsync(
+            sp => sp.AttemptId == attemptId && sp.StepId == stepId,
+            cancellationToken);
+
+        if (existing != null)
+        {
+            _logger.LogInformation("✅ Found existing UserQuestStepProgress {ProgressId}", existing.Id);
+            return existing;
+        }
+
+        // Step 2: Create new record with assigned ID (prevents empty GUID issues)
         var newStepProgress = new UserQuestStepProgress
         {
+            Id = Guid.NewGuid(),  // ⭐ CRITICAL: Assign ID before INSERT
             AttemptId = attemptId,
             StepId = stepId,
             Status = StepCompletionStatus.InProgress,
             StartedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
-            AttemptsCount = 1
+            AttemptsCount = 1,
+            CompletedActivityIds = Array.Empty<Guid>()
         };
-        await _stepProgressRepository.AddAsync(newStepProgress, cancellationToken);
-        return newStepProgress;
+
+        try
+        {
+            var created = await _stepProgressRepository.AddAsync(newStepProgress, cancellationToken);
+            _logger.LogInformation("✅ Created new UserQuestStepProgress {ProgressId} for Attempt {AttemptId}, Step {StepId}",
+                created.Id, attemptId, stepId);
+            return created;
+        }
+        catch (Exception ex) when (ex.Message.Contains("23505") || ex.Message.Contains("duplicate"))
+        {
+            // Step 3: Handle race condition - another request inserted it first
+            _logger.LogWarning(
+                "⚠️ Race condition detected! Another request created the record first. " +
+                "Fetching the record that was just created. Error: {Error}",
+                ex.Message);
+
+            // Try to fetch it now - another request must have created it
+            var justCreated = await _stepProgressRepository.FirstOrDefaultAsync(
+                sp => sp.AttemptId == attemptId && sp.StepId == stepId,
+                cancellationToken);
+
+            if (justCreated != null)
+            {
+                _logger.LogInformation(
+                    "✅ Successfully recovered from race condition. Using record {ProgressId} " +
+                    "that was created by concurrent request.",
+                    justCreated.Id);
+                return justCreated;
+            }
+
+            // If we still can't find it, something is seriously wrong
+            _logger.LogError(
+                "❌ CRITICAL: Race condition handling failed - record should exist but wasn't found. " +
+                "Original error: {Error}",
+                ex.Message);
+            throw;
+        }
     }
 
     // ⭐ FIXED: Now handles both JSON string and Dictionary content formats
-    private async Task CompleteActivityAndCheckForModuleCompletion(QuestStep questStep, UserQuestStepProgress stepProgress, UserQuestAttempt attempt, Guid activityIdToComplete, CancellationToken cancellationToken)
+    private async Task CompleteActivityAndCheckForModuleCompletion(
+        QuestStep questStep,
+        UserQuestStepProgress stepProgress,
+        UserQuestAttempt attempt,
+        Guid activityIdToComplete,
+        CancellationToken cancellationToken)
     {
         // 1. Parse the content - it might be a JSON string or Dictionary
         List<object> activities = null;
@@ -309,6 +405,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             _logger.LogError("❌ Activity {ActivityId} not found in quest step {StepId}", activityIdToComplete, questStep.Id);
             throw new NotFoundException("Activity", activityIdToComplete);
         }
+
         // 3. Dispatch the XP event for this specific activity
         if (activityToComplete.TryGetValue("payload", out var payloadObj))
         {
@@ -411,7 +508,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             _logger.LogWarning("⚠️ 'payload' property not found in activity");
         }
 
-
         // 4. Update the progress record by adding the completed activity's ID
         stepProgress.CompletedActivityIds = (stepProgress.CompletedActivityIds ?? Array.Empty<Guid>()).Append(activityIdToComplete).ToArray();
         stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
@@ -459,32 +555,19 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             await CheckForOverallQuestCompletion(stepProgress.AttemptId, cancellationToken);
         }
 
-        // ⭐ CRITICAL FIX: Check if stepProgress has an ID before updating
-        // If it's a new record (just created in Handle method), it has an ID but might not exist in DB yet
-        // So we need to handle both cases
-        if (stepProgress.Id == Guid.Empty)
+        // ⭐ CRITICAL FIX: Always use UPDATE since we now guarantee the record exists
+        // (created in GetOrCreateStepProgressAsync with proper error handling)
+        try
         {
-            // This is a brand new record, add it
-            await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
-            _logger.LogInformation("✅ Added new UserQuestStepProgress {ProgressId} for Step {StepId}",
-                stepProgress.Id, questStep.Id);
+            await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
+            _logger.LogInformation("✅ Updated UserQuestStepProgress {ProgressId}", stepProgress.Id);
         }
-        else
+        catch (InvalidOperationException ex) when (ex.Message.Contains("no results"))
         {
-            // Try to update, but catch if it doesn't exist yet
-            try
-            {
-                await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
-                _logger.LogInformation("✅ Updated UserQuestStepProgress {ProgressId}", stepProgress.Id);
-            }
-            catch (InvalidOperationException ex) when (ex.Message.Contains("no results"))
-            {
-                // Record doesn't exist in DB yet, add it instead
-                _logger.LogWarning("⚠️ StepProgress didn't exist in DB, adding instead: {Error}", ex.Message);
-                await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
-                _logger.LogInformation("✅ Added UserQuestStepProgress {ProgressId} after update attempt failed",
-                    stepProgress.Id);
-            }
+            // This should not happen now, but log if it does
+            _logger.LogError("❌ CRITICAL: StepProgress {ProgressId} vanished after creation! Error: {Error}",
+                stepProgress.Id, ex.Message);
+            throw;
         }
     }
 
@@ -552,6 +635,217 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         {
             _logger.LogError(ex, "❌ Error in CheckForOverallQuestCompletion for Attempt {AttemptId}", attemptId);
             throw;
+        }
+    }
+
+    // ⭐ UPDATED: Helper method to extract activity type from step content JSON
+    // Handles string, Dictionary, JObject, and other types with extensive logging
+    private string ExtractActivityType(object stepContent, Guid activityId)
+    {
+        try
+        {
+            if (stepContent == null)
+            {
+                _logger.LogWarning("🔍 Step content is NULL for activity {ActivityId}", activityId);
+                return "Unknown";
+            }
+
+            _logger.LogInformation("🔍 Extracting activity type - Content type: {ContentType}", stepContent.GetType().Name);
+
+            string jsonString = null;
+
+            // ⭐ Handle different content types
+            if (stepContent is string strContent)
+            {
+                _logger.LogInformation("📄 Content is string, length: {Length}", strContent?.Length ?? 0);
+
+                if (string.IsNullOrWhiteSpace(strContent))
+                {
+                    _logger.LogWarning("⚠️ Step content string is empty or whitespace for activity {ActivityId}", activityId);
+                    return "Unknown";
+                }
+
+                jsonString = strContent;
+                _logger.LogInformation("📝 String content (first 200 chars): {Content}",
+                    strContent.Length > 200 ? strContent.Substring(0, 200) + "..." : strContent);
+            }
+            else if (stepContent is Dictionary<string, object> dictContent)
+            {
+                _logger.LogInformation("📦 Content is Dictionary with {KeyCount} keys", dictContent.Count);
+                _logger.LogInformation("📋 Dictionary keys: {Keys}", string.Join(", ", dictContent.Keys));
+
+                jsonString = System.Text.Json.JsonSerializer.Serialize(dictContent);
+                _logger.LogInformation("✅ Converted Dictionary to JSON string");
+            }
+            else if (stepContent.GetType().Name == "JObject")
+            {
+                _logger.LogInformation("📦 Content is JObject (Newtonsoft)");
+
+                try
+                {
+                    jsonString = stepContent.ToString();
+                    _logger.LogInformation("✅ Converted JObject to string, length: {Length}", jsonString?.Length ?? 0);
+                }
+                catch (Exception jEx)
+                {
+                    _logger.LogError(jEx, "❌ Failed to convert JObject to string");
+                    return "Unknown";
+                }
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ Content is unsupported type: {Type}", stepContent.GetType().FullName);
+
+                // Try to convert to string as fallback
+                try
+                {
+                    jsonString = stepContent.ToString();
+                    _logger.LogInformation("🔄 Converted unsupported type to string via ToString()");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Failed to convert unsupported type to string");
+                    return "Unknown";
+                }
+            }
+
+            // ⭐ Validate JSON string before parsing
+            if (string.IsNullOrWhiteSpace(jsonString))
+            {
+                _logger.LogWarning("⚠️ JSON string is empty after conversion for activity {ActivityId}", activityId);
+                return "Unknown";
+            }
+
+            _logger.LogInformation("📝 JSON string to parse, length: {Length}", jsonString.Length);
+            _logger.LogInformation("📄 JSON preview (first 300 chars): {JsonPreview}",
+                jsonString.Length > 300 ? jsonString.Substring(0, 300) + "..." : jsonString);
+
+            // ⭐ Check for data corruption (nested arrays)
+            if (jsonString.Contains("[[") || jsonString.Contains("]]"))
+            {
+                _logger.LogWarning("⚠️ ⚠️ POTENTIAL DATA CORRUPTION DETECTED - Nested arrays found in JSON!");
+                _logger.LogWarning("📋 Full JSON content: {FullJson}", jsonString);
+            }
+
+            // Parse JSON
+            using (JsonDocument doc = JsonDocument.Parse(jsonString))
+            {
+                var root = doc.RootElement;
+                _logger.LogInformation("✅ Successfully parsed JSON, root type: {RootType}", root.ValueKind);
+
+                if (root.ValueKind != JsonValueKind.Object)
+                {
+                    _logger.LogError("❌ JSON root is not an object, it's: {Type}", root.ValueKind);
+                    _logger.LogError("📋 JSON root content: {Content}", root.GetRawText());
+                    return "Unknown";
+                }
+
+                if (!root.TryGetProperty("activities", out var activitiesElement))
+                {
+                    _logger.LogWarning("⚠️ 'activities' property not found in root");
+                    var properties = string.Join(", ", root.EnumerateObject().Select(p => p.Name));
+                    _logger.LogWarning("📋 Available root properties: {Properties}", properties);
+                    return "Unknown";
+                }
+
+                _logger.LogInformation("✅ Found 'activities' property, type: {Type}", activitiesElement.ValueKind);
+
+                if (activitiesElement.ValueKind != JsonValueKind.Array)
+                {
+                    _logger.LogError("❌ 'activities' is not an array, it's: {Type}", activitiesElement.ValueKind);
+                    _logger.LogError("📋 'activities' content: {Content}", activitiesElement.GetRawText());
+                    return "Unknown";
+                }
+
+                var arrayLength = activitiesElement.GetArrayLength();
+                _logger.LogInformation("✅ Activities array has {Count} items", arrayLength);
+
+                if (arrayLength == 0)
+                {
+                    _logger.LogWarning("⚠️ Activities array is empty");
+                    return "Unknown";
+                }
+
+                // ⭐ Iterate through activities with detailed logging
+                int activityIndex = 0;
+                foreach (var activityElement in activitiesElement.EnumerateArray())
+                {
+                    _logger.LogInformation("🔍 Checking activity index {Index}, type: {Type}", activityIndex, activityElement.ValueKind);
+
+                    if (activityElement.ValueKind != JsonValueKind.Object)
+                    {
+                        _logger.LogWarning("⚠️ Activity at index {Index} is not an object, it's: {Type}. Content: {Content}",
+                            activityIndex, activityElement.ValueKind, activityElement.GetRawText());
+                        activityIndex++;
+                        continue;
+                    }
+
+                    if (!activityElement.TryGetProperty("activityId", out var idElement))
+                    {
+                        _logger.LogDebug("⏭️ Activity index {Index} has no 'activityId', skipping", activityIndex);
+                        activityIndex++;
+                        continue;
+                    }
+
+                    if (idElement.ValueKind == JsonValueKind.Null)
+                    {
+                        _logger.LogDebug("⏭️ Activity index {Index} has null 'activityId', skipping", activityIndex);
+                        activityIndex++;
+                        continue;
+                    }
+
+                    var idString = idElement.GetString();
+                    _logger.LogInformation("📌 Activity index {Index} has activityId: {ActivityId}", activityIndex, idString);
+
+                    if (!Guid.TryParse(idString, out var id))
+                    {
+                        _logger.LogWarning("⚠️ Activity index {Index} has invalid GUID format: {Id}", activityIndex, idString);
+                        activityIndex++;
+                        continue;
+                    }
+
+                    if (id == activityId)
+                    {
+                        _logger.LogInformation("🎯 FOUND matching activity at index {Index}, ID: {ActivityId}", activityIndex, id);
+
+                        if (!activityElement.TryGetProperty("type", out var typeElement))
+                        {
+                            _logger.LogWarning("⚠️ Activity {ActivityId} found but 'type' property is missing", id);
+                            var availableProps = string.Join(", ", activityElement.EnumerateObject().Select(p => p.Name));
+                            _logger.LogWarning("📋 Available properties in activity: {Properties}", availableProps);
+                            return "Unknown";
+                        }
+
+                        if (typeElement.ValueKind == JsonValueKind.Null)
+                        {
+                            _logger.LogWarning("⚠️ Activity {ActivityId} 'type' property is null", id);
+                            return "Unknown";
+                        }
+
+                        var activityType = typeElement.GetString() ?? "Unknown";
+                        _logger.LogInformation("✅ ✅ EXTRACTED activity type '{Type}' for activity {ActivityId}", activityType, id);
+                        return activityType;
+                    }
+
+                    activityIndex++;
+                }
+
+                _logger.LogError("❌ Activity {ActivityId} not found in activities array (searched {Count} items)",
+                    activityId, arrayLength);
+                return "Unknown";
+            }
+        }
+        catch (JsonException jsonEx)
+        {
+            _logger.LogError(jsonEx, "❌ JSON parsing error while extracting activity type for activity {ActivityId}", activityId);
+            _logger.LogError("📋 JSON Exception details: {Message}", jsonEx.Message);
+            return "Unknown";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Unexpected error extracting activity type for activity {ActivityId}", activityId);
+            _logger.LogError("📋 Exception details: {Message}", ex.Message);
+            return "Unknown";
         }
     }
 }

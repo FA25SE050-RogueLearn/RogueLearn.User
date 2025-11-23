@@ -3,6 +3,7 @@
 // ⭐ UPDATED: Pass null for PerformContext - Hangfire injects it automatically
 
 using BuildingBlocks.Shared.Authentication;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Hangfire;
 using Hangfire.Server;
 using Hangfire.States;
@@ -11,14 +12,16 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
-using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
-using RogueLearn.User.Domain.Entities;
 // MODIFIED: This using is updated to point to the refactored command location.
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
+using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
 using RogueLearn.User.Application.Services;
-using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
+using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json.Serialization;
 
 [ApiController]
@@ -227,31 +230,110 @@ public class QuestsController : ControllerBase
         }
     }
 
-    // MODIFIED: This endpoint is now more specific. It targets a specific activity within a step.
-    /// <summary>
-    /// Updates the progress status of a specific activity within a quest step (weekly module) for the authenticated user.
-    /// </summary>
     [HttpPost("{questId:guid}/steps/{stepId:guid}/activities/{activityId:guid}/progress")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]  
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateQuestActivityProgress(Guid questId, Guid stepId, Guid activityId, [FromBody] UpdateQuestActivityProgressRequest body)
+    public async Task<IActionResult> UpdateQuestActivityProgress(
+    Guid questId,
+    Guid stepId,
+    Guid activityId,
+    [FromBody] UpdateQuestActivityProgressRequest body)
     {
         var authUserId = User.GetAuthUserId();
-        // MODIFIED: We now use the new, more descriptive command.
-        var command = new UpdateQuestActivityProgressCommand
+
+        try
         {
-            AuthUserId = authUserId,
-            QuestId = questId,
-            StepId = stepId,
-            ActivityId = activityId,
-            Status = body.Status
-        };
-        await _mediator.Send(command);
-        return NoContent();
+            var command = new UpdateQuestActivityProgressCommand
+            {
+                AuthUserId = authUserId,
+                QuestId = questId,
+                StepId = stepId,
+                ActivityId = activityId,
+                Status = body.Status
+            };
+
+            await _mediator.Send(command);
+            return NoContent();
+        }
+        catch (ValidationException ex)
+        {
+            // ✅ GRACEFUL: Return 400 Bad Request with error message
+            _logger.LogWarning("Validation failed: {Message}", ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            _logger.LogWarning("Not found: {Message}", ex.Message);
+            return NotFound();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating activity progress");
+            return StatusCode(500);
+        }
     }
+
+    [HttpPost("{questId:guid}/steps/{stepId:guid}/activities/{activityId:guid}/submit-quiz")]
+    [ProducesResponseType(typeof(SubmitQuizAnswerResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SubmitQuizAnswer(
+    Guid questId,
+    Guid stepId,
+    Guid activityId,
+    [FromBody] SubmitQuizAnswerRequest body)
+    {
+        var authUserId = User.GetAuthUserId();
+
+        _logger.LogInformation(
+            "Quiz submission endpoint - User: {UserId}, Quest: {QuestId}, Step: {StepId}, Activity: {ActivityId}",
+            authUserId, questId, stepId, activityId);
+
+        try
+        {
+            // Fast validation - quest and step exist
+            var quest = await _questRepository.GetByIdAsync(questId);
+            if (quest == null)
+                return NotFound(new { message = $"Quest {questId} not found" });
+
+            var step = await _questStepRepository.GetByIdAsync(stepId);
+            if (step == null || step.QuestId != questId)
+                return NotFound(new { message = $"Step {stepId} not found in quest {questId}" });
+
+            // Create command and send to handler
+            var command = new SubmitQuizAnswerCommand
+            {
+                AuthUserId = authUserId,
+                QuestId = questId,
+                StepId = stepId,
+                ActivityId = activityId,
+                Answers = body.Answers,
+                CorrectAnswerCount = body.CorrectAnswerCount,
+                TotalQuestions = body.TotalQuestions
+            };
+
+            var result = await _mediator.Send(command);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing quiz submission");
+            return StatusCode(500, new { message = "Failed to process quiz submission", error = ex.Message });
+        }
+    }
+
+    // Add DTO classes at bottom of controller file:
+
+    
 }
 
+public class SubmitQuizAnswerRequest
+{
+    public Dictionary<string, string> Answers { get; set; } = new();
+    public int CorrectAnswerCount { get; set; }
+    public int TotalQuestions { get; set; }
+}
 // ========== RESPONSE DTOs ==========
 
 /// <summary>

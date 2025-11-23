@@ -4,6 +4,8 @@ using BuildingBlocks.Shared.Repositories;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using RogueLearn.User.Application.Features.Quests.Services;
+using RogueLearn.User.Application.Features.QuestSubmissions.Services;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Interfaces;
@@ -114,7 +116,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();
-
+        services.AddScoped<IQuestSubmissionRepository, QuestSubmissionRepository>();
 
         // Guild repositories
         services.AddScoped<IGuildRepository, GuildRepository>();
@@ -171,6 +173,10 @@ public static class ServiceCollectionExtensions
 
         // Add the new UrlValidationService for checking live links
         services.AddScoped<IUrlValidationService, UrlValidationService>();
+        services.AddScoped<ActivityValidationService>();
+        services.AddScoped<IQuizValidationService, QuizValidationService>();
+        services.AddScoped<IKnowledgeCheckValidationService, KnowledgeCheckValidationService>();
+        services.AddScoped<IQuestSubmissionRepository, QuestSubmissionRepository>();
 
         return services;
     }

@@ -1,4 +1,4 @@
-using FluentValidation.Results;
+﻿using FluentValidation.Results;
 
 namespace RogueLearn.User.Application.Exceptions;
 
@@ -11,6 +11,11 @@ public class ValidationException : Exception
         Errors = new Dictionary<string, string[]>();
     }
 
+    //NEW: Simple string constructor for business logic validation
+    public ValidationException(string message) : base(message)
+    {
+        Errors = new Dictionary<string, string[]>();
+    }
     public ValidationException(IEnumerable<ValidationFailure> failures) : this()
     {
         Errors = failures
