@@ -1,4 +1,4 @@
-name: Build, Push, and Deploy RogueLearn.User
+name: RogueLearn User Service CD
 
 on:
   push:

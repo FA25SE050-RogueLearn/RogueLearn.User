@@ -32,7 +32,7 @@ public class Achievement : BaseEntity
     public string? IconUrl { get; set; }
 
     [Column("version")]
-    public int Version { get; set; } = 1;
+    public int? Version { get; set; } = 1;
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;

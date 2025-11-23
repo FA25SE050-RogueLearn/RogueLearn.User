@@ -16,17 +16,24 @@ public class TransferPartyLeadershipCommandHandler : IRequestHandler<TransferPar
     public async Task<Unit> Handle(TransferPartyLeadershipCommand request, CancellationToken cancellationToken)
     {
         var members = await _memberRepository.GetMembersByPartyAsync(request.PartyId, cancellationToken);
-        var currentLeader = members.FirstOrDefault(m => m.Role == PartyRole.Leader);
-        if (currentLeader is null)
-        {
-            throw new Application.Exceptions.NotFoundException("PartyLeader", request.PartyId.ToString());
-        }
 
         var newLeader = members.FirstOrDefault(m => m.AuthUserId == request.ToUserId && m.Status == MemberStatus.Active)
                         ?? throw new Application.Exceptions.NotFoundException("PartyMember", request.ToUserId.ToString());
 
-        currentLeader.Role = PartyRole.Member;
-        await _memberRepository.UpdateAsync(currentLeader, cancellationToken);
+        var leaders = members.Where(m => m.Role == PartyRole.Leader).ToList();
+        if (!leaders.Any())
+        {
+            throw new Application.Exceptions.NotFoundException("PartyLeader", request.PartyId.ToString());
+        }
+
+        foreach (var leader in leaders)
+        {
+            if (leader.AuthUserId != newLeader.AuthUserId)
+            {
+                leader.Role = PartyRole.Member;
+                await _memberRepository.UpdateAsync(leader, cancellationToken);
+            }
+        }
 
         newLeader.Role = PartyRole.Leader;
         await _memberRepository.UpdateAsync(newLeader, cancellationToken);

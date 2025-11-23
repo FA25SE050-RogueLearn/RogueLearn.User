@@ -15,22 +15,26 @@ public class TransferGuildLeadershipCommandHandler : IRequestHandler<TransferGui
 
     public async Task<Unit> Handle(TransferGuildLeadershipCommand request, CancellationToken cancellationToken)
     {
-        // Find current GuildMaster
         var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
-        var currentMaster = members.FirstOrDefault(m => m.Role == GuildRole.GuildMaster);
-        if (currentMaster is null)
-        {
-            throw new Application.Exceptions.NotFoundException("GuildMaster", request.GuildId.ToString());
-        }
 
         var newMaster = members.FirstOrDefault(m => m.AuthUserId == request.ToUserId && m.Status == MemberStatus.Active)
                         ?? throw new Application.Exceptions.NotFoundException("GuildMember", request.ToUserId.ToString());
 
-        // Demote current master to Member (could be Officer if desired)
-        currentMaster.Role = GuildRole.Member;
-        await _memberRepository.UpdateAsync(currentMaster, cancellationToken);
+        var masters = members.Where(m => m.Role == GuildRole.GuildMaster).ToList();
+        if (!masters.Any())
+        {
+            throw new Application.Exceptions.NotFoundException("GuildMaster", request.GuildId.ToString());
+        }
 
-        // Promote new master
+        foreach (var master in masters)
+        {
+            if (master.AuthUserId != newMaster.AuthUserId)
+            {
+                master.Role = GuildRole.Member;
+                await _memberRepository.UpdateAsync(master, cancellationToken);
+            }
+        }
+
         newMaster.Role = GuildRole.GuildMaster;
         await _memberRepository.UpdateAsync(newMaster, cancellationToken);
 
