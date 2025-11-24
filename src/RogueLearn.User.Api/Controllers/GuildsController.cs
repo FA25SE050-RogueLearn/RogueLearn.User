@@ -203,7 +203,7 @@ public class GuildsController : ControllerBase
     /// Invite members to the guild (Guild Master only).
     /// </summary>
     [HttpPost("{guildId:guid}/invite")]
-    [GuildMasterOnly("guildId")]
+    [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(typeof(InviteGuildMembersResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
