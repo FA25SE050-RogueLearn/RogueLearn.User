@@ -29,6 +29,7 @@ public class LearningPathsController : ControllerBase
     /// Gets the primary learning path for the currently authenticated user.
     /// </summary>
     [HttpGet("me")]
+    [ResponseCache(CacheProfileName = "Default60", VaryByHeader = "Authorization")]
     [ProducesResponseType(typeof(LearningPathDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

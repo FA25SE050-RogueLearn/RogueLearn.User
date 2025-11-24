@@ -116,12 +116,41 @@ try
     builder.Services.AddApplication(builder.Configuration);
     builder.Services.AddInfrastructureServices();
 
-    builder.Services.AddControllers()
-        .AddNewtonsoftJson(options =>
-        {
-            options.SerializerSettings.Converters.Add(new StringEnumConverter());
-            options.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-        });
+    // Add response caching services
+    builder.Services.AddResponseCaching();
+
+    builder.Services.AddControllers(options =>
+    {
+        // Define cache profiles for different scenarios
+        options.CacheProfiles.Add("Default30",
+            new Microsoft.AspNetCore.Mvc.CacheProfile
+            {
+                Duration = 30,
+                Location = Microsoft.AspNetCore.Mvc.ResponseCacheLocation.Any,
+                VaryByHeader = "Authorization"
+            });
+
+        options.CacheProfiles.Add("Default60",
+            new Microsoft.AspNetCore.Mvc.CacheProfile
+            {
+                Duration = 60,
+                Location = Microsoft.AspNetCore.Mvc.ResponseCacheLocation.Any,
+                VaryByHeader = "Authorization"
+            });
+
+        options.CacheProfiles.Add("Default300",
+            new Microsoft.AspNetCore.Mvc.CacheProfile
+            {
+                Duration = 300, // 5 minutes
+                Location = Microsoft.AspNetCore.Mvc.ResponseCacheLocation.Any,
+                VaryByHeader = "Authorization"
+            });
+    })
+    .AddNewtonsoftJson(options =>
+    {
+        options.SerializerSettings.Converters.Add(new StringEnumConverter());
+        options.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
+    });
 
     builder.Services.AddApiServices();
 
@@ -162,6 +191,9 @@ try
     
     app.UseCors("AllowAll");
     app.UseHttpsRedirection();
+
+    // Enable response caching middleware (must be before Authentication)
+    app.UseResponseCaching();
 
     app.UseAuthentication();
     app.UseAuthorization();
