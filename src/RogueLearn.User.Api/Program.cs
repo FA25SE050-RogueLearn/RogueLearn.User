@@ -13,6 +13,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.SemanticKernel;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
+using RogueLearn.User.Api.HealthChecks;
 using RogueLearn.User.Api.Utilities;
 using RogueLearn.User.Application.Services;
 
@@ -60,6 +61,7 @@ try
             listenOptions.Protocols = HttpProtocols.Http2;
         });
     }); 
+    
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
@@ -124,7 +126,13 @@ try
     builder.Services.AddApiServices();
 
     builder.Services.AddGrpc();
-    builder.Services.AddHealthChecks();
+    
+    builder.Services.AddHealthChecks()
+        .AddCheck<SupabaseHealthCheck>(
+            "supabase",
+            failureStatus: HealthStatus.Unhealthy,
+            tags: new[] { "ready", "db" });
+    
     if (builder.Environment.IsDevelopment())
     {
         builder.Services.AddGrpcReflection();
@@ -155,6 +163,28 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
+    
+    app.MapHealthChecks("/health");
+
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = async (context, report) =>
+        {
+            var result = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                status = report.Status.ToString(),
+                checks = report.Entries.Select(e => new
+                {
+                    name = e.Key,
+                    status = e.Value.Status.ToString(),
+                    duration = $"{e.Value.Duration.TotalMilliseconds}ms"
+                })
+            });
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(result);
+        }
+    });
 
     app.MapControllers();
     app.MapHealthChecks("/health", new HealthCheckOptions
