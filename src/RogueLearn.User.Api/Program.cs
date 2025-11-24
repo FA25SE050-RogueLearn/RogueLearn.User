@@ -127,11 +127,13 @@ try
 
     builder.Services.AddGrpc();
     
+// Health check registration
     builder.Services.AddHealthChecks()
+        .AddCheck("self", () => HealthCheckResult.Healthy(), tags: new[] { "live" })
         .AddCheck<SupabaseHealthCheck>(
             "supabase",
             failureStatus: HealthStatus.Unhealthy,
-            tags: new[] { "ready", "db" });
+            tags: new[] { "db" });
     
     if (builder.Environment.IsDevelopment())
     {
@@ -164,37 +166,38 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     
-    app.MapHealthChecks("/health");
-
-    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    // Simple text "OK" health check
+    app.MapHealthChecks("/health", new HealthCheckOptions
     {
-        Predicate = check => check.Tags.Contains("ready"),
+        Predicate = check => check.Tags.Contains("live"),
         ResponseWriter = async (context, report) =>
         {
+            context.Response.ContentType = "text/plain";
+            await context.Response.WriteAsync(report.Status == HealthStatus.Healthy ? "OK" : "UNHEALTHY");
+        }
+    });
+
+    // Supabase-specific health check with detailed response
+    app.MapHealthChecks("/health/supabase", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("db"),
+        ResponseWriter = async (context, report) =>
+        {
+            context.Response.ContentType = "application/json";
+        
+            var entry = report.Entries.First();
             var result = System.Text.Json.JsonSerializer.Serialize(new
             {
-                status = report.Status.ToString(),
-                checks = report.Entries.Select(e => new
-                {
-                    name = e.Key,
-                    status = e.Value.Status.ToString(),
-                    duration = $"{e.Value.Duration.TotalMilliseconds}ms"
-                })
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                duration = $"{entry.Value.Duration.TotalMilliseconds}ms",
+                timestamp = DateTime.UtcNow
             });
-            context.Response.ContentType = "application/json";
+        
             await context.Response.WriteAsync(result);
         }
     });
-
     app.MapControllers();
-    app.MapHealthChecks("/health", new HealthCheckOptions
-    {
-        ResponseWriter = async (ctx, report) =>
-        {
-            ctx.Response.ContentType = "text/plain";
-            await ctx.Response.WriteAsync(report.Status == HealthStatus.Healthy ? "OK" : report.Status.ToString());
-        }
-    });
 
     app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserProfilesGrpcService>();
     app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserContextGrpcService>();
