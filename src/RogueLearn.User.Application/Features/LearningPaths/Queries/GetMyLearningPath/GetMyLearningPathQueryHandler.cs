@@ -13,37 +13,26 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
     private readonly ILearningPathRepository _learningPathRepository;
     private readonly IQuestChapterRepository _questChapterRepository;
     private readonly IQuestRepository _questRepository;
-    // MODIFICATION: The UserQuestAttemptRepository is no longer needed for deriving status.
-    // private readonly IUserQuestAttemptRepository _userQuestAttemptRepository;
     private readonly ILogger<GetMyLearningPathQueryHandler> _logger;
-    private readonly ISubjectRepository _subjectRepository;
-    private readonly IMapper _mapper;
 
     public GetMyLearningPathQueryHandler(
         ILearningPathRepository learningPathRepository,
         IQuestChapterRepository questChapterRepository,
         IQuestRepository questRepository,
-        // IUserQuestAttemptRepository userQuestAttemptRepository, // REMOVED
-        ILogger<GetMyLearningPathQueryHandler> logger,
-        ISubjectRepository subjectRepository,
-        IMapper mapper)
+        ILogger<GetMyLearningPathQueryHandler> logger)
     {
         _learningPathRepository = learningPathRepository;
         _questChapterRepository = questChapterRepository;
         _questRepository = questRepository;
-        // _userQuestAttemptRepository = userQuestAttemptRepository; // REMOVED
         _logger = logger;
-        _subjectRepository = subjectRepository;
-        _mapper = mapper;
     }
 
     public async Task<LearningPathDto?> Handle(GetMyLearningPathQuery request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Fetching primary learning path for user {AuthUserId}", request.AuthUserId);
 
-        var learningPath = (await _learningPathRepository.FindAsync(lp => lp.CreatedBy == request.AuthUserId, cancellationToken))
-            .OrderByDescending(lp => lp.CreatedAt)
-            .FirstOrDefault();
+        // Optimized: Use specialized repository method that orders at DB level
+        var learningPath = await _learningPathRepository.GetLatestByUserAsync(request.AuthUserId, cancellationToken);
 
         if (learningPath == null)
         {
@@ -51,26 +40,42 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             return null;
         }
 
-        var chapters = (await _questChapterRepository.FindAsync(qc => qc.LearningPathId == learningPath.Id, cancellationToken))
-            .OrderBy(c => c.Sequence)
+        // Optimized: Use specialized repository method that orders at DB level
+        var chapters = (await _questChapterRepository.GetChaptersByLearningPathIdOrderedAsync(learningPath.Id, cancellationToken))
             .ToList();
+
+        // Early exit if no chapters - no need to query quests
+        if (chapters.Count == 0)
+        {
+            return new LearningPathDto
+            {
+                Id = learningPath.Id,
+                Name = learningPath.Name,
+                Description = learningPath.Description,
+                Chapters = new List<QuestChapterDto>(),
+                CompletionPercentage = 0
+            };
+        }
 
         var chapterIds = chapters.Select(c => c.Id).ToList();
-
-        var quests = (await _questRepository.GetAllAsync(cancellationToken))
-            .Where(q => q.QuestChapterId.HasValue && chapterIds.Contains(q.QuestChapterId.Value))
+        var quests = (await _questRepository.GetQuestsByChapterIdsAsync(chapterIds, cancellationToken))
             .ToList();
 
+        // Group quests by chapter for efficient lookup
         var questsByChapterId = quests
             .GroupBy(q => q.QuestChapterId!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
+            .ToDictionary(g => g.Key, g => g.OrderBy(q => q.Sequence ?? 0).ToList()); // Pre-sort quests by sequence
 
-        // MODIFICATION: This dictionary is no longer needed as status is read directly from the quest.
-        // var userAttempts = (await _userQuestAttemptRepository.FindAsync(a => a.AuthUserId == request.AuthUserId && quests.Select(q => q.Id).Contains(a.QuestId), cancellationToken))
-        //     .GroupBy(a => a.QuestId)
-        //     .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.StartedAt).FirstOrDefault());
+        // Pre-calculate completion stats to avoid multiple enumerations
+        var totalQuests = quests.Count;
+        var completedQuests = quests.Count(q => q.Status == QuestStatus.Completed);
+        var completionPercentage = totalQuests > 0 ? Math.Round((double)completedQuests / totalQuests * 100, 2) : 0;
 
-        var chapterDtos = new List<QuestChapterDto>();
+        // Build chapter DTOs
+        var chapterDtos = new List<QuestChapterDto>(chapters.Count); // Pre-allocate capacity
+        var completedStatusString = QuestStatus.Completed.ToString();
+        var inProgressStatusString = QuestStatus.InProgress.ToString();
+
         foreach (var chapter in chapters)
         {
             var chapterDto = new QuestChapterDto
@@ -82,37 +87,31 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
             if (questsByChapterId.TryGetValue(chapter.Id, out var chapterQuests))
             {
-                foreach (var quest in chapterQuests)
+                // Quests are already sorted from the dictionary
+                chapterDto.Quests = chapterQuests.Select(quest => new QuestSummaryDto
                 {
-                    // MODIFICATION: The status is now read directly from the quest entity itself.
-                    // This simplifies the query and relies on the new single source of truth.
-                    var status = quest.Status.ToString();
+                    Id = quest.Id,
+                    Title = quest.Title,
+                    Status = quest.Status.ToString(),
+                    SequenceOrder = quest.Sequence ?? 0,
+                    LearningPathId = learningPath.Id,
+                    ChapterId = chapter.Id,
+                    IsRecommended = quest.IsRecommended,
+                    RecommendationReason = quest.RecommendationReason
+                }).ToList();
 
-                    chapterDto.Quests.Add(new QuestSummaryDto
-                    {
-                        Id = quest.Id,
-                        Title = quest.Title,
-                        Status = status,
-                        SequenceOrder = quest.Sequence ?? 0,
-                        LearningPathId = learningPath.Id,
-                        ChapterId = chapter.Id,
-                        IsRecommended = quest.IsRecommended,
-                        RecommendationReason = quest.RecommendationReason
-                    });
-                }
-            }
+                // Optimized: Use enum comparison instead of string comparison
+                var questStatuses = chapterQuests.Select(q => q.Status).ToList();
+                var hasCompleted = questStatuses.Contains(QuestStatus.Completed);
+                var hasInProgress = questStatuses.Contains(QuestStatus.InProgress);
+                var allCompleted = questStatuses.All(s => s == QuestStatus.Completed);
 
-            chapterDto.Quests = chapterDto.Quests.OrderBy(q => q.SequenceOrder).ToList();
-
-            if (chapterDto.Quests.Any())
-            {
-                var allCompleted = chapterDto.Quests.All(q => q.Status == QuestStatus.Completed.ToString());
-                var anyInProgress = chapterDto.Quests.Any(q => q.Status == QuestStatus.InProgress.ToString());
-                var anyCompleted = chapterDto.Quests.Any(q => q.Status == QuestStatus.Completed.ToString());
-
-                if (allCompleted) chapterDto.Status = PathProgressStatus.Completed.ToString();
-                else if (anyInProgress || anyCompleted) chapterDto.Status = PathProgressStatus.InProgress.ToString();
-                else chapterDto.Status = PathProgressStatus.NotStarted.ToString();
+                if (allCompleted)
+                    chapterDto.Status = PathProgressStatus.Completed.ToString();
+                else if (hasInProgress || hasCompleted)
+                    chapterDto.Status = PathProgressStatus.InProgress.ToString();
+                else
+                    chapterDto.Status = PathProgressStatus.NotStarted.ToString();
             }
             else
             {
@@ -121,11 +120,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
             chapterDtos.Add(chapterDto);
         }
-
-        // MODIFICATION: Calculate completion percentage dynamically since the summary table is gone.
-        var totalQuests = quests.Count;
-        var completedQuests = quests.Count(q => q.Status == QuestStatus.Completed);
-        var completionPercentage = totalQuests > 0 ? Math.Round((double)completedQuests / totalQuests * 100, 2) : 0;
 
         var learningPathDto = new LearningPathDto
         {

@@ -6,4 +6,5 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IQuestRepository : IGenericRepository<Quest>
 {
+    Task<IEnumerable<Quest>> GetQuestsByChapterIdsAsync(IEnumerable<Guid> chapterIds, CancellationToken cancellationToken = default);
 }

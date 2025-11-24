@@ -6,4 +6,5 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IQuestChapterRepository : IGenericRepository<QuestChapter>
 {
+    Task<IEnumerable<QuestChapter>> GetChaptersByLearningPathIdOrderedAsync(Guid learningPathId, CancellationToken cancellationToken = default);
 }
