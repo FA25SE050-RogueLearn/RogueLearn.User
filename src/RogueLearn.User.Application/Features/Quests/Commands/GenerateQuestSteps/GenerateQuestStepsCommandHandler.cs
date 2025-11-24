@@ -1,6 +1,7 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommandHandler.cs
 //  OPTIMIZED: Added AI prompt compression (89% reduction), optimized serialization
 //  UPDATED: Added Hangfire progress tracking for real-time user updates
+//  UPDATED: Skills initialized at Level 0 (Discovered) instead of Level 1
 
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -17,15 +18,6 @@ using Hangfire;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 
-/// <summary>
-/// Generates weekly learning modules for a quest.
-/// Each call to this handler generates quest steps by looping through weeks (1-N).
-/// Supports 5-12 total weeks based on syllabus size.
-/// Each week = 1 quest step with 7-10 activities (Reading, KnowledgeCheck, Quiz ONLY - NO Coding).
-/// 
-/// ⭐ OPTIMIZATION: Uses compressed AI prompt (89% reduction from 175KB → 19KB)
-/// ⭐ UPDATED: Tracks progress in Hangfire job parameters for real-time UI updates
-/// </summary>
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
     // ========== CONFIGURATION CONSTANTS ==========
@@ -163,14 +155,18 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 SkillId = skill.Id,
                 SkillName = skill.Name,
                 ExperiencePoints = 0,
-                Level = 1
+                // ⭐ CHANGED: Initialize at Level 0. 
+                // Level 0 = "Discovered/Unlocked"
+                // Level 1 = "Started Learning"
+                // Level 5 = "Mastered" (Prerequisite Met)
+                Level = 0
             })
             .ToList();
 
         if (newUserSkills.Any())
         {
             await _userSkillRepository.AddRangeAsync(newUserSkills, cancellationToken);
-            _logger.LogInformation("Unlocked {Count} new skills in batch for User {AuthUserId}",
+            _logger.LogInformation("Unlocked {Count} new skills (Level 0) in batch for User {AuthUserId}",
                 newUserSkills.Count, request.AuthUserId);
         }
 
