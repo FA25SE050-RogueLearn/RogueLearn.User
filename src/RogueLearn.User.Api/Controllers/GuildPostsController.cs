@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/GuildPostsController.cs
 using System.Net.Mime;
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
@@ -81,7 +82,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Create a guild post.
+    /// Create a guild post (JSON).
     /// </summary>
     [HttpPost("api/guilds/{guildId:guid}/posts")]
     [ProducesResponseType(typeof(CreateGuildPostResponse), StatusCodes.Status201Created)]
@@ -94,7 +95,10 @@ public class GuildPostsController : ControllerBase
         return CreatedAtAction(nameof(GetGuildPostById), new { guildId, postId = result.PostId }, result);
     }
 
-    [HttpPost("api/guilds/{guildId:guid}/posts")]
+    /// <summary>
+    /// Create a guild post with images (Multipart Form).
+    /// </summary>
+    [HttpPost("api/guilds/{guildId:guid}/posts/upload")] // CHANGED: Added /upload suffix to resolve route conflict
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateGuildPostResponse), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateGuildPostForm([FromRoute] Guid guildId, [FromForm] string title, [FromForm] string content, [FromForm] string[]? tags, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
@@ -136,7 +140,7 @@ public class GuildPostsController : ControllerBase
     }
 
     /// <summary>
-    /// Edit a guild post.
+    /// Edit a guild post (JSON).
     /// </summary>
     [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -148,7 +152,10 @@ public class GuildPostsController : ControllerBase
         return NoContent();
     }
 
-    [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}")]
+    /// <summary>
+    /// Edit a guild post with images (Multipart Form).
+    /// </summary>
+    [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}/upload")] // CHANGED: Added /upload suffix to resolve route conflict
     [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> EditGuildPostForm([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromForm] string title, [FromForm] string content, [FromForm] string[]? tags, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
@@ -275,7 +282,7 @@ public class GuildPostsController : ControllerBase
     /// <summary>
     /// Unpin a guild post.
     /// </summary>
-    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unpin")] 
+    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unpin")]
     [GuildMasterOrOfficerOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
