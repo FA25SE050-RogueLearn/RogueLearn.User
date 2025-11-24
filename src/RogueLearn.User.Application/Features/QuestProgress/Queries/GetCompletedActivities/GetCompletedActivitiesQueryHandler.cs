@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetCompletedActivities/GetCompletedActivitiesQueryHandler.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestProgress/Queries/GetCompletedActivities/GetCompletedActivitiesQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -44,10 +44,26 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
             // 2. Get user's attempt
             var attempt = await _attemptRepository.FirstOrDefaultAsync(
                 a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
-                cancellationToken)
-                ?? throw new NotFoundException("UserQuestAttempt", request.QuestId);
+                cancellationToken);
 
-            // 3. ⭐ FIX: Get step progress - if null, return empty progress (user just started this step)
+            // ⭐ FIX: If attempt doesn't exist yet (Not Started), return empty progress instead of throwing exception
+            if (attempt == null)
+            {
+                _logger.LogInformation("ℹ️ No attempt found for Quest:{QuestId} - returning empty activity list", request.QuestId);
+
+                // Parse activities but mark all as incomplete
+                var allActivities = ExtractAndMapActivities(questStep.Content, Array.Empty<Guid>());
+
+                return new CompletedActivitiesDto
+                {
+                    StepId = request.StepId,
+                    Activities = allActivities,
+                    CompletedCount = 0,
+                    TotalCount = allActivities.Count
+                };
+            }
+
+            // 3. Get step progress - if null, return empty progress (user just started this step)
             var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
                 sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
                 cancellationToken);
@@ -66,9 +82,6 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                     CompletedCount = 0,
                     TotalCount = allActivities.Count
                 };
-
-                _logger.LogInformation("📊 Returned empty progress: 0/{Total} activities completed",
-                    emptyResult.TotalCount);
 
                 return emptyResult;
             }
