@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
@@ -36,6 +37,9 @@ public class GetUserProfileByAuthIdQueryHandler : IRequestHandler<GetUserProfile
 	public async Task<UserProfileDto?> Handle(GetUserProfileByAuthIdQuery request, CancellationToken cancellationToken)
 	{
 		_logger.LogInformation("Fetching user profile by auth id {AuthId}", request.AuthId);
+		var stopWatch = System.Diagnostics.Stopwatch.StartNew();
+
+		// 1. Fetch Profile
 		var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthId, cancellationToken);
 
 		if (userProfile is null)
@@ -46,21 +50,31 @@ public class GetUserProfileByAuthIdQueryHandler : IRequestHandler<GetUserProfile
 
 		var dto = _mapper.Map<UserProfileDto>(userProfile);
 
-		var userRoles = await _userRoleRepository.GetRolesForUserAsync(userProfile.AuthUserId, cancellationToken) 
-			?? Enumerable.Empty<Domain.Entities.UserRole>();
-		var roleNames = new List<string>();
-		foreach (var userRole in userRoles)
+		// 2. Fetch User Roles
+		var userRoles = await _userRoleRepository.GetRolesForUserAsync(userProfile.AuthUserId, cancellationToken)
+		                ?? Enumerable.Empty<Domain.Entities.UserRole>();
+
+		// 3. OPTIMIZED: Batch Fetch Roles
+		var roleIds = userRoles.Select(ur => ur.RoleId).Distinct().ToList();
+
+		if (roleIds.Any())
 		{
-			var role = await _roleRepository.GetByIdAsync(userRole.RoleId, cancellationToken);
-			if (role != null && !string.IsNullOrWhiteSpace(role.Name))
-			{
-				roleNames.Add(role.Name);
-			}
+			// This is now 1 request regardless of how many roles the user has
+			var roles = await _roleRepository.GetByIdsAsync(roleIds, cancellationToken);
+
+			dto.Roles = roles
+				.Where(r => !string.IsNullOrWhiteSpace(r.Name))
+				.Select(r => r.Name)
+				.ToList();
 		}
-
-		dto.Roles = roleNames.Distinct().ToList();
-
-		_logger.LogInformation("Retrieved profile for auth user {AuthUserId} with {RoleCount} roles", userProfile.AuthUserId, dto.Roles.Count);
+		else
+		{
+			dto.Roles = new List<string>();
+		}
+		stopWatch.Stop();
+		_logger.LogInformation($"Handler took: {stopWatch.Elapsed.TotalSeconds}s");
+		_logger.LogInformation("Retrieved profile for auth user {AuthUserId} with {RoleCount} roles",
+			userProfile.AuthUserId, dto.Roles.Count);
 
 		return dto;
 	}
