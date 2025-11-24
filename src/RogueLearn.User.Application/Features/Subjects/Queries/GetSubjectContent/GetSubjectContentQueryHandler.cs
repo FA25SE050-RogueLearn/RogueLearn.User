@@ -1,9 +1,14 @@
-﻿using MediatR;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Queries/GetSubjectContent/GetSubjectContentQueryHandler.cs
+using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Interfaces;
-using System.Text.Json;
+using System.Text.Json; // Keep for Deserialization
+using System.Text.Json.Serialization;
+
+// Alias Newtonsoft to avoid ambiguity
+using NewtonsoftJson = Newtonsoft.Json;
 
 namespace RogueLearn.User.Application.Features.Subjects.Queries.GetSubjectContent;
 
@@ -42,169 +47,75 @@ public class GetSubjectContentQueryHandler : IRequestHandler<GetSubjectContentQu
             return new SyllabusContent();
         }
 
-        _logger.LogInformation("📊 Content structure: {KeyCount} keys", subject.Content.Count);
-
         try
         {
-            // ⭐ CRITICAL: Same pattern as Quest Handler's ValidateActivities()
-            // Serialize to JSON string, then use JsonElement to parse flexibly
-            var jsonString = JsonSerializer.Serialize(
-                subject.Content,
-                new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = null,
-                    WriteIndented = false
-                });
+            // ---------------------------------------------------------------------------
+            // STEP 1: Serialize Dictionary -> JSON String using NEWTONSOFT.JSON
+            // ---------------------------------------------------------------------------
+            // Supabase's dictionary contains JTokens/JArrays (Newtonsoft types).
+            // System.Text.Json CANNOT serialize these correctly. We must use Newtonsoft here.
+            var jsonString = NewtonsoftJson.JsonConvert.SerializeObject(subject.Content);
 
-            _logger.LogInformation("✅ Serialized to JSON: {Length} bytes", jsonString.Length);
-            _logger.LogDebug("📄 JSON Content: {Json}",
-                jsonString.Length > 500 ? jsonString.Substring(0, 500) + "..." : jsonString);
+            _logger.LogInformation("✅ Serialized Dictionary to JSON string ({Length} bytes)", jsonString.Length);
 
-            // ⭐ Parse with JsonElement FIRST - handles flexible structure
-            using (JsonDocument doc = JsonDocument.Parse(jsonString))
+            // Log a safe preview of the JSON to verify it looks like valid data (not internal object props)
+            var preview = jsonString.Length > 500 ? jsonString.Substring(0, 500) + "..." : jsonString;
+            _logger.LogInformation("📄 JSON Content Preview: {Json}", preview);
+
+            // ---------------------------------------------------------------------------
+            // STEP 2: Deserialize JSON String -> DTOs using SYSTEM.TEXT.JSON
+            // ---------------------------------------------------------------------------
+            // Now that we have a valid JSON string, we switch back to System.Text.Json
+            // to ensure all [JsonPropertyName] attributes on your DTOs are respected.
+            var options = new JsonSerializerOptions
             {
-                var root = doc.RootElement;
-                var content = new SyllabusContent();
+                PropertyNameCaseInsensitive = true,
+                Converters = { new JsonStringEnumConverter() },
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            };
 
-                // Parse CourseDescription
-                if (root.TryGetProperty("CourseDescription", out var descElement) &&
-                    descElement.ValueKind != JsonValueKind.Null)
-                {
-                    content.CourseDescription = descElement.GetString();
-                }
+            var content = JsonSerializer.Deserialize<SyllabusContent>(jsonString, options);
 
-                // Parse SessionSchedule - manually parse each session
-                if (root.TryGetProperty("SessionSchedule", out var sessionElement) &&
-                    sessionElement.ValueKind == JsonValueKind.Array)
-                {
-                    content.SessionSchedule = new List<SyllabusSessionDto>();
-
-                    foreach (var sessionItem in sessionElement.EnumerateArray())
-                    {
-                        if (sessionItem.ValueKind != JsonValueKind.Object)
-                        {
-                            _logger.LogWarning("⚠️ SessionSchedule item is not an object, skipping");
-                            continue;
-                        }
-
-                        var session = new SyllabusSessionDto();
-
-                        // Parse SessionNumber
-                        if (sessionItem.TryGetProperty("SessionNumber", out var sessionNumElement))
-                        {
-                            session.SessionNumber = sessionNumElement.GetInt32();
-                        }
-
-                        // Parse Topic
-                        if (sessionItem.TryGetProperty("Topic", out var topicElement) &&
-                            topicElement.ValueKind != JsonValueKind.Null)
-                        {
-                            session.Topic = topicElement.GetString() ?? string.Empty;
-                        }
-
-                        // Parse Activities
-                        if (sessionItem.TryGetProperty("Activities", out var activitiesElement) &&
-                            activitiesElement.ValueKind == JsonValueKind.Array)
-                        {
-                            session.Activities = new List<string>();
-                            foreach (var activity in activitiesElement.EnumerateArray())
-                            {
-                                if (activity.ValueKind != JsonValueKind.Null)
-                                {
-                                    session.Activities.Add(activity.GetString() ?? string.Empty);
-                                }
-                            }
-                        }
-
-                        // Parse Readings
-                        if (sessionItem.TryGetProperty("Readings", out var readingsElement) &&
-                            readingsElement.ValueKind == JsonValueKind.Array)
-                        {
-                            session.Readings = new List<string>();
-                            foreach (var reading in readingsElement.EnumerateArray())
-                            {
-                                if (reading.ValueKind != JsonValueKind.Null)
-                                {
-                                    session.Readings.Add(reading.GetString() ?? string.Empty);
-                                }
-                            }
-                        }
-
-                        // Parse SuggestedUrl
-                        if (sessionItem.TryGetProperty("SuggestedUrl", out var urlElement) &&
-                            urlElement.ValueKind != JsonValueKind.Null)
-                        {
-                            session.SuggestedUrl = urlElement.GetString();
-                        }
-
-                        content.SessionSchedule.Add(session);
-                    }
-
-                    _logger.LogInformation("✅ Parsed {Count} sessions", content.SessionSchedule.Count);
-                }
-
-                // Parse CourseLearningOutcomes
-                if (root.TryGetProperty("CourseLearningOutcomes", out var outcomesElement) &&
-                    outcomesElement.ValueKind == JsonValueKind.Array)
-                {
-                    content.CourseLearningOutcomes = new List<CourseLearningOutcome>();
-                    foreach (var outcomeItem in outcomesElement.EnumerateArray())
-                    {
-                        if (outcomeItem.ValueKind != JsonValueKind.Object) continue;
-
-                        var outcome = new CourseLearningOutcome();
-                        if (outcomeItem.TryGetProperty("Id", out var idElement))
-                            outcome.Id = idElement.GetString() ?? string.Empty;
-                        if (outcomeItem.TryGetProperty("Details", out var detailsElement))
-                            outcome.Details = detailsElement.GetString() ?? string.Empty;
-
-                        content.CourseLearningOutcomes.Add(outcome);
-                    }
-                    _logger.LogInformation("✅ Parsed {Count} learning outcomes", content.CourseLearningOutcomes.Count);
-                }
-
-                // Parse ConstructiveQuestions
-                if (root.TryGetProperty("ConstructiveQuestions", out var questionsElement) &&
-                    questionsElement.ValueKind == JsonValueKind.Array)
-                {
-                    content.ConstructiveQuestions = new List<ConstructiveQuestion>();
-                    foreach (var questionItem in questionsElement.EnumerateArray())
-                    {
-                        if (questionItem.ValueKind != JsonValueKind.Object) continue;
-
-                        var question = new ConstructiveQuestion();
-                        if (questionItem.TryGetProperty("Name", out var nameElement))
-                            question.Name = nameElement.GetString() ?? string.Empty;
-                        if (questionItem.TryGetProperty("Question", out var questionTextElement))
-                            question.Question = questionTextElement.GetString() ?? string.Empty;
-                        if (questionItem.TryGetProperty("SessionNumber", out var sessionNumQElement))
-                            question.SessionNumber = sessionNumQElement.GetInt32();
-
-                        content.ConstructiveQuestions.Add(question);
-                    }
-                    _logger.LogInformation("✅ Parsed {Count} constructive questions", content.ConstructiveQuestions.Count);
-                }
-
-                _logger.LogInformation(
-                    "✅ Successfully retrieved content: {Sessions} sessions, {Outcomes} outcomes, {Questions} questions",
-                    content.SessionSchedule?.Count ?? 0,
-                    content.CourseLearningOutcomes?.Count ?? 0,
-                    content.ConstructiveQuestions?.Count ?? 0);
-
-                return content;
+            if (content == null)
+            {
+                _logger.LogError("❌ Deserialization resulted in null object for Subject {SubjectId}", subject.Id);
+                return new SyllabusContent();
             }
+
+            // ---------------------------------------------------------------------------
+            // STEP 3: Initialize Collections
+            // ---------------------------------------------------------------------------
+            content.CourseLearningOutcomes ??= new List<CourseLearningOutcome>();
+            content.SessionSchedule ??= new List<SyllabusSessionDto>();
+            content.ConstructiveQuestions ??= new List<ConstructiveQuestion>();
+
+            _logger.LogInformation(
+                "✅ Successfully parsed content: {Sessions} sessions, {Outcomes} outcomes, {Questions} questions",
+                content.SessionSchedule.Count,
+                content.CourseLearningOutcomes.Count,
+                content.ConstructiveQuestions.Count);
+
+            return content;
         }
-        catch (JsonException jsonEx)
+        catch (NewtonsoftJson.JsonException njEx)
         {
-            _logger.LogError(jsonEx,
-                "❌ JSON error at Path: {Path} - {Message}",
-                jsonEx.Path ?? "unknown", jsonEx.Message);
+            _logger.LogError(njEx, "❌ Newtonsoft Serialization Failed. The database content structure might be corrupted.");
+            throw new InvalidOperationException($"Failed to serialize subject content from DB: {njEx.Message}", njEx);
+        }
+        catch (JsonException stjEx)
+        {
+            _logger.LogError(stjEx,
+                "❌ System.Text.Json Deserialization Failed. Path: {Path} | Error: {Message}",
+                stjEx.Path ?? "root", stjEx.Message);
+
+            // Provide a clearer error message for debugging
             throw new InvalidOperationException(
-                $"Failed to convert subject content: {jsonEx.Message}", jsonEx);
+                $"The data in the database is valid JSON but does not match the SyllabusContent schema. Path: {stjEx.Path}. Error: {stjEx.Message}", stjEx);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Unexpected error during deserialization");
+            _logger.LogError(ex, "❌ Unexpected error during GetSubjectContent");
             throw;
         }
     }

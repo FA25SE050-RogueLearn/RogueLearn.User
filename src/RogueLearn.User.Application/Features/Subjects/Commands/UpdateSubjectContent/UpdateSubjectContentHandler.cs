@@ -1,20 +1,17 @@
-﻿using MediatR;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/UpdateSubjectContent/UpdateSubjectContentHandler.cs
+using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Interfaces;
-using System.Text.Json;
+using System.Text.Json; // Keep System.Text.Json for serializing the DTO
 using System.Text.Json.Serialization;
+
+// ⭐ Alias Newtonsoft to handle the Dictionary conversion safely
+using NewtonsoftJson = Newtonsoft.Json;
 
 namespace RogueLearn.User.Application.Features.Subjects.Commands.UpdateSubjectContent;
 
-/// <summary>
-/// Handler for updating subject content (syllabus JSON).
-/// Converts SyllabusContent model to Dictionary<string, object> (JSONB).
-/// 
-/// Pattern: Supabase expects JSONB as Dictionary<string, object>
-/// We convert from our strongly-typed SyllabusContent model.
-/// </summary>
 public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentCommand, SyllabusContent>
 {
     private readonly ISubjectRepository _subjectRepository;
@@ -28,9 +25,6 @@ public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentC
         _logger = logger;
     }
 
-    /// <summary>
-    /// Executes the command to update subject content.
-    /// </summary>
     public async Task<SyllabusContent> Handle(
         UpdateSubjectContentCommand request,
         CancellationToken cancellationToken)
@@ -51,17 +45,19 @@ public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentC
             throw new NotFoundException("Subject", request.SubjectId);
         }
 
-        // ⭐ CRITICAL: Convert SyllabusContent model to Dictionary<string, object> (JSONB)
         try
         {
-            // Step 1: Serialize SyllabusContent to JSON string
+            // STEP 1: Serialize DTO -> JSON String (using System.Text.Json)
+            // We MUST use System.Text.Json here to respect the [JsonPropertyName] attributes
+            // defined in your SyllabusContent/SyllabusSessionDto classes.
             var jsonString = JsonSerializer.Serialize(
                 request.Content,
                 new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                     WriteIndented = false,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                    Converters = { new JsonStringEnumConverter() }
                 });
 
             _logger.LogInformation(
@@ -69,14 +65,11 @@ public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentC
                 subject.Id,
                 jsonString.Length);
 
-            // Step 2: Deserialize JSON string to Dictionary<string, object>
-            // This is what Supabase expects for JSONB columns
-            var contentDict = JsonSerializer.Deserialize<Dictionary<string, object>>(
-                jsonString,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+            // STEP 2: Deserialize JSON String -> Dictionary (using NEWTONSOFT.JSON)
+            // ⭐ FIXED: We use Newtonsoft here. System.Text.Json would create 'JsonElement' objects,
+            // which results in {"ValueKind": ...} artifacts when saved to Supabase.
+            // Newtonsoft creates JObjects/JArrays/Primitives which Supabase handles correctly.
+            var contentDict = NewtonsoftJson.JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonString);
 
             if (contentDict == null)
             {
@@ -87,8 +80,7 @@ public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentC
             subject.Content = contentDict;
             subject.UpdatedAt = DateTimeOffset.UtcNow;
 
-            // Save to database via repository
-            // GenericRepository handles the Supabase update automatically
+            // Save to database
             await _subjectRepository.UpdateAsync(subject, cancellationToken);
 
             _logger.LogInformation(
@@ -98,21 +90,20 @@ public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentC
         }
         catch (JsonException jsonEx)
         {
-            _logger.LogError(jsonEx,
-                "JSON conversion error for subject {SubjectId}",
-                subject.Id);
-            throw new InvalidOperationException(
-                $"Failed to convert subject content: {jsonEx.Message}", jsonEx);
+            _logger.LogError(jsonEx, "System.Text.Json serialization error for subject {SubjectId}", subject.Id);
+            throw new InvalidOperationException($"Failed to serialize DTO: {jsonEx.Message}", jsonEx);
+        }
+        catch (NewtonsoftJson.JsonException njEx)
+        {
+            _logger.LogError(njEx, "Newtonsoft deserialization error for subject {SubjectId}", subject.Id);
+            throw new InvalidOperationException($"Failed to prepare dictionary for DB: {njEx.Message}", njEx);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "Unexpected error updating subject {SubjectId}",
-                subject.Id);
+            _logger.LogError(ex, "Unexpected error updating subject {SubjectId}", subject.Id);
             throw;
         }
 
-        // Return the content object (not the Dictionary)
         return request.Content;
     }
 }
