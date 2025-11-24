@@ -57,18 +57,6 @@ public static class ServiceCollectionExtensions
             // The blocking `.GetAwaiter().GetResult()` call is removed.
             // Initialization is now handled in a non-blocking, fire-and-forget task,
             // which prevents deadlocks and thread pool starvation that caused the connection errors.
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await client.InitializeAsync();
-                }
-                catch
-                {
-                    // Initialization failures are handled gracefully. The client will attempt to
-                    // initialize on first use if this background task fails.
-                }
-            });
 
             return client;
         });
