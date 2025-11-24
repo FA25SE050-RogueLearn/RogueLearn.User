@@ -127,7 +127,7 @@ public class SubjectsController : ControllerBase
     /// <summary>
     /// Gets all skill mappings for a specific subject.
     /// </summary>
-    [HttpGet("{subjectId:guid}/skill-mappings")]
+    [HttpGet("{subjectId:guid}/skills")]
     [ProducesResponseType(typeof(List<SubjectSkillMappingDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSkillMappings(Guid subjectId, CancellationToken cancellationToken)
     {
@@ -138,7 +138,7 @@ public class SubjectsController : ControllerBase
     /// <summary>
     /// Maps a skill to a subject with a specific relevance weight.
     /// </summary>
-    [HttpPost("{subjectId:guid}/skill-mappings")]
+    [HttpPost("{subjectId:guid}/skills")]
     [ProducesResponseType(typeof(AddSubjectSkillMappingResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -152,7 +152,7 @@ public class SubjectsController : ControllerBase
     /// <summary>
     /// Removes a skill mapping from a subject.
     /// </summary>
-    [HttpDelete("{subjectId:guid}/skill-mappings/{skillId:guid}")]
+    [HttpDelete("{subjectId:guid}/skills/{skillId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveSkillMapping(Guid subjectId, Guid skillId, CancellationToken cancellationToken)

@@ -23,11 +23,6 @@ public class Skill : BaseEntity
     [Column("description")]
     public string? Description { get; set; }
 
-    // This new column links the skill to the subject it was generated from.
-    // It is nullable to allow for skills that are created manually by an admin.
-    [Column("source_subject_id")]
-    public Guid? SourceSubjectId { get; set; }
-
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
