@@ -95,10 +95,7 @@ public class GuildPostsController : ControllerBase
         return CreatedAtAction(nameof(GetGuildPostById), new { guildId, postId = result.PostId }, result);
     }
 
-    /// <summary>
-    /// Create a guild post with images (Multipart Form).
-    /// </summary>
-    [HttpPost("api/guilds/{guildId:guid}/posts/upload")] // CHANGED: Added /upload suffix to resolve route conflict
+    [HttpPost("api/guilds/{guildId:guid}/posts/form")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateGuildPostResponse), StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateGuildPostForm([FromRoute] Guid guildId, [FromForm] string title, [FromForm] string content, [FromForm] string[]? tags, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
@@ -152,10 +149,7 @@ public class GuildPostsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Edit a guild post with images (Multipart Form).
-    /// </summary>
-    [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}/upload")] // CHANGED: Added /upload suffix to resolve route conflict
+    [HttpPut("api/guilds/{guildId:guid}/posts/{postId:guid}/form")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> EditGuildPostForm([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromForm] string title, [FromForm] string content, [FromForm] string[]? tags, [FromForm] IFormFileCollection files, CancellationToken cancellationToken)
