@@ -228,6 +228,8 @@ service GuildsService {
   rpc GetMemberRoles(GetGuildMemberRolesRequest) returns (GuildMemberRoleList);
   rpc GetMyGuild(GetMyGuildRequest) returns (Guild);
   rpc GetMyJoinRequests(GetMyJoinRequestsRequest) returns (GuildJoinRequestList);
+  rpc UpdateMemberContributionPoints(UpdateMemberContributionPointsRequest) returns (google.protobuf.Empty);
+  rpc UpdateGuildMeritPoints(UpdateGuildMeritPointsRequest) returns (google.protobuf.Empty);
 }
 
 message GetAllGuildsRequest { bool include_private = 1; }
@@ -269,3 +271,14 @@ message GuildMemberRoleList { repeated string roles = 1; }
 message GetMyGuildRequest { string auth_user_id = 1; }
 
 message GetMyJoinRequestsRequest { string auth_user_id = 1; bool pending_only = 2; }
+
+message UpdateMemberContributionPointsRequest {
+  string guild_id = 1;
+  string member_auth_user_id = 2;
+  int32 contribution_points = 3;
+}
+
+message UpdateGuildMeritPointsRequest {
+  string guild_id = 1;
+  int32 merit_points = 2;
+}

@@ -373,6 +373,28 @@ public class GuildsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("{guildId:guid}/members/{memberAuthUserId:guid}/contribution-points")]
+    [GuildMasterOrOfficerOnly("guildId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateMemberContributionPoints([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] AddContributionPointsRequest body, CancellationToken cancellationToken = default)
+    {
+        await _mediator.Send(new RogueLearn.User.Application.Features.Guilds.Commands.UpdateMemberContributionPoints.UpdateMemberContributionPointsCommand(guildId, memberAuthUserId, body.PointsToAdd), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("{guildId:guid}/merit-points")]
+    [GuildMasterOnly("guildId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateGuildMeritPoints([FromRoute] Guid guildId, [FromBody] AddGuildMeritPointsRequest body, CancellationToken cancellationToken = default)
+    {
+        await _mediator.Send(new RogueLearn.User.Application.Features.Guilds.Commands.UpdateGuildMeritPoints.UpdateGuildMeritPointsCommand(guildId, body.PointsToAdd), cancellationToken);
+        return NoContent();
+    }
+
     /// <summary>
     /// Admin-only: Transfer guild leadership.
     /// </summary>
@@ -525,6 +547,9 @@ public class GuildsController : ControllerBase
         await _mediator.Send(new RevokeGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId, IsAdminOverride: true));
         return NoContent();
     }
+
+    public record AddContributionPointsRequest(int PointsToAdd);
+    public record AddGuildMeritPointsRequest(int PointsToAdd);
 
     /// <summary>
     /// Get roles of a guild member. Returns list to support future multi-role.
