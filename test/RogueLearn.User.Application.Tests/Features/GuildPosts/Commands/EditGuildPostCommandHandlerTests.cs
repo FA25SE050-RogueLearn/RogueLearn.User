@@ -26,7 +26,8 @@ public class EditGuildPostCommandHandlerTests
         repo.Setup(r => r.UpdateAsync(It.IsAny<GuildPost>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((GuildPost p, CancellationToken _) => p);
 
-        var handler = new EditGuildPostCommandHandler(repo.Object);
+        var imageStorage = new Mock<RogueLearn.User.Application.Interfaces.IGuildPostImageStorage>();
+        var handler = new EditGuildPostCommandHandler(repo.Object, imageStorage.Object);
         var cmd = new EditGuildPostCommand(guildId, postId, authorId, new EditGuildPostRequest
         {
             Title = "Updated",
@@ -51,7 +52,8 @@ public class EditGuildPostCommandHandlerTests
         repo.Setup(r => r.GetByIdAsync(guildId, postId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GuildPost { Id = postId, GuildId = guildId, AuthorId = Guid.NewGuid() });
 
-        var handler = new EditGuildPostCommandHandler(repo.Object);
+        var imageStorage2 = new Mock<RogueLearn.User.Application.Interfaces.IGuildPostImageStorage>();
+        var handler = new EditGuildPostCommandHandler(repo.Object, imageStorage2.Object);
         var cmd = new EditGuildPostCommand(guildId, postId, authorId, new EditGuildPostRequest { Title = "x" });
 
         await Assert.ThrowsAsync<ForbiddenException>(() => handler.Handle(cmd, CancellationToken.None));

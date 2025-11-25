@@ -156,6 +156,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAvatarStorage, AvatarStorage>();
         services.AddScoped<IAchievementImageStorage, AchievementImageStorage>();
         services.AddScoped<IGuildPostImageStorage, GuildPostImageStorage>();
+        services.AddScoped<ILecturerVerificationProofStorage, LecturerVerificationProofStorage>();
 
         services.AddScoped<IPdfTextExtractor, PdfTextExtractor>();
 
