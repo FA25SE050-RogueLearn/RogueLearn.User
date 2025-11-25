@@ -22,7 +22,8 @@ public class GetMyLecturerVerificationRequestsQueryHandler : IRequestHandler<Get
             Reason = r.ReviewNotes,
             SubmittedAt = r.SubmittedAt,
             ReviewedAt = r.ReviewedAt,
-            ScreenshotUrl = r.Documents != null && r.Documents.TryGetValue("screenshotUrl", out var urlObj) ? urlObj?.ToString() : null
+            ScreenshotUrl = r.Documents != null && r.Documents.TryGetValue("screenshotUrl", out var urlObj) ? urlObj?.ToString() : null,
+            Documents = r.Documents
         }).OrderByDescending(x => x.SubmittedAt).ToList();
         return list;
     }

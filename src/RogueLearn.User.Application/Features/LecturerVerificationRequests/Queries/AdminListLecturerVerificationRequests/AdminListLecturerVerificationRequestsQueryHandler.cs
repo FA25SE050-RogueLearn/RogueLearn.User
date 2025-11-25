@@ -41,7 +41,8 @@ public class AdminListLecturerVerificationRequestsQueryHandler : IRequestHandler
                 Id = r.Id,
                 UserId = r.AuthUserId,
                 Status = r.Status == VerificationStatus.Rejected ? "declined" : r.Status.ToString().ToLowerInvariant(),
-                Institution = r.Documents != null && r.Documents.TryGetValue("institution", out var inst) ? inst?.ToString() : null
+                StaffId = r.Documents != null && r.Documents.TryGetValue("staffId", out var staff) ? staff?.ToString() : null,
+                Email = r.Documents != null && r.Documents.TryGetValue("email", out var email) ? email?.ToString() : null
             })
             .ToList();
 

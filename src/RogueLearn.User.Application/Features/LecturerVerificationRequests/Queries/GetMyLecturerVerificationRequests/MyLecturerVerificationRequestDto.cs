@@ -8,4 +8,5 @@ public class MyLecturerVerificationRequestDto
     public DateTimeOffset SubmittedAt { get; set; }
     public DateTimeOffset? ReviewedAt { get; set; }
     public string? ScreenshotUrl { get; set; }
+    public Dictionary<string, object>? Documents { get; set; }
 }

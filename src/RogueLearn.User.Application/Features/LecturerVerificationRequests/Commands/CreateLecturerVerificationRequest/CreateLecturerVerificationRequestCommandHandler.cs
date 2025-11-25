@@ -33,13 +33,13 @@ public class CreateLecturerVerificationRequestCommandHandler : IRequestHandler<C
             throw new BadRequestException("Email does not match authenticated account.");
         }
 
-        var hasPending = await _requestRepository.AnyAsync(r => r.AuthUserId == request.AuthUserId && r.Status == VerificationStatus.Pending, cancellationToken);
+        var hasPending = await _requestRepository.AnyPendingAsync(request.AuthUserId, cancellationToken);
         if (hasPending)
         {
             throw new ConflictException("You already have a pending verification request.");
         }
 
-        var hasApproved = await _requestRepository.AnyAsync(r => r.AuthUserId == request.AuthUserId && r.Status == VerificationStatus.Approved, cancellationToken);
+        var hasApproved = await _requestRepository.AnyApprovedAsync(request.AuthUserId, cancellationToken);
         if (hasApproved)
         {
             throw new ConflictException("You already have an approved verification request.");
