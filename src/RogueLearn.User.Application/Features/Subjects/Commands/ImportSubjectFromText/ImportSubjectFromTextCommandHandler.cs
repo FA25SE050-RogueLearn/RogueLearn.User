@@ -234,6 +234,8 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
     private string BuildSubjectContext(SyllabusData syllabusData)
     {
         var contextParts = new List<string>();
+        var subjectNameLower = syllabusData.SubjectName?.ToLowerInvariant() ?? "";
+        var subjectCodeLower = syllabusData.SubjectCode?.ToLowerInvariant() ?? "";
 
         // Priority 1: Use TechnologyStack if AI extracted it
         if (!string.IsNullOrWhiteSpace(syllabusData.TechnologyStack))
@@ -242,72 +244,61 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             _logger.LogDebug("Using TechnologyStack from AI: '{Stack}'", syllabusData.TechnologyStack);
         }
 
-        // Priority 2: Extract from subject name
-        var subjectNameLower = syllabusData.SubjectName?.ToLowerInvariant() ?? "";
-
+        // Priority 2: Extract from subject name (more reliable)
         if (subjectNameLower.Contains("android") || subjectNameLower.Contains("mobile"))
         {
-            if (!contextParts.Any(c => c.Contains("Android", StringComparison.OrdinalIgnoreCase)))
+            contextParts.Add("Android Mobile");
+        }
+        else if (subjectNameLower.Contains("asp.net") || (subjectNameLower.Contains(".net") && !subjectNameLower.Contains("java")))
+        {
+            contextParts.Add("ASP.NET Core");
+        }
+        else if (subjectNameLower.Contains("react"))
+        {
+            contextParts.Add("React JavaScript");
+        }
+        else if (subjectNameLower.Contains("vue"))
+        {
+            contextParts.Add("Vue JavaScript");
+        }
+        else if (subjectNameLower.Contains("angular"))
+        {
+            contextParts.Add("Angular TypeScript");
+        }
+        else if (subjectNameLower.Contains("java") && !subjectNameLower.Contains("javascript"))
+        {
+            contextParts.Add("Java");
+        }
+        else if (subjectNameLower.Contains("python"))
+        {
+            contextParts.Add("Python");
+        }
+        else if (subjectNameLower.Contains("web") && !subjectNameLower.Contains("java"))
+        {
+            contextParts.Add("Web Development");
+        }
+
+        // Priority 3: If name detection failed, use subject code patterns
+        if (contextParts.Count == 0 || (contextParts.Count == 1 && contextParts[0] == syllabusData.TechnologyStack))
+        {
+            if (subjectCodeLower.StartsWith("prm") || subjectCodeLower.StartsWith("mad"))
+            {
                 contextParts.Add("Android Mobile");
-        }
-        if (subjectNameLower.Contains("asp.net") || subjectNameLower.Contains(".net") || subjectNameLower.Contains("c#"))
-        {
-            if (!contextParts.Any(c => c.Contains("ASP.NET", StringComparison.OrdinalIgnoreCase)))
+            }
+            else if (subjectCodeLower.StartsWith("prn"))
+            {
                 contextParts.Add("ASP.NET Core");
-        }
-
-        // JavaScript frameworks
-        if (subjectNameLower.Contains("react"))
-        {
-            if (!contextParts.Any(c => c.Contains("React", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("React JavaScript");
-        }
-        if (subjectNameLower.Contains("vue"))
-        {
-            if (!contextParts.Any(c => c.Contains("Vue", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("Vue JavaScript");
-        }
-        if (subjectNameLower.Contains("angular"))
-        {
-            if (!contextParts.Any(c => c.Contains("Angular", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("Angular TypeScript");
-        }
-
-        // Java (not JavaScript)
-        if (subjectNameLower.Contains("java") && !subjectNameLower.Contains("javascript"))
-        {
-            if (!contextParts.Any(c => c.Contains("Java", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("Java");
-        }
-
-        // Python
-        if (subjectNameLower.Contains("python"))
-        {
-            if (!contextParts.Any(c => c.Contains("Python", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("Python");
-        }
-
-        // Priority 3: Extract from subject code patterns
-        var subjectCodeLower = syllabusData.SubjectCode?.ToLowerInvariant() ?? "";
-
-        // Common FPT University subject code patterns
-        if (subjectCodeLower.StartsWith("prm") || subjectCodeLower.StartsWith("mad"))
-        {
-            if (!contextParts.Any(c => c.Contains("Android", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("Android Mobile");
-        }
-        else if (subjectCodeLower.StartsWith("prn") || subjectCodeLower.StartsWith("prj"))
-        {
-            if (!contextParts.Any(c => c.Contains("ASP.NET", StringComparison.OrdinalIgnoreCase)))
-                contextParts.Add("ASP.NET Core");
-        }
-        else if (subjectCodeLower.StartsWith("swp") || subjectCodeLower.StartsWith("swd"))
-        {
-            if (!contextParts.Any(c => c.Contains("Web", StringComparison.OrdinalIgnoreCase)))
+            }
+            else if (subjectCodeLower.StartsWith("prj"))
+            {
+                contextParts.Add("Project/General Programming");
+            }
+            else if (subjectCodeLower.StartsWith("swp") || subjectCodeLower.StartsWith("swd"))
+            {
                 contextParts.Add("Web Development");
+            }
         }
 
-        // Build final context string
         var finalContext = contextParts.Any()
             ? string.Join(", ", contextParts.Distinct())
             : syllabusData.SubjectName ?? "Programming";
@@ -315,8 +306,14 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         return finalContext;
     }
 
+
     /// <summary>
     /// Detect the category of subject for appropriate source selection.
+    /// NOW INCLUDES ComputerScience category for theory-based CS subjects.
+    /// </summary>
+    /// <summary>
+    /// Detect the category of subject for appropriate source selection.
+    /// NOW INCLUDES ComputerScience category for theory-based CS subjects.
     /// </summary>
     private SubjectCategory DetectSubjectCategory(SyllabusData syllabusData)
     {
@@ -369,7 +366,28 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             return SubjectCategory.Science;
         }
 
-        // Programming/Technology
+        // NEW: Computer Science (theory/architecture - not hands-on coding)
+        // Check BEFORE Programming to catch theory-heavy CS subjects
+        if (combinedText.Contains("computer organization") ||
+            combinedText.Contains("computer architecture") ||
+            combinedText.Contains("computer system") ||
+            combinedText.Contains("operating system") ||
+            combinedText.Contains("data structure") ||
+            combinedText.Contains("algorithm") ||
+            combinedText.Contains("network") && !combinedText.Contains("programming") ||
+            combinedText.Contains("database") && !combinedText.Contains("development") ||
+            subjectCodeLower.StartsWith("cea") ||  // Computer Evolution & Architecture
+            subjectCodeLower.StartsWith("csa") ||  // Computer System Architecture
+            subjectCodeLower.StartsWith("csi") ||  // Computer Science Introduction
+            subjectCodeLower.StartsWith("osf") ||  // Operating System Fundamentals
+            subjectCodeLower.StartsWith("net") ||  // Networking
+            subjectCodeLower.StartsWith("dsa") ||  // Data Structures & Algorithms (theory)
+            subjectCodeLower.StartsWith("cso"))    // Computer System Organization
+        {
+            return SubjectCategory.ComputerScience;
+        }
+
+        // Programming/Technology (hands-on coding)
         if (combinedText.Contains("programming") || combinedText.Contains("lập trình") ||
             combinedText.Contains("android") || combinedText.Contains("web") ||
             combinedText.Contains("mobile") || combinedText.Contains("software") ||
@@ -380,6 +398,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         {
             return SubjectCategory.Programming;
         }
+
         return SubjectCategory.General;
     }
 

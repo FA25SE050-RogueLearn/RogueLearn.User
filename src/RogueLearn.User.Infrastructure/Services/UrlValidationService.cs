@@ -8,11 +8,94 @@ namespace RogueLearn.User.Infrastructure.Services;
 
 /// <summary>
 /// Validates URLs for accessibility and detects soft 404s, paywalls, and restricted content.
+/// Uses trusted domain whitelist to skip content validation for JavaScript-rendered sites.
 /// </summary>
 public class UrlValidationService : IUrlValidationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UrlValidationService> _logger;
+
+    // Trusted domains that skip content length validation
+    // These are well-known educational/tutorial sites that may use JS rendering
+    private static readonly HashSet<string> _trustedDomains = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Programming Tutorials - Vietnamese
+        "viblo.asia",
+        "topdev.vn",
+        "200lab.io",
+        "techtalk.vn",
+        "techmaster.vn",
+        
+        // Programming Tutorials - International
+        "geeksforgeeks.org",
+        "w3schools.com",
+        "tutorialspoint.com",
+        "programiz.com",
+        "javatpoint.com",
+        "tutorialsteacher.com",
+        "guru99.com",
+        "studytonight.com",
+        "baeldung.com",         // Java tutorials
+        "jenkov.com",           // Java tutorials
+        "mkyong.com",           // Java/Spring tutorials
+        
+        // Developer Blogs
+        "dev.to",
+        "hashnode.dev",
+        "freecodecamp.org",
+        "digitalocean.com",
+        "css-tricks.com",
+        "smashingmagazine.com",
+        "logrocket.com",
+        "sitepoint.com",
+        
+        // Official Documentation
+        "developer.android.com",
+        "learn.microsoft.com",
+        "docs.microsoft.com",
+        "react.dev",
+        "reactjs.org",
+        "vuejs.org",
+        "angular.io",
+        "docs.oracle.com",
+        "oracle.com",
+        "developer.mozilla.org",
+        "nodejs.org",
+        "docs.python.org",
+        "kotlinlang.org",
+        "dart.dev",
+        "flutter.dev",
+        
+        // Vietnamese Educational Sites
+        "vietjack.com",
+        "tailieu.vn",
+        "123doc.net",
+        "hocmai.vn",
+        "tuyensinh247.com",
+        "loigiaihay.com",
+        
+        // Vietnamese News/Politics (for non-programming subjects)
+        "thuvienphapluat.vn",
+        "dangcongsan.vn",
+        "chinhphu.vn",
+        "nhandan.vn",
+        "vnexpress.net",
+        "thanhnien.vn",
+        "tuoitre.vn",
+        "dantri.com.vn",
+        "cafef.vn",
+        "baomoi.com",
+        
+        // Academic Sources
+        "wikipedia.org",
+        "britannica.com",
+        "khanacademy.org",
+        "coursera.org",
+        "edx.org",
+        "mit.edu",
+        "stanford.edu",
+        "berkeley.edu"
+    };
 
     // Patterns indicating unavailable content
     private static readonly string[] _notFoundIndicators = new[]
@@ -33,7 +116,7 @@ public class UrlValidationService : IUrlValidationService
         "the page you requested"
     };
 
-    // ADDED: Patterns indicating paywalls or login requirements
+    // Patterns indicating paywalls or login requirements
     private static readonly string[] _paywallIndicators = new[]
     {
         "member-only",
@@ -56,6 +139,23 @@ public class UrlValidationService : IUrlValidationService
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Checks if a URL is from a trusted domain that can skip content validation.
+    /// Supports both exact match and subdomain match.
+    /// </summary>
+    private bool IsTrustedDomain(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+
+        var host = uri.Host.ToLowerInvariant();
+
+        // Check if host matches any trusted domain
+        // e.g., "developer.android.com" matches "android.com"
+        return _trustedDomains.Any(domain =>
+            host == domain || host.EndsWith($".{domain}"));
     }
 
     public async Task<bool> IsUrlAccessibleAsync(string url, CancellationToken cancellationToken = default)
@@ -99,6 +199,8 @@ public class UrlValidationService : IUrlValidationService
             // Fetch actual content
             var getRequest = new HttpRequestMessage(HttpMethod.Get, url);
             getRequest.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            getRequest.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+            getRequest.Headers.Add("Accept-Language", "en-US,en;q=0.9,vi;q=0.8");
 
             var response = await client.SendAsync(getRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
@@ -118,7 +220,16 @@ public class UrlValidationService : IUrlValidationService
                 return true;
             }
 
-            // Read content to check for soft 404s and paywalls
+            // ✅ NEW: Skip content validation for trusted domains
+            // These sites are vetted and may use JavaScript rendering
+            if (IsTrustedDomain(url))
+            {
+                _logger.LogInformation("✅ URL validation successful for '{Url}' (trusted domain - skipping content check).",
+                    url);
+                return true;
+            }
+
+            // Read content to check for soft 404s and paywalls (untrusted domains only)
             var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var reader = new StreamReader(contentStream);
 
@@ -126,6 +237,16 @@ public class UrlValidationService : IUrlValidationService
             var buffer = new char[102400];
             var charsRead = await reader.ReadAsync(buffer, 0, buffer.Length);
             var contentSnippet = new string(buffer, 0, charsRead);
+
+            // Log HTML preview for debugging (only in Debug mode)
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                var preview = contentSnippet.Length > 500
+                    ? contentSnippet.Substring(0, 500) + "..."
+                    : contentSnippet;
+                _logger.LogDebug("HTML Preview for '{Url}': {Preview}", url, preview);
+            }
+
             var contentLower = contentSnippet.ToLowerInvariant();
 
             // Check for "not found" indicators
@@ -139,7 +260,7 @@ public class UrlValidationService : IUrlValidationService
                 }
             }
 
-            // ADDED: Check for paywall indicators
+            // Check for paywall indicators
             foreach (var indicator in _paywallIndicators)
             {
                 if (contentLower.Contains(indicator))
@@ -151,13 +272,16 @@ public class UrlValidationService : IUrlValidationService
             }
 
             // Check for minimal content (possible blank page or redirect stub)
-            var textContent = Regex.Replace(contentSnippet, "<.*?>", string.Empty);
-            var meaningfulText = Regex.Replace(textContent, @"\s+", " ").Trim();
+            var meaningfulText = ExtractTextFromHtml(contentSnippet);
 
             if (meaningfulText.Length < 200)
             {
-                _logger.LogWarning("URL '{Url}' has insufficient content (only {Length} characters of text).",
-                    url, meaningfulText.Length);
+                _logger.LogWarning(
+                    "URL '{Url}' has insufficient content (only {Length} characters of text). " +
+                    "Extracted text preview: '{TextPreview}'",
+                    url,
+                    meaningfulText.Length,
+                    meaningfulText.Length > 100 ? meaningfulText.Substring(0, 100) + "..." : meaningfulText);
                 return false;
             }
 
@@ -179,6 +303,52 @@ public class UrlValidationService : IUrlValidationService
         {
             _logger.LogError(ex, "An exception occurred while validating URL '{Url}'.", url);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Extracts meaningful text content from HTML, handling common JS-rendering patterns.
+    /// Properly removes script/style blocks and decodes HTML entities.
+    /// </summary>
+    private string ExtractTextFromHtml(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        try
+        {
+            // Remove script and style tags entirely (with their content)
+            var withoutScripts = Regex.Replace(html,
+                @"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>",
+                string.Empty,
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            var withoutStyles = Regex.Replace(withoutScripts,
+                @"<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>",
+                string.Empty,
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            // Remove HTML comments
+            var withoutComments = Regex.Replace(withoutStyles,
+                @"<!--.*?-->",
+                string.Empty,
+                RegexOptions.Singleline);
+
+            // Remove all remaining HTML tags
+            var textContent = Regex.Replace(withoutComments, @"<[^>]+>", string.Empty);
+
+            // Decode common HTML entities
+            textContent = System.Net.WebUtility.HtmlDecode(textContent);
+
+            // Normalize whitespace (collapse multiple spaces/newlines into single space)
+            textContent = Regex.Replace(textContent, @"\s+", " ");
+
+            return textContent.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting text from HTML");
+            return string.Empty;
         }
     }
 }
