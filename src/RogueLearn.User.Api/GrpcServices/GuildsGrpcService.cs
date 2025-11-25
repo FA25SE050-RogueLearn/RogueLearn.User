@@ -10,6 +10,7 @@ using RogueLearn.User.Application.Features.Guilds.Queries.GetMyJoinRequests;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetAllGuilds;
 using RogueLearn.User.Application.Features.Guilds.Commands.UpdateMemberContributionPoints;
 using RogueLearn.User.Application.Features.Guilds.Commands.UpdateGuildMeritPoints;
+using RogueLearn.User.Application.Features.Guilds.Commands.GrantGuildAchievement;
 
 namespace RogueLearn.User.Api.GrpcServices;
 
@@ -204,6 +205,17 @@ public class GuildsGrpcService : GuildsService.GuildsServiceBase
             throw new RpcException(new Status(StatusCode.InvalidArgument, "invalid guild_id"));
         }
         await _mediator.Send(new UpdateGuildMeritPointsCommand(guildId, request.MeritPoints), context.CancellationToken);
+        return new Google.Protobuf.WellKnownTypes.Empty();
+    }
+
+    public override async Task<Google.Protobuf.WellKnownTypes.Empty> GrantGuildAchievement(GrantGuildAchievementRequest request, ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.GuildId, out var guildId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "invalid guild_id"));
+        }
+
+        await _mediator.Send(new GrantGuildAchievementCommand(guildId, request.AchievementKey), context.CancellationToken);
         return new Google.Protobuf.WellKnownTypes.Empty();
     }
 }

@@ -28,7 +28,8 @@ public class CreateGuildPostCommandHandlerTests
         postRepo.Setup(r => r.AddAsync(It.IsAny<GuildPost>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((GuildPost p, CancellationToken _) => p);
 
-        var handler = new CreateGuildPostCommandHandler(postRepo.Object, memberRepo.Object, guildRepo.Object);
+        var imageStorage = new Mock<RogueLearn.User.Application.Interfaces.IGuildPostImageStorage>();
+        var handler = new CreateGuildPostCommandHandler(postRepo.Object, memberRepo.Object, guildRepo.Object, imageStorage.Object);
 
         var cmd = new CreateGuildPostCommand(guildId, Guid.NewGuid(), new CreateGuildPostRequest
         {

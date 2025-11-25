@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Features.Guilds.Commands.UpdateMemberContributionPoints;
 
 namespace RogueLearn.User.Application.Features.Achievements.Commands.GrantAchievements;
 
@@ -10,17 +11,23 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IAchievementRepository _achievementRepository;
     private readonly IUserAchievementRepository _userAchievementRepository;
+    private readonly IGuildMemberRepository _guildMemberRepository;
+    private readonly IMediator _mediator;
     private readonly ILogger<GrantAchievementsCommandHandler> _logger;
 
     public GrantAchievementsCommandHandler(
         IUserProfileRepository userProfileRepository,
         IAchievementRepository achievementRepository,
         IUserAchievementRepository userAchievementRepository,
+        IGuildMemberRepository guildMemberRepository,
+        IMediator mediator,
         ILogger<GrantAchievementsCommandHandler> logger)
     {
         _userProfileRepository = userProfileRepository;
         _achievementRepository = achievementRepository;
         _userAchievementRepository = userAchievementRepository;
+        _guildMemberRepository = guildMemberRepository;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -72,6 +79,16 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
 
             result.GrantedCount++;
             _logger.LogInformation("Granted achievement key={Key} to AuthUserId={AuthUserId}", entry.AchievementKey, entry.AuthUserId);
+
+            var contributionDelta = achievement.ContributionPointsReward ?? 0;
+            if (contributionDelta > 0)
+            {
+                var memberships = await _guildMemberRepository.GetMembershipsByUserAsync(user.AuthUserId, cancellationToken);
+                foreach (var m in memberships.Where(x => x.Status == RogueLearn.User.Domain.Enums.MemberStatus.Active))
+                {
+                    await _mediator.Send(new UpdateMemberContributionPointsCommand(m.GuildId, user.AuthUserId, contributionDelta), cancellationToken);
+                }
+            }
         }
 
         return result;

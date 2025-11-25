@@ -39,4 +39,10 @@ public class Achievement : BaseEntity
 
     [Column("source_service")]
     public string SourceService { get; set; } = string.Empty;
+
+    [Column("merit_points_reward")]
+    public int? MeritPointsReward { get; set; }
+
+    [Column("contribution_points_reward")]
+    public int? ContributionPointsReward { get; set; }
 }
