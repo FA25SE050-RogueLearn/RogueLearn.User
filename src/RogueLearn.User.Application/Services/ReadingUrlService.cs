@@ -11,6 +11,7 @@ namespace RogueLearn.User.Application.Services;
 public enum SubjectCategory
 {
     Programming,
+    ComputerScience,  // NEW: Theory-based CS (architecture, systems, etc.)
     VietnamesePolitics,
     History,
     VietnameseLiterature,
@@ -41,6 +42,9 @@ public class ReadingUrlService : IReadingUrlService
         "tutorialsteacher.com",
         "guru99.com",
         "studytonight.com",
+        "baeldung.com",         // Excellent Java tutorials
+        "jenkov.com",           // Java tutorials
+        "mkyong.com",           // Java/Spring tutorials
         
         // Vietnamese programming
         "viblo.asia",
@@ -289,12 +293,25 @@ public class ReadingUrlService : IReadingUrlService
         if (contextLower.Contains("android")) keywords.Add("android");
         if (contextLower.Contains("mobile")) keywords.Add("mobile");
         if (contextLower.Contains("kotlin")) keywords.Add("kotlin");
-        if (contextLower.Contains("java") && !contextLower.Contains("javascript")) keywords.Add("java");
 
-        // Web - Backend
+        // Java (NOT JavaScript) - Check carefully
+        if (contextLower.Contains("java") && !contextLower.Contains("javascript"))
+        {
+            keywords.Add("java");
+
+            // Specific Java web frameworks
+            if (contextLower.Contains("servlet") || contextLower.Contains("jsp"))
+                keywords.Add("java-web");
+            if (contextLower.Contains("spring"))
+                keywords.Add("spring");
+        }
+
+        // Web - Backend (.NET)
         if (contextLower.Contains("asp.net") || contextLower.Contains("aspnet")) keywords.Add("asp.net");
         if (contextLower.Contains("c#") || contextLower.Contains("csharp")) keywords.Add("c#");
-        if (contextLower.Contains(".net")) keywords.Add(".net");
+        if (contextLower.Contains(".net") && !contextLower.Contains("dotnet.vn")) keywords.Add(".net");
+
+        // Web - Backend (Node.js)
         if (contextLower.Contains("node")) keywords.Add("nodejs");
         if (contextLower.Contains("express")) keywords.Add("express");
 
@@ -302,12 +319,11 @@ public class ReadingUrlService : IReadingUrlService
         if (contextLower.Contains("react")) keywords.Add("react");
         if (contextLower.Contains("vue")) keywords.Add("vue");
         if (contextLower.Contains("angular")) keywords.Add("angular");
-        if (contextLower.Contains("javascript")) keywords.Add("javascript");
+        if (contextLower.Contains("javascript") && !contextLower.Contains("java ")) keywords.Add("javascript");
         if (contextLower.Contains("typescript")) keywords.Add("typescript");
 
         // Other
         if (contextLower.Contains("python")) keywords.Add("python");
-        if (contextLower.Contains("spring")) keywords.Add("spring");
         if (contextLower.Contains("flutter")) keywords.Add("flutter");
         if (contextLower.Contains("ios") || contextLower.Contains("swift")) keywords.Add("ios");
 
@@ -316,6 +332,7 @@ public class ReadingUrlService : IReadingUrlService
 
     /// <summary>
     /// Build search query with subject context and category awareness.
+    /// NOW INCLUDES LANGUAGE DETECTION for General category.
     /// </summary>
     private string BuildContextAwareQuery(string topic, string? subjectContext, SubjectCategory category)
     {
@@ -329,6 +346,10 @@ public class ReadingUrlService : IReadingUrlService
                     return $"{string.Join(" ", contextTokens)} {topic} tutorial";
                 }
                 return $"{topic} tutorial guide";
+
+            case SubjectCategory.ComputerScience:
+                // Computer Science: "Computer architecture guide tutorial"
+                return $"{topic} guide tutorial explanation";
 
             case SubjectCategory.VietnamesePolitics:
                 // Vietnamese Politics: "Tư tưởng Hồ Chí Minh lý thuyết bài giảng"
@@ -351,7 +372,22 @@ public class ReadingUrlService : IReadingUrlService
                 return $"{topic} bài giảng kinh tế";
 
             default:
-                return $"{topic} tài liệu học tập";
+                // FIXED: Detect language to avoid mixing English/Vietnamese
+                bool isVietnamese = topic.Contains(" và ") ||
+                                   topic.Contains(" của ") ||
+                                   topic.Contains(" là ") ||
+                                   topic.Contains(" được ") ||
+                                   topic.Contains(" trong ");
+
+                if (isVietnamese)
+                {
+                    return $"{topic} tài liệu học tập";
+                }
+                else
+                {
+                    // For English topics in General category
+                    return $"{topic} guide tutorial explanation";
+                }
         }
     }
 
@@ -378,10 +414,11 @@ public class ReadingUrlService : IReadingUrlService
                 continue;
             }
 
-            // ⭐ FILTER 2: Block wrong frameworks (PROGRAMMING only)
-            if (category == SubjectCategory.Programming && IsWrongFramework(url, technologyKeywords))
+            // ⭐ FILTER 2: Block wrong frameworks/content
+            if ((category == SubjectCategory.Programming || category == SubjectCategory.ComputerScience) &&
+                IsWrongFramework(url, technologyKeywords, category, topic))
             {
-                _logger.LogDebug("  → 🚫 BLOCKED (wrong framework): {Url}", url);
+                _logger.LogDebug("  → 🚫 BLOCKED (wrong framework/content): {Url}", url);
                 continue;
             }
 
@@ -427,12 +464,13 @@ public class ReadingUrlService : IReadingUrlService
         switch (category)
         {
             case SubjectCategory.Programming:
-                // For programming: Block forums, discussions, etc.
+            case SubjectCategory.ComputerScience:
+                // For programming/CS: Block forums, discussions, etc.
                 foreach (var untrusted in UntrustedSourcesForProgramming)
                 {
                     if (urlLower.Contains(untrusted))
                     {
-                        _logger.LogDebug("🚫 Programming-specific block: {Pattern}", untrusted);
+                        _logger.LogDebug("🚫 Programming/CS-specific block: {Pattern}", untrusted);
                         return true;
                     }
                 }
@@ -459,64 +497,231 @@ public class ReadingUrlService : IReadingUrlService
     }
 
     /// <summary>
-    /// Check if URL is about the wrong technology/framework (PROGRAMMING only).
+    /// Check if URL is about the wrong technology/framework.
+    /// NOW SUPPORTS: Programming category AND ComputerScience category.
     /// </summary>
-    private bool IsWrongFramework(string url, List<string> technologyKeywords)
+    private bool IsWrongFramework(string url, List<string> technologyKeywords, SubjectCategory category, string topic)
     {
         var urlLower = url.ToLowerInvariant();
 
-        // If subject is Android (Kotlin/Java), block Flutter and web-specific content
-        if (technologyKeywords.Contains("android") || technologyKeywords.Contains("kotlin") || technologyKeywords.Contains("mobile"))
+        // PROGRAMMING CATEGORY: Framework-specific blocking
+        if (category == SubjectCategory.Programming)
         {
-            if (urlLower.Contains("flutter") || urlLower.Contains("/flutter/"))
+            // JAVA-SPECIFIC BLOCKING: Block .NET/C# content for Java subjects
+            if (technologyKeywords.Contains("java") && !technologyKeywords.Contains("javascript"))
             {
-                _logger.LogDebug("❌ Wrong framework: Flutter (expected Android)");
-                return true;
+                // Only block if the URL PATH is specifically about .NET (not just mentions it)
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath.ToLowerInvariant();
+
+                // Block dedicated .NET tutorial pages
+                var dotNetPaths = new[] {
+                    "/asp/", "/aspnet/", "/dotnet/", "/csharp/", "/cs/",
+                    "/asp.net/", "/c-sharp/", "/vb.net/"
+                };
+
+                if (dotNetPaths.Any(pattern => path.Contains(pattern)))
+                {
+                    _logger.LogDebug("❌ Wrong language path: .NET/C# (expected Java) - Path: {Path}", path);
+                    return true;
+                }
+
+                // Block W3Schools .NET pages specifically
+                if (urlLower.Contains("w3schools.com") &&
+                    (path.Contains("/asp/") || path.Contains("/cs/")))
+                {
+                    _logger.LogDebug("❌ W3Schools .NET page (expected Java)");
+                    return true;
+                }
+
+                // Block PHP tutorial pages for Java subjects
+                var phpPaths = new[] { "/php/", "/php5/", "/php7/" };
+                if (phpPaths.Any(pattern => path.Contains(pattern)))
+                {
+                    _logger.LogDebug("❌ Wrong language: PHP (expected Java)");
+                    return true;
+                }
+
+                // Block Python tutorial pages for Java subjects (unless DS/Algo comparison)
+                var topicLower = topic.ToLowerInvariant();
+                var isPythonPath = path.Contains("/python/") || path.Contains("/py/");
+                var isComparisonTopic = topicLower.Contains("comparison") || topicLower.Contains("vs") ||
+                                       topicLower.Contains("difference");
+
+                if (isPythonPath && !isComparisonTopic)
+                {
+                    _logger.LogDebug("❌ Wrong language: Python tutorial (expected Java)");
+                    return true;
+                }
             }
 
-            if (urlLower.Contains("react-native") || urlLower.Contains("reactnative"))
+            // ASP.NET-SPECIFIC BLOCKING: Block Java/Spring content for .NET subjects
+            if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#") || technologyKeywords.Contains(".net"))
             {
-                _logger.LogDebug("❌ Wrong framework: React Native (expected Android)");
-                return true;
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath.ToLowerInvariant();
+
+                // Block dedicated Java tutorial pages
+                var javaPaths = new[] {
+                    "/java/", "/jsp/", "/servlet/", "/spring/",
+                    "/java-ee/", "/jakarta/"
+                };
+
+                if (javaPaths.Any(pattern => path.Contains(pattern)))
+                {
+                    _logger.LogDebug("❌ Wrong language path: Java (expected ASP.NET/C#) - Path: {Path}", path);
+                    return true;
+                }
             }
 
-            if (urlLower.Contains("xamarin"))
+            // ANDROID-SPECIFIC BLOCKING: Block Flutter and web-specific content
+            if (technologyKeywords.Contains("android") || technologyKeywords.Contains("kotlin") || technologyKeywords.Contains("mobile"))
             {
-                _logger.LogDebug("❌ Wrong framework: Xamarin (expected Android)");
-                return true;
+                if (urlLower.Contains("flutter") || urlLower.Contains("/flutter/"))
+                {
+                    _logger.LogDebug("❌ Wrong framework: Flutter (expected Android)");
+                    return true;
+                }
+
+                if (urlLower.Contains("react-native") || urlLower.Contains("reactnative"))
+                {
+                    _logger.LogDebug("❌ Wrong framework: React Native (expected Android)");
+                    return true;
+                }
+
+                if (urlLower.Contains("xamarin"))
+                {
+                    _logger.LogDebug("❌ Wrong framework: Xamarin (expected Android)");
+                    return true;
+                }
+
+                if (urlLower.Contains("localstorage") || urlLower.Contains("local-storage") || urlLower.Contains("sessionstorage"))
+                {
+                    _logger.LogDebug("❌ Web content (expected Android native)");
+                    return true;
+                }
+
+                if (urlLower.Contains("chrome-extension") || urlLower.Contains("chrome/extension"))
+                {
+                    _logger.LogDebug("❌ Chrome extension content (expected Android)");
+                    return true;
+                }
             }
 
-            if (urlLower.Contains("localstorage") || urlLower.Contains("local-storage") || urlLower.Contains("sessionstorage"))
+            // REACT-SPECIFIC BLOCKING: Block Angular/Vue
+            if (technologyKeywords.Contains("react"))
             {
-                _logger.LogDebug("❌ Web content (expected Android native)");
-                return true;
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath.ToLowerInvariant();
+
+                if (path.Contains("/angular/") || path.Contains("/vue/"))
+                {
+                    _logger.LogDebug("❌ Wrong framework (expected React)");
+                    return true;
+                }
             }
 
-            if (urlLower.Contains("chrome-extension") || urlLower.Contains("chrome/extension"))
+            // VUE-SPECIFIC BLOCKING: Block React/Angular
+            if (technologyKeywords.Contains("vue"))
             {
-                _logger.LogDebug("❌ Chrome extension content (expected Android)");
-                return true;
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath.ToLowerInvariant();
+
+                if (path.Contains("/react/") || path.Contains("/angular/"))
+                {
+                    _logger.LogDebug("❌ Wrong framework (expected Vue)");
+                    return true;
+                }
+            }
+
+            // ANGULAR-SPECIFIC BLOCKING: Block React/Vue
+            if (technologyKeywords.Contains("angular"))
+            {
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath.ToLowerInvariant();
+
+                if (path.Contains("/react/") || path.Contains("/vue/"))
+                {
+                    _logger.LogDebug("❌ Wrong framework (expected Angular)");
+                    return true;
+                }
+            }
+
+            // PYTHON-SPECIFIC BLOCKING: Block Java/.NET content
+            if (technologyKeywords.Contains("python"))
+            {
+                var uri = new Uri(url);
+                var path = uri.AbsolutePath.ToLowerInvariant();
+
+                var otherLanguagePaths = new[] { "/java/", "/csharp/", "/asp/", "/dotnet/" };
+                if (otherLanguagePaths.Any(pattern => path.Contains(pattern)))
+                {
+                    _logger.LogDebug("❌ Wrong language (expected Python)");
+                    return true;
+                }
             }
         }
 
-        // If subject is React, block Angular/Vue
-        if (technologyKeywords.Contains("react"))
+        // COMPUTER SCIENCE CATEGORY: Block irrelevant tutorial site sections
+        if (category == SubjectCategory.ComputerScience)
         {
-            if (urlLower.Contains("angular") || urlLower.Contains("vue.js") || urlLower.Contains("vuejs"))
-            {
-                _logger.LogDebug("❌ Wrong framework (expected React)");
-                return true;
-            }
-        }
+            var topicLower = topic.ToLowerInvariant();
 
-        // If subject is ASP.NET, block Spring/Django/Express
-        if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#"))
-        {
-            if (urlLower.Contains("spring-boot") || urlLower.Contains("django") ||
-                urlLower.Contains("express.js") || urlLower.Contains("flask"))
+            // Block W3Schools web development sections for CS theory topics
+            if (urlLower.Contains("w3schools.com"))
             {
-                _logger.LogDebug("❌ Wrong framework (expected ASP.NET)");
-                return true;
+                // Assembly Language, Architecture, OS - NO web dev
+                if (topicLower.Contains("assembly") || topicLower.Contains("architecture") ||
+                    topicLower.Contains("operating system") || topicLower.Contains("computer organization"))
+                {
+                    var webDevSections = new[] { "/html/", "/css/", "/js/", "/javascript/", "/react/", "/vue/", "/angular/", "/bootstrap/" };
+                    if (webDevSections.Any(section => urlLower.Contains(section)))
+                    {
+                        _logger.LogDebug("❌ Wrong W3Schools section: {Url} (expected CS theory, got web dev)", url);
+                        return true;
+                    }
+                }
+
+                // Data Structures - only allow Python/Java/C++, not web languages
+                if (topicLower.Contains("data structure") || topicLower.Contains("algorithm"))
+                {
+                    var webDevSections = new[] { "/html/", "/css/", "/js/", "/javascript/", "/react/", "/vue/", "/sql/" };
+                    if (webDevSections.Any(section => urlLower.Contains(section)))
+                    {
+                        _logger.LogDebug("❌ Wrong W3Schools section: {Url} (expected DS/Algo, got web dev)", url);
+                        return true;
+                    }
+                }
+            }
+
+            // Block TutorialsPoint web development for CS theory
+            if (urlLower.Contains("tutorialspoint.com"))
+            {
+                if (topicLower.Contains("assembly") || topicLower.Contains("architecture") ||
+                    topicLower.Contains("operating system") || topicLower.Contains("computer organization"))
+                {
+                    var webDevSections = new[] { "/html/", "/css/", "/javascript/", "/reactjs/", "/vuejs/", "/angular/" };
+                    if (webDevSections.Any(section => urlLower.Contains(section)))
+                    {
+                        _logger.LogDebug("❌ Wrong TutorialsPoint section: {Url} (expected CS theory, got web dev)", url);
+                        return true;
+                    }
+                }
+            }
+
+            // Block GeeksforGeeks web development for pure CS theory
+            if (urlLower.Contains("geeksforgeeks.org"))
+            {
+                if (topicLower.Contains("assembly") || topicLower.Contains("architecture") ||
+                    topicLower.Contains("operating system"))
+                {
+                    var webDevKeywords = new[] { "-html-", "-css-", "-javascript-", "-react-", "-vue-" };
+                    if (webDevKeywords.Any(keyword => urlLower.Contains(keyword)))
+                    {
+                        _logger.LogDebug("❌ Wrong GeeksforGeeks article: {Url} (expected CS theory, got web dev)", url);
+                        return true;
+                    }
+                }
             }
         }
 
@@ -526,6 +731,7 @@ public class ReadingUrlService : IReadingUrlService
     /// <summary>
     /// Calculate relevance score (CATEGORY-AWARE).
     /// Higher score = more relevant. Score ≤ 0 = BLOCKED.
+    /// NOW INCLUDES ComputerScience category scoring.
     /// </summary>
     private int CalculateRelevanceScore(
         string url,
@@ -550,7 +756,7 @@ public class ReadingUrlService : IReadingUrlService
                 if (CommunityBlogs.Any(site => urlLower.Contains(site)))
                     score += 900;
 
-                // Technology keyword matches
+                // Technology keyword matches in URL
                 foreach (var keyword in technologyKeywords)
                 {
                     if (urlLower.Contains(keyword))
@@ -559,17 +765,90 @@ public class ReadingUrlService : IReadingUrlService
                         score += 100;
                 }
 
-                // Block wrong technology tutorials
+                // JAVA-SPECIFIC SCORING: Boost Java-relevant URLs
+                if (technologyKeywords.Contains("java") || technologyKeywords.Contains("java-web"))
+                {
+                    // Java-specific tutorial sites get extra boost
+                    if (urlLower.Contains("/java/") || urlLower.Contains("/servlet/") ||
+                        urlLower.Contains("/jsp/") || urlLower.Contains("java-"))
+                        score += 600;
+
+                    // Oracle official docs = very high priority for Java
+                    if (urlLower.Contains("docs.oracle.com") || urlLower.Contains("oracle.com/javase"))
+                        score += 800;
+
+                    // Baeldung = excellent Java tutorials
+                    if (urlLower.Contains("baeldung.com"))
+                        score += 700;
+
+                    // Java-specific terms in topic matched in URL
+                    var topicLower = topic.ToLowerInvariant();
+                    if (topicLower.Contains("servlet") && urlLower.Contains("servlet"))
+                        score += 500;
+                    if (topicLower.Contains("jsp") && urlLower.Contains("jsp"))
+                        score += 500;
+                    if (topicLower.Contains("jdbc") && urlLower.Contains("jdbc"))
+                        score += 500;
+                    if (topicLower.Contains("tomcat") && urlLower.Contains("tomcat"))
+                        score += 400;
+                }
+
+                // Block wrong technology tutorials (W3Schools wrong sections)
                 var wrongTechPatterns = new[]
                 {
                     "w3schools.com/python", "w3schools.com/nodejs",
-                    "w3schools.com/html", "w3schools.com/css",
-                    "w3schools.com/sql", "programiz.com/cpp",
-                    "programiz.com/c-programming", "programiz.com/python",
+                    "w3schools.com/php", "w3schools.com/sql",
+                    "programiz.com/cpp", "programiz.com/c-programming"
                 };
 
                 if (wrongTechPatterns.Any(pattern => urlLower.Contains(pattern)))
-                    return -500;  // Block
+                {
+                    // Only block if subject is NOT about that technology
+                    var subjectTechs = string.Join(" ", technologyKeywords).ToLowerInvariant();
+                    if (!subjectTechs.Contains("python") && urlLower.Contains("/python"))
+                        return -500;
+                    if (!subjectTechs.Contains("php") && urlLower.Contains("/php"))
+                        return -500;
+                    if (!subjectTechs.Contains("nodejs") && urlLower.Contains("/nodejs"))
+                        return -500;
+                }
+                break;
+
+            case SubjectCategory.ComputerScience:
+                // Tutorial sites (GeeksforGeeks excellent for CS theory)
+                if (TutorialSites.Any(site => urlLower.Contains(site)))
+                    score += 1000;
+
+                // Academic sources (Wikipedia, university sites)
+                if (AcademicSources.Any(site => urlLower.Contains(site)))
+                    score += 900;
+
+                // Tech blogs (good explanations)
+                if (CommunityBlogs.Any(site => urlLower.Contains(site)))
+                    score += 800;
+
+                // Specific CS theory terms in URL
+                var csTerms = new[] {
+                    "architecture", "organization", "performance",
+                    "cache", "cpu", "memory", "pipeline", "instruction",
+                    "computer-system", "operating-system", "assembly",
+                    "assembly-language", "x86", "arm", "mips", "register"
+                };
+                foreach (var term in csTerms)
+                {
+                    if (urlLower.Contains(term))
+                        score += 300;
+                }
+
+                // Use a different variable name to avoid CS0136
+                var csTopicLower = topic.ToLowerInvariant();
+                if (csTopicLower.Contains("assembly") && urlLower.Contains("assembly"))
+                    score += 500;
+                if (csTopicLower.Contains("architecture") && urlLower.Contains("architecture"))
+                    score += 500;
+                if (csTopicLower.Contains("operating") && urlLower.Contains("operating"))
+                    score += 500;
+
                 break;
 
             case SubjectCategory.VietnamesePolitics:
@@ -688,8 +967,8 @@ public class ReadingUrlService : IReadingUrlService
     {
         var topicLower = topic.ToLowerInvariant();
 
-        // Only for programming subjects
-        if (category != SubjectCategory.Programming)
+        // Only for programming/CS subjects
+        if (category != SubjectCategory.Programming && category != SubjectCategory.ComputerScience)
             return null;
 
         // Android
