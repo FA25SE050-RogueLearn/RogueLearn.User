@@ -8,6 +8,8 @@ using RogueLearn.User.Application.Features.Guilds.Queries.GetMemberRoles;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyGuild;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyJoinRequests;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetAllGuilds;
+using RogueLearn.User.Application.Features.Guilds.Commands.UpdateMemberContributionPoints;
+using RogueLearn.User.Application.Features.Guilds.Commands.UpdateGuildMeritPoints;
 
 namespace RogueLearn.User.Api.GrpcServices;
 
@@ -183,5 +185,25 @@ public class GuildsGrpcService : GuildsService.GuildsServiceBase
             });
         }
         return list;
+    }
+
+    public override async Task<Google.Protobuf.WellKnownTypes.Empty> UpdateMemberContributionPoints(UpdateMemberContributionPointsRequest request, ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.GuildId, out var guildId) || !Guid.TryParse(request.MemberAuthUserId, out var memberAuthUserId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "invalid ids"));
+        }
+        await _mediator.Send(new UpdateMemberContributionPointsCommand(guildId, memberAuthUserId, request.ContributionPoints), context.CancellationToken);
+        return new Google.Protobuf.WellKnownTypes.Empty();
+    }
+
+    public override async Task<Google.Protobuf.WellKnownTypes.Empty> UpdateGuildMeritPoints(UpdateGuildMeritPointsRequest request, ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.GuildId, out var guildId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "invalid guild_id"));
+        }
+        await _mediator.Send(new UpdateGuildMeritPointsCommand(guildId, request.MeritPoints), context.CancellationToken);
+        return new Google.Protobuf.WellKnownTypes.Empty();
     }
 }
