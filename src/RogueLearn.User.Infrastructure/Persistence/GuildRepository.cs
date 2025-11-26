@@ -20,4 +20,17 @@ public class GuildRepository : GenericRepository<Guild>, IGuildRepository
 
         return response.Models;
     }
+
+    public async Task<IEnumerable<Guild>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        var list = ids.Select(id => id.ToString()).ToList();
+        if (!list.Any()) return Enumerable.Empty<Guild>();
+
+        var response = await _supabaseClient
+            .From<Guild>()
+            .Filter("id", Supabase.Postgrest.Constants.Operator.In, list)
+            .Get(cancellationToken);
+
+        return response.Models;
+    }
 }

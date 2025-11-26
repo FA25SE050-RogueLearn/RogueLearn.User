@@ -4,6 +4,7 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Supabase.Postgrest;
 using Client = Supabase.Client;
+using static Supabase.Postgrest.Constants;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
@@ -29,7 +30,7 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
     {
         var routeSubjects = await _supabaseClient
             .From<CurriculumProgramSubject>()
-            .Filter("program_id", Constants.Operator.Equals, routeId.ToString())
+            .Filter("program_id", Operator.Equals, routeId.ToString())
             .Get(cancellationToken);
 
 
@@ -41,7 +42,7 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
         // Fetch the actual subjects
         var subjects = await _supabaseClient
             .From<Subject>()
-            .Filter("id", Constants.Operator.In, subjectIds)
+            .Filter("id", Operator.In, subjectIds)
             .Get(cancellationToken);
 
         return subjects.Models;
@@ -83,10 +84,23 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
         // Step 3: Find the subject that matches the code AND is in the user's allowed set.
         var response = await _supabaseClient
             .From<Subject>()
-            .Filter("subject_code", Constants.Operator.Equals, subjectCode)
-            .Filter("id", Constants.Operator.In, allowedSubjectIds.Select(id => id.ToString()).ToList())
+            .Filter("subject_code", Operator.Equals, subjectCode)
+            .Filter("id", Operator.In, allowedSubjectIds.Select(id => id.ToString()).ToList())
             .Single(cancellationToken);
 
         return response;
+    }
+
+    public async Task<IEnumerable<Subject>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        var list = ids.Select(id => id.ToString()).ToList();
+        if (!list.Any()) return Enumerable.Empty<Subject>();
+
+        var response = await _supabaseClient
+            .From<Subject>()
+            .Filter("id", Operator.In, list)
+            .Get(cancellationToken);
+
+        return response.Models;
     }
 }
