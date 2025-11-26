@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums;
+using RogueLearn.User.Domain.Entities;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.UserFullInfo.Queries.GetFullUserInfo;
 
@@ -31,6 +33,9 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
     private readonly IUserQuestStepProgressRepository _userQuestStepProgressRepository;
     private readonly IQuestStepRepository _questStepRepository;
     private readonly ISubjectRepository _subjectRepository;
+    private readonly IClassRepository _classRepository;
+    private readonly ICurriculumProgramRepository _curriculumProgramRepository;
+    private readonly IRpcFullUserInfoService _rpcFullUserInfoService;
     private readonly ILogger<GetFullUserInfoQueryHandler> _logger;
 
     public GetFullUserInfoQueryHandler(
@@ -58,6 +63,9 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
         IUserQuestStepProgressRepository userQuestStepProgressRepository,
         IQuestStepRepository questStepRepository,
         ISubjectRepository subjectRepository,
+        IClassRepository classRepository,
+        ICurriculumProgramRepository curriculumProgramRepository,
+        IRpcFullUserInfoService rpcFullUserInfoService,
         ILogger<GetFullUserInfoQueryHandler> logger)
     {
         _userProfileRepository = userProfileRepository;
@@ -84,6 +92,9 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
         _userQuestStepProgressRepository = userQuestStepProgressRepository;
         _questStepRepository = questStepRepository;
         _subjectRepository = subjectRepository;
+        _classRepository = classRepository;
+        _curriculumProgramRepository = curriculumProgramRepository;
+        _rpcFullUserInfoService = rpcFullUserInfoService;
         _logger = logger;
     }
 
@@ -96,6 +107,15 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
             return null;
         }
 
+        _logger.LogInformation("Calling RPC supabase_get_full_user_info for auth user {AuthUserId}", request.AuthUserId);
+        var rpcResponse = await _rpcFullUserInfoService.GetAsync(request.AuthUserId, request.PageSize, request.PageNumber, cancellationToken);
+        if (rpcResponse is not null)
+        {
+            _logger.LogInformation("RPC supabase_get_full_user_info returned {RpcResponse}", rpcResponse);
+            return rpcResponse;
+        }
+
+        _logger.LogWarning("RPC supabase_get_full_user_info returned null for auth user {AuthUserId}", request.AuthUserId);
         var response = new FullUserInfoResponse
         {
             Profile = new ProfileSection
@@ -106,7 +126,9 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
                 FirstName = profile.FirstName,
                 LastName = profile.LastName,
                 ClassId = profile.ClassId,
+                ClassName = null,
                 RouteId = profile.RouteId,
+                CurriculumName = null,
                 Level = profile.Level,
                 ExperiencePoints = profile.ExperiencePoints,
                 ProfileImageUrl = profile.ProfileImageUrl,
@@ -121,7 +143,45 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
             }
         };
 
-        var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.AuthUserId, cancellationToken);
+        Task<Class?> classTask = profile.ClassId.HasValue ? _classRepository.GetByIdAsync(profile.ClassId.Value, cancellationToken) : Task.FromResult<Class?>(null);
+        Task<CurriculumProgram?> programTask = profile.RouteId.HasValue ? _curriculumProgramRepository.GetByIdAsync(profile.RouteId.Value, cancellationToken) : Task.FromResult<CurriculumProgram?>(null);
+
+        var rolesTask = _userRoleRepository.GetRolesForUserAsync(request.AuthUserId, cancellationToken);
+        var enrollmentsTask = _studentEnrollmentRepository.FindAsync(e => e.AuthUserId == request.AuthUserId, cancellationToken);
+        var subjectsTask = _studentTermSubjectRepository.FindAsync(s => s.AuthUserId == request.AuthUserId, cancellationToken);
+        var skillsTask = _userSkillRepository.FindAsync(s => s.AuthUserId == request.AuthUserId, cancellationToken);
+        var userAchievementsTask = _userAchievementRepository.FindPagedAsync(ua => ua.AuthUserId == request.AuthUserId, request.PageNumber, request.PageSize, cancellationToken);
+        var partyMembershipsTask = _partyMemberRepository.GetMembershipsByUserAsync(request.AuthUserId, cancellationToken);
+        var guildMembershipsTask = _guildMemberRepository.GetMembershipsByUserAsync(request.AuthUserId, cancellationToken);
+        var notesTask = _noteRepository.FindPagedAsync(n => n.AuthUserId == request.AuthUserId, request.PageNumber, request.PageSize, cancellationToken);
+        var notificationsTask = _notificationRepository.GetLatestByUserAsync(request.AuthUserId, request.PageSize, cancellationToken);
+        var verifsTask = _lecturerVerificationRequestRepository.FindAsync(v => v.AuthUserId == request.AuthUserId, cancellationToken);
+        var attemptsTask = _userQuestAttemptRepository.FindAsync(a => a.AuthUserId == request.AuthUserId, cancellationToken);
+        var meetingsTask = _meetingParticipantRepository.GetByUserAsync(request.AuthUserId, cancellationToken);
+
+        await Task.WhenAll(
+            classTask,
+            programTask,
+            rolesTask,
+            enrollmentsTask,
+            subjectsTask,
+            skillsTask,
+            userAchievementsTask,
+            partyMembershipsTask,
+            guildMembershipsTask,
+            notesTask,
+            notificationsTask,
+            verifsTask,
+            attemptsTask,
+            meetingsTask
+        );
+
+        if (classTask.Result is not null)
+            response.Profile.ClassName = classTask.Result!.Name;
+        if (programTask.Result is not null)
+            response.Profile.CurriculumName = programTask.Result!.ProgramName;
+
+        var userRoles = rolesTask.Result;
         var roleIds = userRoles.Select(ur => ur.RoleId).Distinct().ToList();
         var roles = await _roleRepository.GetByIdsAsync(roleIds, cancellationToken);
         var roleNameMap = roles.ToDictionary(r => r.Id, r => r.Name);
@@ -129,12 +189,12 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
             .Select(ur => new UserRoleItem(ur.RoleId, ur.AssignedAt, roleNameMap.GetValueOrDefault(ur.RoleId)))
             .ToList();
 
-        var enrollments = await _studentEnrollmentRepository.FindAsync(e => e.AuthUserId == request.AuthUserId, cancellationToken);
+        var enrollments = enrollmentsTask.Result;
         response.Relations.StudentEnrollments = enrollments
             .Select(e => new StudentEnrollmentItem(e.Id, e.Status.ToString(), e.EnrollmentDate, e.ExpectedGraduationDate))
             .ToList();
 
-        var subjects = await _studentTermSubjectRepository.FindAsync(s => s.AuthUserId == request.AuthUserId, cancellationToken);
+        var subjects = subjectsTask.Result;
         var subjectIds = subjects.Select(s => s.SubjectId).Distinct().ToList();
         var subjectModels = await _subjectRepository.GetByIdsAsync(subjectIds, cancellationToken);
         var subjMap = subjectModels.ToDictionary(sm => sm.Id, sm => sm);
@@ -155,12 +215,12 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
             .OrderBy(st => st.Semester ?? int.MaxValue)
             .ToList();
 
-        var skills = await _userSkillRepository.FindAsync(s => s.AuthUserId == request.AuthUserId, cancellationToken);
+        var skills = skillsTask.Result;
         response.Relations.UserSkills = skills
             .Select(s => new UserSkillItem(s.Id, s.SkillName, s.Level, s.ExperiencePoints))
             .ToList();
 
-        var userAchievements = await _userAchievementRepository.FindPagedAsync(ua => ua.AuthUserId == request.AuthUserId, request.PageNumber, request.PageSize, cancellationToken);
+        var userAchievements = userAchievementsTask.Result;
         var achIds = userAchievements.Select(ua => ua.AchievementId).Distinct().ToList();
         var achs = await _achievementRepository.GetByIdsAsync(achIds, cancellationToken);
         var achNameMap = achs.ToDictionary(a => a.Id, a => a.Name);
@@ -168,7 +228,7 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
             .Select(ua => new UserAchievementItem(ua.AchievementId, ua.EarnedAt, achNameMap.GetValueOrDefault(ua.AchievementId)))
             .ToList();
 
-        var partyMemberships = await _partyMemberRepository.GetMembershipsByUserAsync(request.AuthUserId, cancellationToken);
+        var partyMemberships = partyMembershipsTask.Result;
         var partyIds = partyMemberships.Select(pm => pm.PartyId).Distinct().ToList();
         var parties = await _partyRepository.GetByIdsAsync(partyIds, cancellationToken);
         var partyNameMap = parties.ToDictionary(p => p.Id, p => p.Name);
@@ -176,7 +236,7 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
             .Select(pm => new PartyMemberItem(pm.PartyId, partyNameMap.GetValueOrDefault(pm.PartyId) ?? string.Empty, pm.Role.ToString(), pm.JoinedAt))
             .ToList();
 
-        var guildMemberships = await _guildMemberRepository.GetMembershipsByUserAsync(request.AuthUserId, cancellationToken);
+        var guildMemberships = guildMembershipsTask.Result;
         var guildIds = guildMemberships.Select(gm => gm.GuildId).Distinct().ToList();
         var guilds = await _guildRepository.GetByIdsAsync(guildIds, cancellationToken);
         var guildNameMap = guilds.ToDictionary(g => g.Id, g => g.Name);
@@ -186,20 +246,20 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
 
         var meetingParticipants = await _meetingParticipantRepository.GetByUserAsync(request.AuthUserId, cancellationToken);
 
-        var notes = await _noteRepository.FindPagedAsync(n => n.AuthUserId == request.AuthUserId, request.PageNumber, request.PageSize, cancellationToken);
+        var notes = notesTask.Result;
         response.Relations.Notes = notes.Select(n => new NoteItem(n.Id, n.Title, n.CreatedAt)).ToList();
 
-        var notifications = await _notificationRepository.GetLatestByUserAsync(request.AuthUserId, request.PageSize, cancellationToken);
+        var notifications = notificationsTask.Result;
         response.Relations.Notifications = notifications
             .Select(n => new NotificationItem(n.Id, n.Type.ToString(), n.Title, n.IsRead, n.CreatedAt))
             .ToList();
 
-        var verifs = await _lecturerVerificationRequestRepository.FindAsync(v => v.AuthUserId == request.AuthUserId, cancellationToken);
+        var verifs = verifsTask.Result;
         response.Relations.LecturerVerificationRequests = verifs
             .Select(v => new LecturerVerificationRequestItem(v.Id, v.Status.ToString(), v.SubmittedAt))
             .ToList();
 
-        var attempts = await _userQuestAttemptRepository.FindAsync(a => a.AuthUserId == request.AuthUserId, cancellationToken);
+        var attempts = attemptsTask.Result;
         var questIds = attempts.Select(a => a.QuestId).Distinct().ToList();
         var quests = await _questRepository.GetByIdsAsync(questIds, cancellationToken);
         var questTitleMap = quests.ToDictionary(q => q.Id, q => q.Title);
@@ -227,10 +287,9 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
 
         response.Counts.Notes = await _noteRepository.CountAsync(n => n.AuthUserId == request.AuthUserId, cancellationToken);
         response.Counts.Achievements = await _userAchievementRepository.CountAsync(ua => ua.AuthUserId == request.AuthUserId, cancellationToken);
-        var meetingCount = await _meetingParticipantRepository.GetByUserAsync(request.AuthUserId, cancellationToken);
-        response.Counts.Meetings = meetingCount.Count();
+        response.Counts.Meetings = meetingsTask.Result.Count();
         response.Counts.NotificationsUnread = await _notificationRepository.CountUnreadByUserAsync(request.AuthUserId, cancellationToken);
-        var attemptsForCounts = await _userQuestAttemptRepository.FindAsync(a => a.AuthUserId == request.AuthUserId, cancellationToken);
+        var attemptsForCounts = attempts;
         response.Counts.QuestsCompleted = attemptsForCounts.Count(a => a.Status == QuestAttemptStatus.Completed);
         response.Counts.QuestsInProgress = attemptsForCounts.Count(a => a.Status == QuestAttemptStatus.InProgress);
 

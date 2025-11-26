@@ -25,7 +25,9 @@ public class ProfileSection
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public Guid? ClassId { get; set; }
+    public string? ClassName { get; set; }
     public Guid? RouteId { get; set; }
+    public string? CurriculumName { get; set; }
     public int Level { get; set; }
     public int ExperiencePoints { get; set; }
     public string? ProfileImageUrl { get; set; }
