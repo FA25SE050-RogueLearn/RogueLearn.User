@@ -5,5 +5,5 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IAchievementRepository : IGenericRepository<Achievement>
 {
-
+    Task<IEnumerable<Achievement>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
 }

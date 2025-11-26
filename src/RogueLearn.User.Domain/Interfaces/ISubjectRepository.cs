@@ -12,4 +12,5 @@ public interface ISubjectRepository : IGenericRepository<Subject>
     // This new method will find a subject by its code within the full context of a user's
     // program and their chosen specialization class.
     Task<Subject?> GetSubjectForUserContextAsync(string subjectCode, Guid authUserId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Subject>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
 }
