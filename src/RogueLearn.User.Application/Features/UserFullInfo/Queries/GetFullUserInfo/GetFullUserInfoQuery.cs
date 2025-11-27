@@ -75,7 +75,7 @@ public record UserRoleItem(Guid RoleId, DateTimeOffset AssignedAt, string? RoleN
 public record StudentEnrollmentItem(Guid Id, string Status, DateOnly EnrollmentDate, DateOnly? ExpectedGraduationDate);
 public record StudentTermSubjectItem(Guid Id, Guid SubjectId, string SubjectCode, string SubjectName, int? Semester, string Status, string? Grade);
 public record UserSkillItem(Guid Id, string SkillName, int Level, int ExperiencePoints);
-public record UserAchievementItem(Guid AchievementId, DateTimeOffset EarnedAt, string? AchievementName);
+public record UserAchievementItem(Guid AchievementId, DateTimeOffset EarnedAt, string? AchievementName, string? AchievementIconUrl = null);
 public record PartyMemberItem(Guid PartyId, string PartyName, string Role, DateTimeOffset? JoinedAt);
 public record GuildMemberItem(Guid GuildId, string GuildName, string Role, DateTimeOffset? JoinedAt);
 public record NoteItem(Guid Id, string Title, DateTimeOffset CreatedAt);

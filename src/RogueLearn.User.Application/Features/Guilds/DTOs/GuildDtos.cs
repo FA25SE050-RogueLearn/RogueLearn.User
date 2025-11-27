@@ -15,6 +15,23 @@ public record GuildDto
     public int MemberCount { get; init; }
 }
 
+public record GuildFullDto
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public RogueLearn.User.Domain.Enums.GuildType GuildType { get; init; }
+    public int MaxMembers { get; init; }
+    public int CurrentMemberCount { get; init; }
+    public int MeritPoints { get; init; }
+    public bool IsPublic { get; init; }
+    public bool RequiresApproval { get; init; }
+    public string? BannerImageUrl { get; init; }
+    public Guid CreatedBy { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+}
+
 public record GuildMemberDto
 {
     public Guid MemberId { get; init; }
@@ -24,6 +41,8 @@ public record GuildMemberDto
     public DateTimeOffset JoinedAt { get; init; }
     public DateTimeOffset? LeftAt { get; init; }
     public MemberStatus Status { get; init; }
+    public int ContributionPoints { get; init; }
+    public int? RankWithinGuild { get; init; }
     // Enriched user profile fields
     public string? Username { get; init; }
     public string? Email { get; init; }

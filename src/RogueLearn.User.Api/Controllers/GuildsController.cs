@@ -69,6 +69,14 @@ public class GuildsController : ControllerBase
         return Ok(list);
     }
 
+    [HttpGet("full")]
+    [ProducesResponseType(typeof(IEnumerable<GuildFullDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllGuildsFull(CancellationToken cancellationToken = default)
+    {
+        var list = await _mediator.Send(new GetAllGuildsFullQuery(IncludePrivate: false), cancellationToken);
+        return Ok(list);
+    }
+
     /// <summary>
     /// Get a guild by its id.
     /// </summary>
@@ -477,6 +485,17 @@ public class GuildsController : ControllerBase
     public async Task<IActionResult> GetAllGuildsAdmin(CancellationToken cancellationToken = default)
     {
         var list = await _mediator.Send(new GetAllGuildsQuery(IncludePrivate: true), cancellationToken);
+        return Ok(list);
+    }
+
+    [HttpGet("~/api/admin/guilds/full")]
+    [AdminOnly]
+    [ProducesResponseType(typeof(IEnumerable<GuildFullDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAllGuildsFullAdmin(CancellationToken cancellationToken = default)
+    {
+        var list = await _mediator.Send(new GetAllGuildsFullQuery(IncludePrivate: true), cancellationToken);
         return Ok(list);
     }
 
