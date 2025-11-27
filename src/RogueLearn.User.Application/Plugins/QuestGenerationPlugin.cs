@@ -30,74 +30,198 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     /// Generates quest steps for a SINGLE week using AI.
     /// This method is called multiple times (once per week) to generate all quest steps.
     /// </summary>
-    public async Task<string?> GenerateQuestStepsJsonAsync(
-        WeekContext weekContext,
-        string userContext,
-        List<Skill> relevantSkills,
-        string subjectName,
-        string courseDescription,
-        CancellationToken cancellationToken = default)
-    {
-        int maxAttempts = 3;
-        string? lastError = null;
+    // In your QuestGenerationPlugin.cs - replace the GenerateQuestStepsJsonAsync method:
+public async Task<string> GenerateQuestStepsJsonAsync(
+    WeekContext weekContext,
+    string userContext,
+    List<Skill> relevantSkills,
+    string subjectName,
+    string courseDescription,
+    CancellationToken cancellationToken)
+{
+    const int maxAttempts = 3;
+    string? lastError = null;
 
-        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+    for (int attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
         {
+            _logger.LogInformation(
+                "Generating quest steps for Subject '{Subject}', Week {Week}/{Total} (Attempt {Attempt}/{Max})",
+                subjectName, weekContext.WeekNumber, weekContext.TotalWeeks, attempt, maxAttempts
+            );
+
+            // Build prompt with error feedback on retries
+            var errorHint = attempt > 1 ? BuildRetryErrorHint(lastError) : null;
+
             var prompt = _promptBuilder.BuildPrompt(
                 weekContext,
                 userContext,
                 relevantSkills,
                 subjectName,
                 courseDescription,
-                errorHint: lastError);
+                errorHint: errorHint
+            );
 
-            try
+            // Call LLM
+            var rawResponse = await _kernel.InvokePromptAsync(
+                prompt,
+                cancellationToken: cancellationToken
+            );
+
+            var rawJson = rawResponse.ToString();
+
+            _logger.LogInformation(
+                "Quest Generation - Week {Week} raw AI response length: {Length}",
+                weekContext.WeekNumber,
+                rawJson.Length
+            );
+
+            // **USE THE CLEANER PIPELINE**
+            var (success, cleanedJson, error) = EscapeSequenceCleaner.CleanAndValidate(rawJson);
+
+            if (!success)
             {
-                _logger.LogInformation(
-                    "Generating quest steps for Subject '{SubjectName}', Week {Week}/{Total} (Attempt {Attempt}/{Max})",
-                    subjectName, weekContext.WeekNumber, weekContext.TotalWeeks, attempt, maxAttempts);
-
-                var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
-                var rawResponse = result.GetValue<string>() ?? string.Empty;
-
-                var preview = rawResponse.Length > 300 ? rawResponse.Substring(0, 300) + "..." : rawResponse;
-                _logger.LogInformation(
-                    "Quest Generation - Week {Week} raw AI response length: {Length}. Preview: {Preview}",
-                    weekContext.WeekNumber, rawResponse.Length, preview);
-
-                var cleaned = CleanToJson(rawResponse);
-                return cleaned;
-            }
-            catch (InvalidOperationException ex)
-            {
-                lastError = ex.Message;
-                _logger.LogWarning(
+                _logger.LogError(
                     "Attempt {Attempt}/{Max} failed to clean/parse JSON: {Error}",
-                    attempt, maxAttempts, ex.Message);
+                    attempt, maxAttempts, error
+                );
+
+                lastError = error;
+
+                // Log problematic content on final attempt
+                if (attempt == maxAttempts)
+                {
+                    var preview = rawJson.Length > 1000
+                        ? rawJson.Substring(0, 1000) + "...[truncated]"
+                        : rawJson;
+
+                    _logger.LogError(
+                        "JSON cleaning failure - Week {Week} - content preview:\n{Content}",
+                        weekContext.WeekNumber,
+                        preview
+                    );
+                }
+
+                continue; // Retry
             }
-            catch (Exception ex)
+
+            // Additional validation
+            var (isValid, validationIssues) = EscapeSequenceCleaner.ValidateEscapeSequences(cleanedJson!);
+
+            if (!isValid)
             {
-                lastError = ex.Message;
                 _logger.LogWarning(
-                    ex,
-                    "Attempt {Attempt}/{Max} failed due to exception.",
-                    attempt, maxAttempts);
+                    "Week {Week} - Validation warnings: {Issues}",
+                    weekContext.WeekNumber,
+                    string.Join(", ", validationIssues)
+                );
+                // Continue anyway - warnings are non-fatal
+            }
+
+            _logger.LogInformation(
+                "✅ Week {Week} - Successfully generated and validated JSON",
+                weekContext.WeekNumber
+            );
+
+            return cleanedJson!;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Attempt {Attempt}/{Max} - JSON parsing error for Week {Week}: {Error}",
+                attempt, maxAttempts, weekContext.WeekNumber, ex.Message
+            );
+
+            lastError = $"JSON parsing failed at line {ex.LineNumber}: {ex.Message}";
+
+            if (attempt == maxAttempts)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to generate valid JSON after {maxAttempts} attempts for Week {weekContext.WeekNumber}. " +
+                    $"Last error: {lastError}",
+                    ex
+                );
             }
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Attempt {Attempt}/{Max} - Unexpected error for Week {Week}",
+                attempt, maxAttempts, weekContext.WeekNumber
+            );
 
-        _logger.LogError(
-            "Failed to generate quest steps using AI for subject '{SubjectName}', Week {Week} after {Max} attempts.",
-            subjectName, weekContext.WeekNumber, maxAttempts);
-        return null;
+            lastError = ex.Message;
+
+            if (attempt == maxAttempts)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to generate quest steps after {maxAttempts} attempts for Week {weekContext.WeekNumber}",
+                    ex
+                );
+            }
+        }
     }
 
-    /// <summary>
-    /// Cleans the AI response to extract valid JSON for the weekly activity format.
-    /// Expected output format: { "activities": [...] }
-    /// </summary>
-    private static string CleanToJson(string rawResponse)
+    throw new InvalidOperationException(
+        $"Failed to generate quest steps after {maxAttempts} attempts for Week {weekContext.WeekNumber}. " +
+        $"Last error: {lastError}"
+    );
+}
+
+/// <summary>
+/// Builds an error hint for retry attempts
+/// </summary>
+private string BuildRetryErrorHint(string? lastError)
+{
+    if (string.IsNullOrWhiteSpace(lastError))
     {
-        var cleaned = rawResponse.Trim();
+        return string.Empty;
+    }
+
+    return $@"
+**⚠️ PREVIOUS ATTEMPT FAILED - PLEASE READ CAREFULLY**
+
+Your last output had this error: {lastError}
+
+**CRITICAL: How to handle C escape sequences in JSON**
+
+When discussing C programming concepts like escape sequences, you MUST NOT use literal backslashes.
+
+❌ WRONG - These will break JSON parsing:
+  ""question"": ""What does \n represent?""
+  ""explanation"": ""The \0 character marks the end""
+  ""correctAnswer"": ""\t""
+
+✅ CORRECT - Use descriptive text instead:
+  ""question"": ""What does the newline escape sequence represent?""
+  ""explanation"": ""The null character marks the end""
+  ""correctAnswer"": ""tab character""
+
+**Reference Guide:**
+- Instead of \n → write ""newline"" or ""backslash-n""
+- Instead of \t → write ""tab"" or ""backslash-t""
+- Instead of \0 → write ""null character"" or ""backslash-zero""
+- Instead of \r → write ""carriage return"" or ""backslash-r""
+- Instead of \\ → write ""backslash"" or ""single backslash""
+
+**OUTPUT REQUIREMENTS:**
+1. Pure JSON only - no markdown code fences
+2. No literal backslashes in string content
+3. Describe escape sequences using plain English
+
+Please regenerate the JSON following these rules strictly.
+";
+}
+/// <summary>
+/// Cleans the AI response to extract valid JSON for the weekly activity format.
+/// Expected output format: { "activities": [...] }
+/// </summary>
+private static string CleanToJson(string rawResponse)
+        {
+            var cleaned = rawResponse.Trim();
 
         // 1. Remove markdown code fences
         if (cleaned.StartsWith("````"))
@@ -141,6 +265,10 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         try
         {
             // 5. Validate JSON structure
+            cleaned = Regex.Replace(cleaned, @"\\0", @"\\\\0");
+            cleaned = Regex.Replace(cleaned, @"\\\\\\0", @"\\\\0");
+            cleaned = Regex.Replace(cleaned, @"\\a", @"\\\\a");
+            cleaned = Regex.Replace(cleaned, @"\\v", @"\\\\v");
             using var doc = JsonDocument.Parse(cleaned);
             if (!doc.RootElement.TryGetProperty("activities", out var activitiesElement)
                 || activitiesElement.ValueKind != JsonValueKind.Array)
@@ -170,11 +298,26 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
                 }
                 catch
                 {
-                    // If reconstruction fails, throw original error
+                    throw new CleaningJsonException(
+                        "Reconstruction failed after parse error.",
+                        reconstructed,
+                        ex);
                 }
             }
 
-            throw new InvalidOperationException($"Cleaned response is not valid JSON. Error at Path: {ex.Path} | Position: {ex.BytePositionInLine}. Content snippet: {cleaned.Substring(0, Math.Min(100, cleaned.Length))}...", ex);
+            throw new CleaningJsonException(
+                $"Cleaned response is not valid JSON. Path: {ex.Path} | Position: {ex.BytePositionInLine}",
+                cleaned,
+                ex);
         }
     }
 }
+    internal class CleaningJsonException : InvalidOperationException
+    {
+        public string CleanedContent { get; }
+        public CleaningJsonException(string message, string cleanedContent, Exception inner)
+            : base(message, inner)
+        {
+            CleanedContent = cleanedContent;
+        }
+    }
