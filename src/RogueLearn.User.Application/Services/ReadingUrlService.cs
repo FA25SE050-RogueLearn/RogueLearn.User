@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrlService.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrlService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
 using System.Text.RegularExpressions;
@@ -31,143 +31,7 @@ public class ReadingUrlService : IReadingUrlService
     private readonly IUrlValidationService _urlValidationService;
     private readonly ILogger<ReadingUrlService> _logger;
 
-    // HIGH PRIORITY: Tutorial sites with clear examples (PROGRAMMING)
-    private static readonly string[] TutorialSites = new[]
-    {
-        "geeksforgeeks.org",
-        "w3schools.com",
-        "tutorialspoint.com",
-        "programiz.com",
-        "javatpoint.com",
-        "tutorialsteacher.com",
-        "guru99.com",
-        "studytonight.com",
-        "baeldung.com",         // Excellent Java tutorials
-        "jenkov.com",           // Java tutorials
-        "mkyong.com",           // Java/Spring tutorials
-        
-        // Vietnamese programming
-        "viblo.asia",
-        "topdev.vn",
-        "200lab.io",
-        "techtalk.vn",
-        "techmaster.vn",
-    };
-
-    // HIGH PRIORITY: Community blogs (PROGRAMMING)
-    private static readonly string[] CommunityBlogs = new[]
-    {
-        "dev.to",
-        "hashnode.dev",
-        "freecodecamp.org",
-        "digitalocean.com/community",
-        "css-tricks.com",
-        "smashingmagazine.com",
-        "logrocket.com/blog",
-        "scotch.io",
-        "sitepoint.com",
-        
-        // Personal blogs
-        "kentcdodds.com",
-        "joshwcomeau.com",
-        "overreacted.io",
-        "dan.luu",
-        "pragmaticengineer.com",
-        "martinfowler.com",
-    };
-
-    // HIGH PRIORITY: Vietnamese educational sites (NON-PROGRAMMING)
-    private static readonly string[] VietnameseEducationalSites = new[]
-    {
-        // Educational/Quiz sites
-        "vietjack.com",          // Quizzes, exercises, theory
-        "tailieu.vn",            // Study materials
-        "123doc.net",            // Documents
-        "hocmai.vn",             // Online learning
-        "tuyensinh247.com",      // Educational content
-        "loigiaihay.com",        // Solutions and explanations
-        
-        // Political/Ideological (for Marxism, HCM Thought)
-        "thuvienphapluat.vn",    // Legal/political documents
-        "dangcongsan.vn",        // Communist Party official site
-        "chinhphu.vn",           // Government official site
-        "nhandan.vn",            // Official news (theory articles)
-        
-        // News/Articles (for current events, politics, economics)
-        "vnexpress.net",
-        "thanhnien.vn",
-        "tuoitre.vn",
-        "dantri.com.vn",
-        "baomoi.com",
-        "cafef.vn",              // Business/economics
-        
-        // Wikipedia Vietnamese
-        "vi.wikipedia.org",
-    };
-
-    // HIGH PRIORITY: Academic sources (THEORY/SCIENCE)
-    private static readonly string[] AcademicSources = new[]
-    {
-        "wikipedia.org",
-        "britannica.com",
-        "khanacademy.org",
-        "coursera.org",
-        "edx.org",
-        "mit.edu",
-        "stanford.edu",
-    };
-
-    // BLOCKED: Untrusted sources for PROGRAMMING subjects
-    private static readonly string[] UntrustedSourcesForProgramming = new[]
-    {
-        // Forums and discussion platforms (not tutorials)
-        "reddit.com",
-        "stackoverflow.com/questions",
-        "quora.com",
-        "forum.freecodecamp.org",
-        "discuss.codecademy.com",
-        "answers.unity.com",
-        "/forum/",
-        "/forums/",
-        "/discussion/",
-        "/community/t/",
-        "/community/questions/",
-        
-        // Paywalled/Login-required content
-        "medium.com",
-        "scribd.com",
-        "slideshare.net",
-        "academia.edu",
-        "coursera.org",
-        "udemy.com",
-        
-        // Academic/Research (too dense for practical learning)
-        "researchgate.net",
-        "arxiv.org",
-        "scholar.google",
-        "ieee.org",
-        "acm.org",
-        "/paper/",
-        "/papers/",
-        "/research/",
-        
-        // Video platforms (prefer text tutorials)
-        "youtube.com",
-        "vimeo.com",
-    };
-
-    // BLOCKED: Untrusted sources for ALL subjects (paywalls only)
-    private static readonly string[] UniversalBlockedSources = new[]
-    {
-        "scribd.com",
-        "slideshare.net",
-        ".pdf",  // Direct PDF downloads
-        ".ppt",
-        ".pptx",
-        ".doc",
-        ".docx",
-        ".zip",
-    };
+    
 
     public ReadingUrlService(
         IWebSearchService webSearchService,
@@ -191,8 +55,15 @@ public class ReadingUrlService : IReadingUrlService
         _logger.LogInformation("🔍 Starting URL search | Topic: '{Topic}' | Context: '{Context}' | Category: {Category}",
             topic, subjectContext ?? "none", category);
 
+        var normalizedTopic = TopicNormalizer.Normalize(topic);
+        if (TopicNormalizer.IsMetaSession(normalizedTopic))
+        {
+            _logger.LogWarning("Skipping URL search for meta session: '{Topic}'", topic);
+            return null;
+        }
+
         // Extract technology keywords from context
-        var technologyKeywords = ExtractTechnologyKeywords(subjectContext);
+        var technologyKeywords = ContextKeywordExtractor.ExtractTechnologyKeywords(subjectContext);
         _logger.LogDebug("Detected technologies: {Technologies}", string.Join(", ", technologyKeywords));
 
         // TIER 1: Check syllabus readings
@@ -219,7 +90,7 @@ public class ReadingUrlService : IReadingUrlService
         try
         {
             // Build category-specific query
-            var searchQuery = BuildContextAwareQuery(topic, subjectContext, category);
+            var searchQuery = SearchQueryBuilder.BuildContextAwareQuery(normalizedTopic, subjectContext, category);
             _logger.LogDebug("Search query: '{Query}'", searchQuery);
 
             var searchResults = await _webSearchService.SearchAsync(
@@ -228,13 +99,19 @@ public class ReadingUrlService : IReadingUrlService
             if (searchResults == null || !searchResults.Any())
             {
                 _logger.LogWarning("No search results returned");
-                return null;
+                if (category == SubjectCategory.Science)
+                {
+                    var altQuery = SearchQueryBuilder.BuildContextAwareQuery(normalizedTopic, null, SubjectCategory.General);
+                    _logger.LogDebug("Alternate search query: '{Query}'", altQuery);
+                    searchResults = await _webSearchService.SearchAsync(altQuery, count: 15, offset: 0, cancellationToken);
+                    if (searchResults == null || !searchResults.Any()) return null;
+                }
             }
 
             _logger.LogDebug("Found {Count} raw results, filtering for relevance...", searchResults.Count());
 
             // Filter and prioritize results
-            var relevantUrls = FilterAndPrioritizeResults(searchResults, topic, technologyKeywords, category);
+            var relevantUrls = SearchResultFilter.FilterAndPrioritizeResults(searchResults, normalizedTopic, technologyKeywords, category, _logger);
 
             if (!relevantUrls.Any())
             {
@@ -263,7 +140,7 @@ public class ReadingUrlService : IReadingUrlService
         }
 
         // TIER 3: Fallback to official docs (last resort)
-        var officialDocUrl = GetOfficialDocumentationUrl(topic, technologyKeywords, category);
+        var officialDocUrl = OfficialDocsProvider.GetOfficialDocumentationUrl(topic, technologyKeywords, category);
         if (!string.IsNullOrWhiteSpace(officialDocUrl))
         {
             _logger.LogWarning("⚠️ [TIER 3] Using official doc (last resort): {Url}", officialDocUrl);
@@ -404,7 +281,7 @@ public class ReadingUrlService : IReadingUrlService
 
         foreach (var result in searchResults)
         {
-            var url = ExtractUrlFromSearchResult(result);
+            var url = SearchResultParser.ExtractUrlFromSearchResult(result);
             if (string.IsNullOrWhiteSpace(url)) continue;
 
             // ⭐ FILTER 1: Block category-specific untrusted sources
@@ -451,7 +328,7 @@ public class ReadingUrlService : IReadingUrlService
         var urlLower = url.ToLowerInvariant();
 
         // Universal blocks (paywalls) for ALL subjects
-        foreach (var blocked in UniversalBlockedSources)
+        foreach (var blocked in Sources.UniversalBlockedSources)
         {
             if (urlLower.Contains(blocked))
             {
@@ -466,7 +343,7 @@ public class ReadingUrlService : IReadingUrlService
             case SubjectCategory.Programming:
             case SubjectCategory.ComputerScience:
                 // For programming/CS: Block forums, discussions, etc.
-                foreach (var untrusted in UntrustedSourcesForProgramming)
+                foreach (var untrusted in Sources.UntrustedSourcesForProgramming)
                 {
                     if (urlLower.Contains(untrusted))
                     {
@@ -749,11 +626,11 @@ public class ReadingUrlService : IReadingUrlService
         {
             case SubjectCategory.Programming:
                 // Tutorial sites = highest priority
-                if (TutorialSites.Any(site => urlLower.Contains(site)))
+                if (Sources.TutorialSites.Any(site => urlLower.Contains(site)))
                     score += 1000;
 
                 // Community blogs
-                if (CommunityBlogs.Any(site => urlLower.Contains(site)))
+                if (Sources.CommunityBlogs.Any(site => urlLower.Contains(site)))
                     score += 900;
 
                 // Technology keyword matches in URL
@@ -816,15 +693,15 @@ public class ReadingUrlService : IReadingUrlService
 
             case SubjectCategory.ComputerScience:
                 // Tutorial sites (GeeksforGeeks excellent for CS theory)
-                if (TutorialSites.Any(site => urlLower.Contains(site)))
+                if (Sources.TutorialSites.Any(site => urlLower.Contains(site)))
                     score += 1000;
 
                 // Academic sources (Wikipedia, university sites)
-                if (AcademicSources.Any(site => urlLower.Contains(site)))
+                if (Sources.AcademicSources.Any(site => urlLower.Contains(site)))
                     score += 900;
 
                 // Tech blogs (good explanations)
-                if (CommunityBlogs.Any(site => urlLower.Contains(site)))
+                if (Sources.CommunityBlogs.Any(site => urlLower.Contains(site)))
                     score += 800;
 
                 // Specific CS theory terms in URL
@@ -857,7 +734,7 @@ public class ReadingUrlService : IReadingUrlService
                     score += 1500;
 
                 // Vietnamese educational sites
-                if (VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
+                if (Sources.VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
                     score += 1200;
 
                 // News articles (theory/current events)
@@ -875,11 +752,11 @@ public class ReadingUrlService : IReadingUrlService
                     score += 1000;
 
                 // Vietnamese educational sites
-                if (VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
+                if (Sources.VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
                     score += 900;
 
                 // Academic sources
-                if (AcademicSources.Any(site => urlLower.Contains(site)))
+                if (Sources.AcademicSources.Any(site => urlLower.Contains(site)))
                     score += 800;
                 break;
 
@@ -893,7 +770,7 @@ public class ReadingUrlService : IReadingUrlService
                     score += 1000;
 
                 // Vietnamese educational sites
-                if (VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
+                if (Sources.VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
                     score += 900;
                 break;
 
@@ -907,7 +784,7 @@ public class ReadingUrlService : IReadingUrlService
                     score += 900;
 
                 // Vietnamese educational sites
-                if (VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
+                if (Sources.VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
                     score += 800;
                 break;
 
@@ -917,11 +794,11 @@ public class ReadingUrlService : IReadingUrlService
                     score += 900;
 
                 // Academic sources
-                if (AcademicSources.Any(site => urlLower.Contains(site)))
+                if (Sources.AcademicSources.Any(site => urlLower.Contains(site)))
                     score += 800;
 
                 // Vietnamese educational sites
-                if (VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
+                if (Sources.VietnameseEducationalSites.Any(site => urlLower.Contains(site)))
                     score += 700;
                 break;
         }
