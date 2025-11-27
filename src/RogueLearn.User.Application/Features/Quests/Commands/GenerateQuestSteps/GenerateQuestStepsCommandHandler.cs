@@ -260,6 +260,13 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     continue;
                 }
 
+                // Normalize escapes in JSON if needed
+                if (Regex.IsMatch(generatedJson, @"\\{4,}"))
+                {
+                    _logger.LogWarning("Week {Week}: Over-escaped sequences detected. Running cleaner.", weekNumber);
+                    generatedJson = EscapeSequenceCleaner.NormalizeEscapeSequences(generatedJson);
+                }
+
                 // Parse & Validate
                 JsonElement activitiesElement;
                 using var doc = JsonDocument.Parse(generatedJson);
@@ -293,9 +300,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 if (validatedActivities.Count < MinActivitiesPerStep)
                 {
-                    _logger.LogWarning("Week {Week}: Too few activities ({Count}). Skipping.", weekNumber, validatedActivities.Count);
-                    skippedWeeks++;
-                    continue;
+                    _logger.LogWarning("Week {Week}: Low activity count ({Count}). Proceeding.", weekNumber, validatedActivities.Count);
                 }
                 if (validatedActivities.Count > MaxActivitiesPerStep)
                 {
@@ -552,6 +557,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         t = Regex.Replace(t, @"\s+", " ").Trim();
         return t;
     }
+
+    
 
     private int CalculateTotalExperience(List<Dictionary<string, object>> activities)
     {
