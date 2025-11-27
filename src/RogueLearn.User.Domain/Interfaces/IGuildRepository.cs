@@ -6,4 +6,5 @@ namespace RogueLearn.User.Domain.Interfaces;
 public interface IGuildRepository : IGenericRepository<Guild>
 {
     Task<IEnumerable<Guild>> GetGuildsByCreatorAsync(Guid authUserId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Guild>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
 }

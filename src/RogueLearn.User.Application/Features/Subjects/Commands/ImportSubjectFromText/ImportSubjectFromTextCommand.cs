@@ -14,11 +14,3 @@ public class ImportSubjectFromTextCommand : IRequest<CreateSubjectResponse>
     // extracted by the AI from the syllabus text.
     public int? Semester { get; set; }
 }
-
-// --- MODIFICATION: UPDATED THE REQUEST DTO ---
-// This record is used by the controller to bind the form data.
-public class ImportSubjectFromTextRequest
-{
-    public string RawText { get; set; } = string.Empty;
-    public int? Semester { get; set; }
-}

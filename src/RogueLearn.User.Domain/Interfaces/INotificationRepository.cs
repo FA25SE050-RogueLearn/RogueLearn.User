@@ -5,5 +5,6 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface INotificationRepository : IGenericRepository<Notification>
 {
-
+    Task<IEnumerable<Notification>> GetLatestByUserAsync(Guid authUserId, int size = 20, CancellationToken cancellationToken = default);
+    Task<int> CountUnreadByUserAsync(Guid authUserId, CancellationToken cancellationToken = default);
 }

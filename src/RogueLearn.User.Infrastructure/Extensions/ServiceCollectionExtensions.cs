@@ -166,6 +166,7 @@ public static class ServiceCollectionExtensions
 
         // User context aggregation service
         services.AddScoped<IUserContextService, UserContextService>();
+        services.AddScoped<IRpcFullUserInfoService, RpcFullUserInfoService>();
 
         // Avatar URL validator
         services.AddScoped<IAvatarUrlValidator, AvatarUrlValidator>();

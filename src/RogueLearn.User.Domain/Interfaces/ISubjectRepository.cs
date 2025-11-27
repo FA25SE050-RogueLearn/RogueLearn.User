@@ -13,4 +13,5 @@ public interface ISubjectRepository : IGenericRepository<Subject>
     // program and their chosen specialization class.
     Task<Subject?> GetSubjectForUserContextAsync(string subjectCode, Guid authUserId, CancellationToken cancellationToken = default);
     Task<Subject?> GetByCodeAsync(string subjectCode, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Subject>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
 }

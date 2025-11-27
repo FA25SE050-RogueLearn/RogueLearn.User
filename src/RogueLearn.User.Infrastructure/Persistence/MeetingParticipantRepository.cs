@@ -27,6 +27,15 @@ public class MeetingParticipantRepository : IMeetingParticipantRepository
         return resp.Models;
     }
 
+    public async Task<IEnumerable<MeetingParticipant>> GetByUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        var resp = await _client
+            .From<MeetingParticipant>()
+            .Where(p => p.UserId == authUserId)
+            .Get(cancellationToken);
+        return resp.Models;
+    }
+
     public async Task<MeetingParticipant> AddAsync(MeetingParticipant entity, CancellationToken cancellationToken = default)
     {
         var resp = await _client.From<MeetingParticipant>().Insert(entity, cancellationToken: cancellationToken);

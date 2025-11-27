@@ -11,6 +11,7 @@ using RogueLearn.User.Application.Features.UserProfiles.Commands.UpdateMyProfile
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Models;
+using RogueLearn.User.Application.Features.UserFullInfo.Queries.GetFullUserInfo;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -109,6 +110,20 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves the authenticated user's full dashboard info including relations and counts.
+    /// </summary>
+    [HttpGet("me/full")]
+    [ProducesResponseType(typeof(FullUserInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<FullUserInfoResponse>> GetMyFullInfo([FromQuery(Name = "page[size]")] int pageSize = 20, [FromQuery(Name = "page[number]")] int pageNumber = 1, CancellationToken cancellationToken = default)
+    {
+        var authUserId = User.GetAuthUserId();
+        var query = new GetFullUserInfoQuery { AuthUserId = authUserId, PageSize = pageSize, PageNumber = pageNumber };
+        var result = await _mediator.Send(query, cancellationToken);
+        return result is not null ? Ok(result) : NotFound();
+    }
+
+    /// <summary>
     /// Update the authenticated user's profile (multipart/form-data). Allows uploading a profile image file.
     /// The handler will process and upload the image to Supabase 'user-avatars' storage and update the profile's image URL.
     /// </summary>
@@ -184,6 +199,22 @@ public class UsersController : ControllerBase
     {
         var context = await _mediator.Send(new GetUserContextByAuthIdQuery(authId), cancellationToken);
         return context is not null ? Ok(context) : NotFound();
+    }
+
+    /// <summary>
+    /// Get a user's full dashboard info by their auth ID (admin only).
+    /// </summary>
+    [HttpGet("~/api/admin/users/{authId:guid}/full")]
+    [Authorize]
+    [AdminOnly]
+    [ProducesResponseType(typeof(FullUserInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<FullUserInfoResponse>> AdminGetFullInfo(Guid authId, [FromQuery(Name = "page[size]")] int pageSize = 20, [FromQuery(Name = "page[number]")] int pageNumber = 1, CancellationToken cancellationToken = default)
+    {
+        var query = new GetFullUserInfoQuery { AuthUserId = authId, PageSize = pageSize, PageNumber = pageNumber };
+        var result = await _mediator.Send(query, cancellationToken);
+        return result is not null ? Ok(result) : NotFound();
     }
 
     // REMOVED: The InitializeMySkills and EstablishMySkillDependencies endpoints are now obsolete.

@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User.Infrastructure/Persistence/QuestRepository.cs
+// src/RogueLearn.User.Infrastructure/Persistence/QuestRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -24,6 +24,19 @@ public class QuestRepository : GenericRepository<Quest>, IQuestRepository
         var response = await _supabaseClient
             .From<Quest>()
             .Filter("quest_chapter_id", Operator.In, chapterIdList.Select(id => id.ToString()).ToList())
+            .Get(cancellationToken);
+
+        return response.Models;
+    }
+
+    public async Task<IEnumerable<Quest>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        var list = ids.ToList();
+        if (!list.Any()) return Enumerable.Empty<Quest>();
+
+        var response = await _supabaseClient
+            .From<Quest>()
+            .Filter("id", Operator.In, list.Select(id => id.ToString()).ToList())
             .Get(cancellationToken);
 
         return response.Models;
