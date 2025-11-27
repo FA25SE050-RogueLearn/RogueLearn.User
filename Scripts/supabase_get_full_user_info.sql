@@ -71,7 +71,8 @@ achievements as (
   select jsonb_agg(jsonb_build_object(
     'achievementId', ua.achievement_id,
     'earnedAt', ua.earned_at,
-    'achievementName', a.name
+    'achievementName', a.name,
+    'achievementIconUrl', a.icon_url
   )) as data
   from user_achievements ua
   left join achievements a on a.id = ua.achievement_id
