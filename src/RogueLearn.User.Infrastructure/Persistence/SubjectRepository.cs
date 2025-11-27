@@ -4,6 +4,11 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Supabase.Postgrest;
 using Client = Supabase.Client;
+using Supabase;
+using static Supabase.Postgrest.Constants;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
@@ -88,5 +93,14 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
             .Single(cancellationToken);
 
         return response;
+    }
+    public async Task<Subject?> GetByCodeAsync(string subjectCode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(subjectCode)) return null;
+        var response = await _supabaseClient
+            .From<Subject>()
+            .Filter("subject_code", Operator.Equals, subjectCode)
+            .Get(cancellationToken);
+        return response.Models.FirstOrDefault();
     }
 }

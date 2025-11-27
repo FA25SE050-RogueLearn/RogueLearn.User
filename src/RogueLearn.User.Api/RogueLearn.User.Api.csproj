@@ -40,6 +40,9 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\user\v1\user.proto" GrpcServices="Server" />
+    <Folder Include="tmp\match-results\joins\" />
+    <Folder Include="tmp\match-results\players\" />
+    <Folder Include="tmp\match-results\results\" />
   </ItemGroup>
 
 </Project>

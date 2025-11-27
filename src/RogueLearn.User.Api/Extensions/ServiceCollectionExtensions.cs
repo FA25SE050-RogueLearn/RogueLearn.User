@@ -8,6 +8,8 @@ using RogueLearn.User.Application.Mappings;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Services;
+using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Infrastructure.Persistence;
 using System.Reflection;
 using RogueLearn.User.Infrastructure.Services;
 
@@ -88,6 +90,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IConstructiveQuestionGenerationPlugin, ConstructiveQuestionGenerationPlugin>();
         // MODIFICATION END
 
+
+
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
         services.AddScoped<QuestStepsPromptBuilder>();
@@ -148,6 +152,9 @@ public static class ServiceCollectionExtensions
                        .AllowAnyHeader();
             });
         });
+        // Register the repository for match results.
+        services.AddScoped<IGameSessionRepository, GameSessionRepository>();
+        services.AddScoped<IMatchResultRepository, MatchResultRepository>();
 
         return services;
     }

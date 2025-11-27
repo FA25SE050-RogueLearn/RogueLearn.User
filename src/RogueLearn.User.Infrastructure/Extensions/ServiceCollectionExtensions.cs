@@ -118,6 +118,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserQuestStepProgressRepository, UserQuestStepProgressRepository>();
         services.AddScoped<IQuestSubmissionRepository, QuestSubmissionRepository>();
 
+        // Game session repositories (Unity boss fight multiplayer)
+        services.AddScoped<IGameSessionRepository, GameSessionRepository>();
+        services.AddScoped<IMatchResultRepository, MatchResultRepository>();
+
         // Guild repositories
         services.AddScoped<IGuildRepository, GuildRepository>();
         services.AddScoped<IGuildMemberRepository, GuildMemberRepository>();

@@ -11,11 +11,13 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.SemanticKernel;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Serialization;
-using RogueLearn.User.Api.HealthChecks;
+using Newtonsoft.Json.Converters; // MODIFIED: Changed from System.Text.Json to Newtonsoft.
+using Newtonsoft.Json.Serialization; // ADDED: For CamelCasePropertyNamesContractResolver.
+using System.IO;
+using System.Text;
 using RogueLearn.User.Api.Utilities;
 using RogueLearn.User.Application.Services;
+using RogueLearn.User.Api.HealthChecks;
 
 // Load environment variables from .env file
 
@@ -60,13 +62,20 @@ try
         {
             listenOptions.Protocols = HttpProtocols.Http2;
         });
-    }); 
-    
+
+        // Port 5051: HTTPS for local development (Swagger root on /)
+        options.ListenLocalhost(5051, listenOptions =>
+        {
+            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+            listenOptions.UseHttps();
+        });
+    });
+
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
-    
-    var supabaseConnStr =  builder.Configuration["Supabase:ConnStr"];
+
+    var supabaseConnStr = builder.Configuration["Supabase:ConnStr"];
     //  ADD THIS INSTEAD:
     builder.Services.AddHangfire(configuration => configuration
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -155,15 +164,15 @@ try
     builder.Services.AddApiServices();
 
     builder.Services.AddGrpc();
-    
-// Health check registration
+
+    // Health check registration
     builder.Services.AddHealthChecks()
         .AddCheck("self", () => HealthCheckResult.Healthy(), tags: new[] { "live" })
         .AddCheck<SupabaseHealthCheck>(
             "supabase",
             failureStatus: HealthStatus.Unhealthy,
             tags: new[] { "db" });
-    
+
     if (builder.Environment.IsDevelopment())
     {
         builder.Services.AddGrpcReflection();
@@ -173,6 +182,13 @@ try
 
     // Configure the HTTP request pipeline
     app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+    // MVP FIX: Enable request body buffering to allow multiple reads (must be before controllers)
+    app.Use(async (context, next) =>
+    {
+        context.Request.EnableBuffering();
+        await next();
+    });
 
     // Enable Swagger in all environments (Development and Production)
     app.UseSwagger(c =>
@@ -188,7 +204,7 @@ try
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "RogueLearn.User API V1");
         c.RoutePrefix = string.Empty;
     });
-    
+
     app.UseCors("AllowAll");
     app.UseHttpsRedirection();
 
@@ -197,7 +213,7 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
-    
+
     // Simple text "OK" health check
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
@@ -209,25 +225,28 @@ try
         }
     });
 
-    // Supabase-specific health check with detailed response
-    app.MapHealthChecks("/health/supabase", new HealthCheckOptions
+    app.UseCors("AllowAll");
+    app.UseHttpsRedirection();
+
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.Use(async (context, next) =>
     {
-        Predicate = check => check.Tags.Contains("db"),
-        ResponseWriter = async (context, report) =>
+
+        var body = string.Empty;
+        if (context.Request.Body.CanSeek)
         {
-            context.Response.ContentType = "application/json";
-        
-            var entry = report.Entries.First();
-            var result = System.Text.Json.JsonSerializer.Serialize(new
+            context.Request.Body.Position = 0;
+            using (var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true))
             {
-                status = entry.Value.Status.ToString(),
-                description = entry.Value.Description,
-                duration = $"{entry.Value.Duration.TotalMilliseconds}ms",
-                timestamp = DateTime.UtcNow
-            });
-        
-            await context.Response.WriteAsync(result);
+                body = await reader.ReadToEndAsync();
+            }
+            context.Request.Body.Position = 0;
+            Console.WriteLine($"[MIDDLEWARE] Body length: {body.Length}, Preview: {(body.Length > 100 ? body.Substring(0, 100) : body)}");
         }
+
+        await next();
     });
     app.MapControllers();
 
