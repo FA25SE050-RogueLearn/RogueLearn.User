@@ -26,6 +26,7 @@ using RogueLearn.User.Application.Features.Guilds.Commands.ApproveJoinRequest;
 using RogueLearn.User.Application.Features.Guilds.Commands.DeclineJoinRequest;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetGuildJoinRequests;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyJoinRequests;
+using RogueLearn.User.Application.Features.Guilds.Queries.GetMyGuildInvitations;
 using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -326,13 +327,26 @@ public class GuildsController : ControllerBase
     /// <summary>
     /// Get my pending guild join requests.
     /// </summary>
-    [HttpGet("join-requests/me")]
+    [HttpGet("join-requests/me")] 
     [ProducesResponseType(typeof(IEnumerable<GuildJoinRequestDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMyJoinRequests([FromQuery] bool pendingOnly = true, CancellationToken cancellationToken = default)
     {
         var authUserId = User.GetAuthUserId();
         var list = await _mediator.Send(new GetMyJoinRequestsQuery(authUserId, pendingOnly), cancellationToken);
+        return Ok(list);
+    }
+
+    /// <summary>
+    /// Get my guild invitations (invitee = current user).
+    /// </summary>
+    [HttpGet("invitations/me")]
+    [ProducesResponseType(typeof(IEnumerable<GuildInvitationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyGuildInvitations([FromQuery] bool pendingOnly = true, CancellationToken cancellationToken = default)
+    {
+        var authUserId = User.GetAuthUserId();
+        var list = await _mediator.Send(new GetMyGuildInvitationsQuery(authUserId, pendingOnly), cancellationToken);
         return Ok(list);
     }
 
