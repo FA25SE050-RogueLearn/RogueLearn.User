@@ -190,11 +190,12 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         int skippedWeeks = 0;
 
         // ========== 5. GENERATE EACH WEEK ==========
+        int createdCount = 0;
         for (int weekNumber = 1; weekNumber <= weeksToGenerate; weekNumber++)
         {
             try
             {
-                UpdateHangfireJobProgress(request.HangfireJobId, weekNumber - 1, weeksToGenerate, $"Generating week {weekNumber}...");
+                UpdateHangfireJobProgress(request.HangfireJobId, createdCount, weeksToGenerate, $"Generating target week {weekNumber}...");
 
                 // --- RESOURCE POOLING & AGGREGATION LOGIC ---
 
@@ -234,6 +235,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 _logger.LogInformation("Week {Week}: Pooled {UrlCount} URLs for {TopicCount} topics.",
                     weekNumber, weekContext.AvailableResources.Count, weekContext.TopicsToCover.Count);
+                _logger.LogInformation("Week {Week} Topics: {Topics}", weekNumber, string.Join(" | ", weekContext.TopicsToCover));
                 if (weekContext.TopicsToCover.Count == 0 || weekContext.AvailableResources.Count == 0)
                 {
                     var sampleTopics = string.Join(" | ", weekSessions.Select(s => s.Topic).Take(3));
@@ -273,6 +275,17 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 // Ensure Math notation cleanup
                 validatedActivities = ProcessMathInActivities(validatedActivities);
 
+                if (!weekContext.AvailableResources.Any())
+                {
+                    var before = validatedActivities.Count;
+                    validatedActivities = validatedActivities.Where(a => a.TryGetValue("type", out var t) && !string.Equals(t?.ToString(), "reading", StringComparison.OrdinalIgnoreCase)).ToList();
+                    var removed = before - validatedActivities.Count;
+                    if (removed > 0)
+                    {
+                        _logger.LogInformation("Week {Week}: Removed {Removed} Reading activities due to no URLs", weekNumber, removed);
+                    }
+                }
+
                 // Enforce Constraints (Post-Generation Quality Control)
                 var stats = AnalyzeActivities(validatedActivities);
                 LogWeekStatistics(weekNumber, stats);
@@ -293,20 +306,22 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 int totalXp = CalculateTotalExperience(validatedActivities);
 
                 // Create Step
+                var effectiveStepNumber = createdCount + 1;
                 var questStep = new QuestStep
                 {
                     QuestId = request.QuestId,
-                    StepNumber = weekNumber,
-                    Title = $"Week {weekNumber}: {SummarizeTopics(weekContext.TopicsToCover)}",
-                    Description = $"Mastering concepts from Week {weekNumber}",
+                    StepNumber = effectiveStepNumber,
+                    Title = $"Week {effectiveStepNumber}: {SummarizeTopics(weekContext.TopicsToCover)}",
+                    Description = $"Mastering concepts from Week {effectiveStepNumber}",
                     ExperiencePoints = totalXp,
                     Content = new Dictionary<string, object> { { "activities", validatedActivities } }
                 };
 
                 await _questStepRepository.AddAsync(questStep, cancellationToken);
                 createdSteps.Add(questStep);
+                createdCount++;
 
-                _logger.LogInformation("✅ Week {Week} created with {Count} activities.", weekNumber, validatedActivities.Count);
+                _logger.LogInformation("✅ Created step {Step} (from target week {Week}) with {Count} activities.", effectiveStepNumber, weekNumber, validatedActivities.Count);
             }
             catch (Exception ex)
             {
@@ -315,7 +330,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             }
         }
 
-        UpdateHangfireJobProgress(request.HangfireJobId, weeksToGenerate, weeksToGenerate, "Completed");
+        UpdateHangfireJobProgress(request.HangfireJobId, createdCount, weeksToGenerate, "Completed");
 
         if (!createdSteps.Any()) throw new InvalidOperationException("Failed to generate any quest steps.");
 

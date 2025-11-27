@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestsController.cs
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestsController.cs
 // CORRECTED HANGFIRE API - Using proper JobStorage.Current.GetMonitoringApi()
 // ⭐ UPDATED: Pass null for PerformContext - Hangfire injects it automatically
 
@@ -17,6 +17,7 @@ using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 // MODIFIED: This using is updated to point to the refactored command location.
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
+using RogueLearn.User.Application.Features.Quests.Queries.GetMyQuestsWithSubjects;
 using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
@@ -27,7 +28,7 @@ using System.Text.Json.Serialization;
 [ApiController]
 [Route("api/quests")]
 [Authorize]
-public class QuestsController : ControllerBase
+    public class QuestsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly IBackgroundJobClient _backgroundJobClient;
@@ -323,6 +324,15 @@ public class QuestsController : ControllerBase
         }
     }
 
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(List<MyQuestWithSubjectDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyQuestsWithSubjects()
+    {
+        var authUserId = User.GetAuthUserId();
+        var result = await _mediator.Send(new GetMyQuestsWithSubjectsQuery { AuthUserId = authUserId });
+        return Ok(result);
+    }
+
     // Add DTO classes at bottom of controller file:
 
     
@@ -434,3 +444,4 @@ public class UpdateQuestActivityProgressRequest
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public StepCompletionStatus Status { get; set; }
 }
+    

@@ -58,7 +58,10 @@ public class QuestStepsPromptBuilder
         }
         else
         {
-            prompt.AppendLine("**Note:** No external URLs are available for this week. Set `url` to \"\" for reading activities.");
+            prompt.AppendLine("**No External URLs Available:**");
+            prompt.AppendLine("- Do NOT create any Reading activities");
+            prompt.AppendLine("- Generate only KnowledgeCheck and Quiz activities");
+            prompt.AppendLine("- Use clear, plain-text math and examples derived from Topics");
         }
         prompt.AppendLine();
 
@@ -83,12 +86,21 @@ public class QuestStepsPromptBuilder
 
         // 5. Rules & Schema
         prompt.AppendLine("## 5. Construction Rules");
-        prompt.AppendLine("1. **Group Topics:** Instead of 1 activity per topic, combine 2-3 related topics into a single comprehensive `Reading` activity.");
-        prompt.AppendLine("2. **Distribute Resources:** Use the Approved Resource Pool. If you have 3 topics and 1 good URL that covers them (e.g., a chapter link), use that URL for the grouped activity.");
+        prompt.AppendLine("1. **Group Topics:** Combine 2-3 related topics into each `Reading` activity.");
+        prompt.AppendLine("2. **Distribute Resources:** Use the Approved Resource Pool when available. If limited URLs exist, reuse strong sources across grouped topics.");
         prompt.AppendLine("3. **Activity Count:** Generate **6 to 9** activities total.");
-        prompt.AppendLine("   - 2-4 `Reading` activities (Grouped topics)");
-        prompt.AppendLine("   - 1-2 `KnowledgeCheck` (Formative assessment)");
-        prompt.AppendLine("   - 1 `Quiz` (Summative assessment, 10-15 questions)");
+        if (weekContext.AvailableResources.Any())
+        {
+            prompt.AppendLine("   - 2-4 `Reading` activities");
+            prompt.AppendLine("   - 1-2 `KnowledgeCheck`");
+            prompt.AppendLine("   - 1 `Quiz` (10-15 questions)");
+        }
+        else
+        {
+            prompt.AppendLine("   - 0 `Reading` activities");
+            prompt.AppendLine("   - 3-4 `KnowledgeCheck` activities (3-5 questions each)");
+            prompt.AppendLine("   - 2 `Quiz` activities (10-15 questions each)");
+        }
         prompt.AppendLine("4. **No Coding:** Do not generate coding activities.");
         prompt.AppendLine("5. **JSON Only:** Output valid JSON matching the schema below. No markdown.");
         prompt.AppendLine();
