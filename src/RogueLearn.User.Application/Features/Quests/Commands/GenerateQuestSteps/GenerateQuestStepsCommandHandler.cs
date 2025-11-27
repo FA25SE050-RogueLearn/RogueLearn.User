@@ -293,9 +293,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 if (validatedActivities.Count < MinActivitiesPerStep)
                 {
-                    _logger.LogWarning("Week {Week}: Too few activities ({Count}). Skipping.", weekNumber, validatedActivities.Count);
-                    skippedWeeks++;
-                    continue;
+                    _logger.LogWarning("Week {Week}: Low activity count ({Count}). Proceeding.", weekNumber, validatedActivities.Count);
                 }
                 if (validatedActivities.Count > MaxActivitiesPerStep)
                 {
