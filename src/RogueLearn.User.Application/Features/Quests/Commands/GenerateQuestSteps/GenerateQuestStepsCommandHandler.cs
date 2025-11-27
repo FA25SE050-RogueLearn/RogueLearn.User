@@ -573,56 +573,13 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
             if (activity.Type.Equals("Reading", StringComparison.OrdinalIgnoreCase))
             {
-                bool hasUrl = false;
-                string? url = null;
-                if (activity.Payload.TryGetProperty("url", out var urlElement))
-                {
-                    url = urlElement.GetString();
-                    hasUrl = !string.IsNullOrWhiteSpace(url);
-                }
-
-                if (!hasUrl)
+                bool hasUrlProp = activity.Payload.TryGetProperty("url", out var urlElement);
+                var url = hasUrlProp ? urlElement.GetString() : null;
+                if (!hasUrlProp || string.IsNullOrWhiteSpace(url))
                 {
                     readingsWithoutUrls++;
-                    _logger.LogWarning("Week {Week}: Reading {Id} has empty URL",
+                    _logger.LogWarning("Week {Week}: Reading {Id} has empty/missing URL",
                         weekNumber, finalActivityId);
-
-                    string skillIdStr = activity.Payload.TryGetProperty("skillId", out var skillIdEl)
-                        ? (skillIdEl.GetString() ?? string.Empty)
-                        : string.Empty;
-                    int kcXp = activity.Payload.TryGetProperty("experiencePoints", out var xpEl) && xpEl.TryGetInt32(out var xpVal)
-                        ? Math.Max(xpVal, 30)
-                        : 30;
-                    string topicText = activity.Payload.TryGetProperty("articleTitle", out var titleEl)
-                        ? (titleEl.GetString() ?? string.Empty)
-                        : string.Empty;
-                    if (string.IsNullOrWhiteSpace(topicText) && activity.Payload.TryGetProperty("summary", out var summaryEl))
-                    {
-                        topicText = summaryEl.GetString() ?? string.Empty;
-                    }
-
-                    var kcPayload = new Dictionary<string, object>
-                    {
-                        ["skillId"] = skillIdStr,
-                        ["experiencePoints"] = kcXp,
-                        ["topic"] = string.IsNullOrWhiteSpace(topicText) ? "Knowledge Check" : topicText,
-                        ["questions"] = new List<Dictionary<string, object>>
-                        {
-                            new() { ["question"] = string.IsNullOrWhiteSpace(topicText) ? "Define the key concept discussed." : $"Define {topicText}." },
-                            new() { ["question"] = string.IsNullOrWhiteSpace(topicText) ? "State one important property." : $"State one property related to {topicText}." },
-                            new() { ["question"] = string.IsNullOrWhiteSpace(topicText) ? "Give an example to illustrate the idea." : $"Give an example illustrating {topicText}." }
-                        }
-                    };
-
-                    var kcDict = new Dictionary<string, object>
-                    {
-                        ["activityId"] = finalActivityId,
-                        ["type"] = "KnowledgeCheck",
-                        ["payload"] = kcPayload
-                    };
-
-                    validatedActivities.Add(kcDict);
-                    continue;
                 }
             }
 
