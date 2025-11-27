@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
 using System.Text;
 using System.Text.Json;
 using RogueLearn.User.Domain.Entities;
@@ -24,7 +24,8 @@ public class QuestStepsPromptBuilder
         string subjectName,
         string courseDescription,
         int weekNumber,
-        int totalWeeks)
+        int totalWeeks,
+        string? errorHint = null)
     {
         var prompt = new StringBuilder();
 
@@ -84,6 +85,27 @@ public class QuestStepsPromptBuilder
         // Output Schema
         prompt.AppendLine("## 4. Your Task: Generate JSON for Week Activities");
         prompt.AppendLine($"Your entire output MUST be a single, valid JSON object containing ONLY an array of activities for Week {weekNumber}.");
+        prompt.AppendLine();
+        prompt.AppendLine("### MATHEMATICAL NOTATION RULES (PLAIN TEXT ONLY)");
+        prompt.AppendLine("- Use PLAIN TEXT for all expressions. NO LaTeX, NO $ delimiters.");
+        prompt.AppendLine("- NO backslashes anywhere in math (e.g., sin(x), not \\sin(x))");
+        prompt.AppendLine("- Format guide:");
+        prompt.AppendLine("  - Operations: + - * /");
+        prompt.AppendLine("  - Exponents: x^2, x^3, e^x");
+        prompt.AppendLine("  - Fractions: (a + b) / c");
+        prompt.AppendLine("  - Square root: sqrt(x)");
+        prompt.AppendLine("  - Functions: sin(x), cos(x), ln(x), log(x)");
+        prompt.AppendLine("  - Absolute value: |x|");
+        prompt.AppendLine("  - Greek letters: alpha, beta, theta, pi");
+        prompt.AppendLine("  - Derivatives: f'(x), dy/dx, d^2y/dx^2");
+        prompt.AppendLine("  - Integrals: integral from a to b of f(x) dx");
+        prompt.AppendLine("  - Limits: lim (x->0) f(x)");
+        prompt.AppendLine("  - Summation: sum from i=1 to n of x_i");
+        prompt.AppendLine("Examples:");
+        prompt.AppendLine("- BAD: The derivative is $\\frac{dy}{dx} = 2x$");
+        prompt.AppendLine("- GOOD: The derivative is dy/dx = 2x");
+        prompt.AppendLine("- BAD: Using $\\int_{0}^{\\pi} \\sin(x) dx$");
+        prompt.AppendLine("- GOOD: Using the integral from 0 to pi of sin(x) dx");
         prompt.AppendLine();
         prompt.AppendLine("**Output Schema:**");
         prompt.AppendLine("```json");
@@ -262,6 +284,22 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("   - Every field must have correct type (string, number, array, object)");
         prompt.AppendLine();
         prompt.AppendLine($"Generate the complete JSON object for Week {weekNumber} activities now. Remember: 7-10 activities (Reading, KnowledgeCheck, Quiz ONLY), valid JSON only, no extra text.");
+
+        if (!string.IsNullOrWhiteSpace(errorHint))
+        {
+            prompt.AppendLine();
+            prompt.AppendLine("---");
+            prompt.AppendLine("## 5. Correct Previous Errors");
+            prompt.AppendLine("Your previous output failed JSON validation. Fix ALL issues and output valid JSON only.");
+            prompt.AppendLine("Common fixes:");
+            prompt.AppendLine("- Escape backslashes in LaTeX: use \\\\ (e.g., \\\\alpha, \\\\beta, \\\\times)");
+            prompt.AppendLine("- Escape quotes in strings: use \\\" inside explanations");
+            prompt.AppendLine("- Close all strings; no unclosed quotes");
+            prompt.AppendLine("- No trailing commas");
+            prompt.AppendLine("- Ensure correct commas between object fields");
+            prompt.AppendLine("Validation error details:");
+            prompt.AppendLine(errorHint);
+        }
 
         return prompt.ToString();
     }

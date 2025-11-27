@@ -1,9 +1,10 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -37,38 +38,58 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
         int totalWeeks,
         CancellationToken cancellationToken = default)
     {
-        // Build prompt for the specific week
-        var prompt = _promptBuilder.BuildPrompt(
-            syllabusJson,
-            userContext,
-            relevantSkills,
-            subjectName,
-            courseDescription,
-            weekNumber,
-            totalWeeks);
+        int maxAttempts = 3;
+        string? lastError = null;
 
-        try
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            _logger.LogInformation(
-                "Generating quest steps for Subject '{SubjectName}', Week {Week}/{Total}",
-                subjectName, weekNumber, totalWeeks);
+            var prompt = _promptBuilder.BuildPrompt(
+                syllabusJson,
+                userContext,
+                relevantSkills,
+                subjectName,
+                courseDescription,
+                weekNumber,
+                totalWeeks,
+                errorHint: lastError);
 
-            var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
-            var rawResponse = result.GetValue<string>() ?? string.Empty;
+            try
+            {
+                _logger.LogInformation(
+                    "Generating quest steps for Subject '{SubjectName}', Week {Week}/{Total} (Attempt {Attempt}/{Max})",
+                    subjectName, weekNumber, totalWeeks, attempt, maxAttempts);
 
-            _logger.LogInformation(
-                "Quest Generation - Week {Week} raw AI response: {RawResponse}",
-                weekNumber, rawResponse);
+                var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+                var rawResponse = result.GetValue<string>() ?? string.Empty;
 
-            return CleanToJson(rawResponse);
+                _logger.LogInformation(
+                    "Quest Generation - Week {Week} raw AI response: {RawResponse}",
+                    weekNumber, rawResponse);
+
+                var cleaned = CleanToJson(rawResponse);
+                return cleaned;
+            }
+            catch (InvalidOperationException ex)
+            {
+                lastError = ex.Message;
+                _logger.LogWarning(
+                    "Attempt {Attempt}/{Max} failed to clean/parse JSON: {Error}",
+                    attempt, maxAttempts, ex.Message);
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+                _logger.LogWarning(
+                    ex,
+                    "Attempt {Attempt}/{Max} failed due to exception.",
+                    attempt, maxAttempts);
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Failed to generate quest steps using AI for subject '{SubjectName}', Week {Week}.",
-                subjectName, weekNumber);
-            return null;
-        }
+
+        _logger.LogError(
+            "Failed to generate quest steps using AI for subject '{SubjectName}', Week {Week} after {Max} attempts.",
+            subjectName, weekNumber, maxAttempts);
+        return null;
     }
 
     /// <summary>
@@ -79,6 +100,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     {
         var cleaned = rawResponse.Trim();
 
+        // Remove markdown code fences
         if (cleaned.StartsWith("````") || cleaned.StartsWith("```"))
         {
             var firstNewline = cleaned.IndexOf('\n');
@@ -99,6 +121,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
 
         cleaned = cleaned.Replace("\r", string.Empty).Trim();
 
+        // Extract JSON object
         int idx = cleaned.IndexOf('{');
         if (idx >= 0)
         {
@@ -156,22 +179,49 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
 
         cleaned = cleaned.Trim();
 
+        // ⭐ FIX: Escape invalid backslashes BEFORE parsing
+        cleaned = Regex.Replace(cleaned, @"\\(?![""/\\bfnrtu])", @"\\\\");
+        cleaned = Regex.Replace(cleaned, @",(\s*[\]}])", "$1");
+        cleaned = Regex.Replace(cleaned, @"(?<!\\)\\[A-Za-z]+", m => "\\" + m.Value);
+        cleaned = cleaned
+            .Replace("\\(", "\\\\(")
+            .Replace("\\)", "\\\\)")
+            .Replace("\\[", "\\\\[")
+            .Replace("\\]", "\\\\]")
+            .Replace("\\{", "\\\\{")
+            .Replace("\\}", "\\\\}");
+
         try
         {
+            // Now parse - invalid escapes are already fixed
             using var doc = JsonDocument.Parse(cleaned);
-            if (!doc.RootElement.TryGetProperty("activities", out var activitiesElement) || activitiesElement.ValueKind != JsonValueKind.Array)
+            if (!doc.RootElement.TryGetProperty("activities", out var activitiesElement)
+                || activitiesElement.ValueKind != JsonValueKind.Array)
             {
                 throw new InvalidOperationException("Cleaned JSON does not contain a root 'activities' array.");
             }
+            return cleaned; // ⭐ Return the fixed version
         }
         catch (JsonException)
         {
+            // Fallback: try to reconstruct from array
             var arrStart = cleaned.IndexOf('[');
             var arrEnd = cleaned.LastIndexOf(']');
             if (arrStart >= 0 && arrEnd > arrStart)
             {
                 var arrayJson = cleaned.Substring(arrStart, arrEnd - arrStart + 1);
                 var reconstructed = "{\"activities\": " + arrayJson + "}";
+                reconstructed = Regex.Replace(reconstructed, @"\\(?![""/\\bfnrtu])", @"\\\\");
+                reconstructed = Regex.Replace(reconstructed, @",(\s*[\]}])", "$1");
+                reconstructed = Regex.Replace(reconstructed, @"(?<!\\)\\[A-Za-z]+", m => "\\" + m.Value);
+                reconstructed = reconstructed
+                    .Replace("\\(", "\\\\(")
+                    .Replace("\\)", "\\\\)")
+                    .Replace("\\[", "\\\\[")
+                    .Replace("\\]", "\\\\]")
+                    .Replace("\\{", "\\\\{")
+                    .Replace("\\}", "\\\\}");
+                // No need to escape again - already done above
                 using var doc = JsonDocument.Parse(reconstructed);
                 var activities = doc.RootElement.GetProperty("activities");
                 if (activities.ValueKind != JsonValueKind.Array)
@@ -183,7 +233,5 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
 
             throw new InvalidOperationException($"Cleaned response is not valid JSON. Content: {cleaned}");
         }
-
-        return cleaned;
     }
 }

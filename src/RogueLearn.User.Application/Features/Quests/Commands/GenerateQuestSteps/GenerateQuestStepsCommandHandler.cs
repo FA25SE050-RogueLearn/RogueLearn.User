@@ -15,6 +15,7 @@ using AutoMapper;
 using System.Text.Json.Serialization;
 using RogueLearn.User.Application.Common;
 using Hangfire;
+using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 
@@ -300,6 +301,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 // ========== 6d. VALIDATE ACTIVITIES FOR THIS WEEK ==========
                 var validatedActivities = ValidateActivities(activitiesElement, relevantSkillIds, weekNumber);
+                validatedActivities = ProcessMathInActivities(validatedActivities);
 
                 // Check minimum activities
                 if (validatedActivities.Count < MinActivitiesPerStep)
@@ -667,6 +669,156 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         }
 
         return validatedActivities;
+    }
+
+    private static List<Dictionary<string, object>> ProcessMathInActivities(List<Dictionary<string, object>> activities)
+    {
+        var result = new List<Dictionary<string, object>>();
+        foreach (var activity in activities)
+        {
+            if (!activity.TryGetValue("type", out var typeObj) || typeObj is null)
+            {
+                result.Add(activity);
+                continue;
+            }
+
+            var type = typeObj.ToString()?.ToLowerInvariant();
+            if (!activity.TryGetValue("payload", out var payloadObj) || payloadObj is not Dictionary<string, object> payload)
+            {
+                result.Add(activity);
+                continue;
+            }
+
+            if (type == "reading")
+            {
+                if (payload.TryGetValue("articleTitle", out var atObj) && atObj is string atStr)
+                {
+                    payload["articleTitle"] = NormalizePlainTextMath(atStr);
+                }
+                if (payload.TryGetValue("summary", out var sumObj) && sumObj is string sumStr)
+                {
+                    payload["summary"] = NormalizePlainTextMath(sumStr);
+                }
+            }
+
+            if (type == "knowledgecheck" || type == "quiz")
+            {
+                if (payload.TryGetValue("questions", out var questionsObj))
+                {
+                    var newQuestions = new List<object>();
+                    if (questionsObj is JsonElement qe && qe.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var qEl in qe.EnumerateArray())
+                        {
+                            var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(qEl.GetRawText(), new JsonSerializerOptions { Converters = { new ObjectToInferredTypesConverter() } });
+                            if (dict is not null)
+                            {
+                                newQuestions.Add(NormalizeQuestionDict(dict));
+                            }
+                        }
+                    }
+                    else if (questionsObj is List<object> qList)
+                    {
+                        foreach (var q in qList)
+                        {
+                            if (q is Dictionary<string, object> qDict)
+                            {
+                                newQuestions.Add(NormalizeQuestionDict(qDict));
+                            }
+                            else if (q is JsonElement qEl && qEl.ValueKind == JsonValueKind.Object)
+                            {
+                                var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(qEl.GetRawText(), new JsonSerializerOptions { Converters = { new ObjectToInferredTypesConverter() } });
+                                if (dict is not null)
+                                {
+                                    newQuestions.Add(NormalizeQuestionDict(dict));
+                                }
+                            }
+                            else
+                            {
+                                newQuestions.Add(q);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        newQuestions.Add(questionsObj);
+                    }
+                    payload["questions"] = newQuestions;
+                }
+            }
+
+            result.Add(activity);
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, object> NormalizeQuestionDict(Dictionary<string, object> q)
+    {
+        if (q.TryGetValue("question", out var questionObj) && questionObj is string questionStr)
+        {
+            q["question"] = NormalizePlainTextMath(questionStr);
+        }
+        if (q.TryGetValue("explanation", out var explObj) && explObj is string explStr)
+        {
+            q["explanation"] = NormalizePlainTextMath(explStr);
+        }
+        if (q.TryGetValue("correctAnswer", out var caObj) && caObj is string caStr)
+        {
+            q["correctAnswer"] = NormalizePlainTextMath(caStr);
+        }
+        if (q.TryGetValue("options", out var optionsObj))
+        {
+            if (optionsObj is JsonElement oe && oe.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<object>();
+                foreach (var optEl in oe.EnumerateArray())
+                {
+                    var s = optEl.ValueKind == JsonValueKind.String ? optEl.GetString() ?? string.Empty : optEl.GetRawText();
+                    list.Add(NormalizePlainTextMath(s));
+                }
+                q["options"] = list;
+            }
+            else if (optionsObj is List<object> optList)
+            {
+                var list = new List<object>();
+                foreach (var o in optList)
+                {
+                    var s = o?.ToString() ?? string.Empty;
+                    list.Add(NormalizePlainTextMath(s));
+                }
+                q["options"] = list;
+            }
+        }
+        return q;
+    }
+
+    private static string NormalizePlainTextMath(string s)
+    {
+        var t = s ?? string.Empty;
+        t = t.Replace("\r", " ").Replace("\n", " ");
+        t = t.Replace("$", string.Empty);
+        t = Regex.Replace(t, @"\\left|\\right", string.Empty);
+        t = t.Replace("\\(", string.Empty).Replace("\\)", string.Empty)
+             .Replace("\\[", string.Empty).Replace("\\]", string.Empty);
+        t = Regex.Replace(t, @"\\frac\s*\{\s*([^}]+)\s*\}\s*\{\s*([^}]+)\s*\}", m => "(" + m.Groups[1].Value + ") / (" + m.Groups[2].Value + ")");
+        t = Regex.Replace(t, @"\\sqrt\s*\{\s*([^}]+)\s*\}", m => "sqrt(" + m.Groups[1].Value + ")");
+        t = Regex.Replace(t, @"([A-Za-z0-9])\s*\^\s*\{\s*([^}]+)\s*\}", "$1^$2");
+        t = Regex.Replace(t, @"([A-Za-z0-9])\s*\^\s*([A-Za-z0-9]+)", "$1^$2");
+        t = Regex.Replace(t, @"([A-Za-z])\s*_\s*\{\s*([^}]+)\s*\}", "$1_$2");
+        t = Regex.Replace(t, @"([A-Za-z])\s*_\s*([A-Za-z0-9]+)", "$1_$2");
+        t = Regex.Replace(t, @"\\int\s*_\{\s*([^}]+)\s*\}\s*\^\{\s*([^}]+)\s*\}", m => "integral from " + m.Groups[1].Value + " to " + m.Groups[2].Value + " of ");
+        t = Regex.Replace(t, @"\\(sin|cos|tan|ln|log|lim|sum|alpha|beta|gamma|theta|pi)", m => m.Groups[1].Value);
+        t = Regex.Replace(t, @"(?s)\\begin\{bmatrix\}(.+?)\\end\{bmatrix\}", m =>
+        {
+            var content = m.Groups[1].Value;
+            var rows = Regex.Split(content, @"\\\\");
+            var rowStrings = rows.Select(r => "[" + string.Join(", ", r.Split('&').Select(c => c.Trim())) + "]");
+            return "[" + string.Join(", ", rowStrings) + "]";
+        });
+        t = t.Replace("\\", string.Empty);
+        t = Regex.Replace(t, @"\s+", " ").Trim();
+        return t;
     }
 
     /// <summary>
