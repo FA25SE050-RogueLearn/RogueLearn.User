@@ -38,6 +38,22 @@ public class CreateGuildCommandHandler : IRequestHandler<CreateGuildCommand, Cre
             throw new Exceptions.BadRequestException("User has already created a guild and cannot create another.");
         }
 
+        // Role-based max members constraints
+        var verifiedLecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
+        var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.CreatorAuthUserId, cancellationToken);
+        var isVerifiedLecturer = verifiedLecturerRole != null && userRoles.Any(ur => ur.RoleId == verifiedLecturerRole.Id);
+        var maxAllowed = isVerifiedLecturer ? 100 : 50;
+        if (request.MaxMembers > maxAllowed)
+        {
+            throw new Exceptions.BadRequestException($"Max guild members cannot exceed {maxAllowed} for your role.");
+        }
+
+        // Ensure max members is greater than current members (creator counts as 1)
+        if (request.MaxMembers <= 1)
+        {
+            throw new Exceptions.BadRequestException("Max members must be greater than the current member count (1).");
+        }
+
         var isPublic = request.Privacy.Equals("public", StringComparison.OrdinalIgnoreCase);
 
         var guild = new Guild
