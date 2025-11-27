@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Services;
@@ -79,10 +79,8 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     {
         var cleaned = rawResponse.Trim();
 
-        // Remove markdown code fences if present
-        if (cleaned.StartsWith("```"))
+        if (cleaned.StartsWith("````") || cleaned.StartsWith("```"))
         {
-            // Remove opening fence and language identifier (e.g., ```json)
             var firstNewline = cleaned.IndexOf('\n');
             if (firstNewline > -1)
             {
@@ -90,7 +88,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
             }
         }
 
-        if (cleaned.EndsWith("```"))
+        if (cleaned.EndsWith("````") || cleaned.EndsWith("```"))
         {
             var lastFenceIndex = cleaned.LastIndexOf("```", StringComparison.Ordinal);
             if (lastFenceIndex > -1)
@@ -99,35 +97,93 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
             }
         }
 
-        cleaned = cleaned.Trim();
+        cleaned = cleaned.Replace("\r", string.Empty).Trim();
 
-        // Extract JSON object: { "activities": [...] }
-        var startIdx = cleaned.IndexOf('{');
-        var endIdx = cleaned.LastIndexOf('}');
-
-        if (startIdx >= 0 && endIdx > startIdx)
+        int idx = cleaned.IndexOf('{');
+        if (idx >= 0)
         {
-            cleaned = cleaned.Substring(startIdx, endIdx - startIdx + 1);
+            int depth = 0;
+            bool inString = false;
+            bool escape = false;
+            int end = -1;
+
+            for (int i = idx; i < cleaned.Length; i++)
+            {
+                char c = cleaned[i];
+
+                if (inString)
+                {
+                    if (escape)
+                    {
+                        escape = false;
+                    }
+                    else if (c == '\\')
+                    {
+                        escape = true;
+                    }
+                    else if (c == '"')
+                    {
+                        inString = false;
+                    }
+                }
+                else
+                {
+                    if (c == '"')
+                    {
+                        inString = true;
+                    }
+                    else if (c == '{')
+                    {
+                        depth++;
+                    }
+                    else if (c == '}')
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            end = i;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (end > idx)
+            {
+                cleaned = cleaned.Substring(idx, end - idx + 1);
+            }
         }
 
-        // Validate JSON structure
+        cleaned = cleaned.Trim();
+
         try
         {
             using var doc = JsonDocument.Parse(cleaned);
-            if (!doc.RootElement.TryGetProperty("activities", out var activitiesElement) ||
-                activitiesElement.ValueKind != JsonValueKind.Array)
+            if (!doc.RootElement.TryGetProperty("activities", out var activitiesElement) || activitiesElement.ValueKind != JsonValueKind.Array)
             {
-                throw new InvalidOperationException(
-                    "Cleaned JSON does not contain a root 'activities' array. " +
-                    "This indicates the AI did not follow the prompt format.");
+                throw new InvalidOperationException("Cleaned JSON does not contain a root 'activities' array.");
             }
         }
         catch (JsonException)
         {
-            throw new InvalidOperationException(
-                $"Cleaned response is not valid JSON. Content: {cleaned}");
+            var arrStart = cleaned.IndexOf('[');
+            var arrEnd = cleaned.LastIndexOf(']');
+            if (arrStart >= 0 && arrEnd > arrStart)
+            {
+                var arrayJson = cleaned.Substring(arrStart, arrEnd - arrStart + 1);
+                var reconstructed = "{\"activities\": " + arrayJson + "}";
+                using var doc = JsonDocument.Parse(reconstructed);
+                var activities = doc.RootElement.GetProperty("activities");
+                if (activities.ValueKind != JsonValueKind.Array)
+                {
+                    throw new InvalidOperationException("Failed to reconstruct activities array from response.");
+                }
+                return reconstructed;
+            }
+
+            throw new InvalidOperationException($"Cleaned response is not valid JSON. Content: {cleaned}");
         }
 
-        return cleaned.Trim();
+        return cleaned;
     }
 }
