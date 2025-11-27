@@ -25,7 +25,7 @@ public class UserAchievementsController : ControllerBase
     /// <summary>
     /// Get achievements earned by the current authenticated user
     /// </summary>
-    [HttpGet("me/achievements")]
+    [HttpGet("achievements/me")]
     [ProducesResponseType(typeof(GetUserAchievementsByAuthIdResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GetUserAchievementsByAuthIdResponse>> GetMyAchievements()

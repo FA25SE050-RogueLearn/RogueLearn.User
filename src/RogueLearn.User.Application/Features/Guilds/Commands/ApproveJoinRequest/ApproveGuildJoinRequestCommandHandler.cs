@@ -78,6 +78,13 @@ public class ApproveGuildJoinRequestCommandHandler : IRequestHandler<ApproveGuil
             guild.CurrentMemberCount = newActiveCount;
             guild.UpdatedAt = DateTimeOffset.UtcNow;
             await _guildRepository.UpdateAsync(guild, cancellationToken);
+
+            var otherRequests = await _joinRequestRepository.GetRequestsByRequesterAsync(joinReq.RequesterId, cancellationToken);
+            var toRemove = otherRequests.Where(r => r.GuildId != request.GuildId && r.Status == GuildJoinRequestStatus.Pending).Select(r => r.Id).ToList();
+            if (toRemove.Any())
+            {
+                await _joinRequestRepository.DeleteRangeAsync(toRemove, cancellationToken);
+            }
         }
 
         joinReq.Status = GuildJoinRequestStatus.Accepted;

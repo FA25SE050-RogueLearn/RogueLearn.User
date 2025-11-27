@@ -16,14 +16,15 @@ public class GetAllGuildsQueryHandler : IRequestHandler<GetAllGuildsQuery, IEnum
     public async Task<IEnumerable<GuildDto>> Handle(GetAllGuildsQuery request, CancellationToken cancellationToken)
     {
         var all = await _guildRepository.GetAllAsync(cancellationToken);
-        var filtered = request.IncludePrivate ? all : all.Where(g => g.IsPublic);
+        // var filtered = request.IncludePrivate ? all : all.Where(g => g.IsPublic);
 
-        return filtered.Select(g => new GuildDto
+        return all.Select(g => new GuildDto
         {
             Id = g.Id,
             Name = g.Name,
             Description = g.Description,
             IsPublic = g.IsPublic,
+            IsLecturerGuild = g.IsLecturerGuild,
             MaxMembers = g.MaxMembers,
             CreatedBy = g.CreatedBy,
             CreatedAt = g.CreatedAt,

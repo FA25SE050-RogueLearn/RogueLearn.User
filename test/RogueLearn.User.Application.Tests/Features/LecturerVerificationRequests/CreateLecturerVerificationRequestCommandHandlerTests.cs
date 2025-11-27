@@ -24,7 +24,7 @@ public class CreateLecturerVerificationRequestCommandHandlerTests
     {
         var authId = Guid.NewGuid();
         _profileRepo.Setup(x => x.GetByAuthIdAsync(authId, It.IsAny<CancellationToken>())).ReturnsAsync(new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId, Email = "user@example.com" });
-        _reqRepo.Setup(x => x.AnyAsync(It.IsAny<System.Linq.Expressions.Expression<Func<LecturerVerificationRequest, bool>>>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _reqRepo.Setup(x => x.AnyPendingAsync(authId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var cmd = new CreateLecturerVerificationRequestCommand { AuthUserId = authId, Email = "user@example.com", StaffId = "FPT-123" };
         await FluentActions.Invoking(() => _handler.Handle(cmd, CancellationToken.None)).Should().ThrowAsync<ConflictException>();
@@ -35,9 +35,8 @@ public class CreateLecturerVerificationRequestCommandHandlerTests
     {
         var authId = Guid.NewGuid();
         _profileRepo.Setup(x => x.GetByAuthIdAsync(authId, It.IsAny<CancellationToken>())).ReturnsAsync(new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId, Email = "user@example.com" });
-        _reqRepo.SetupSequence(x => x.AnyAsync(It.IsAny<System.Linq.Expressions.Expression<Func<LecturerVerificationRequest, bool>>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false) // pending
-            .ReturnsAsync(true); // approved
+        _reqRepo.Setup(x => x.AnyPendingAsync(authId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _reqRepo.Setup(x => x.AnyApprovedAsync(authId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         var cmd = new CreateLecturerVerificationRequestCommand { AuthUserId = authId, Email = "user@example.com", StaffId = "FPT-123" };
         await FluentActions.Invoking(() => _handler.Handle(cmd, CancellationToken.None)).Should().ThrowAsync<ConflictException>();
