@@ -40,7 +40,8 @@ public class AchievementsGrpcService : AchievementsService.AchievementsServiceBa
                 IconUrl = a.IconUrl ?? string.Empty,
                 Version = a.Version,
                 IsActive = a.IsActive,
-                SourceService = a.SourceService
+                SourceService = a.SourceService,
+                IsMedal = a.IsMedal
             });
         }
         return list;
@@ -171,7 +172,8 @@ public class AchievementsGrpcService : AchievementsService.AchievementsServiceBa
                     return new Application.Features.Achievements.Commands.GrantAchievements.GrantAchievementEntry
                     {
                         AuthUserId = authUserId,
-                        AchievementKey = x.AchievementKey
+                        AchievementKey = x.AchievementKey,
+                        Context = string.IsNullOrWhiteSpace(x.Context) ? null : x.Context
                     };
                 })
                 .ToList()

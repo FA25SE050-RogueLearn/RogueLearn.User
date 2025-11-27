@@ -11,4 +11,5 @@ public class GrantAchievementEntry
 {
     public Guid AuthUserId { get; set; }
     public string AchievementKey { get; set; } = string.Empty;
+    public string? Context { get; set; }
 }

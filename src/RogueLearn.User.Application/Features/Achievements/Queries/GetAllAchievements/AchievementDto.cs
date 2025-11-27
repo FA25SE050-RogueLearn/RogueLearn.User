@@ -22,4 +22,5 @@ public class AchievementDto
     public bool IsActive { get; set; }
 
     public string SourceService { get; set; } = string.Empty;
+    public bool IsMedal { get; set; }
 }

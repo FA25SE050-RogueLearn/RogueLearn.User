@@ -72,35 +72,13 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
             throw new BadRequestException($"User already earned achievement '{achievement.Name}'.");
         }
 
-        // Parse optional Context JSON string into a structured object
-        Dictionary<string, object>? contextDict = null;
-        if (!string.IsNullOrWhiteSpace(request.Context))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(request.Context);
-                if (doc.RootElement.ValueKind == JsonValueKind.Object)
-                {
-                    contextDict = JsonSerializer.Deserialize<Dictionary<string, object>>(request.Context);
-                }
-                else
-                {
-                    throw new RogueLearn.User.Application.Exceptions.ValidationException(new[] { new FluentValidation.Results.ValidationFailure("Context", "Context must be a valid JSON object.") });
-                }
-            }
-            catch (JsonException)
-            {
-                throw new RogueLearn.User.Application.Exceptions.ValidationException(new[] { new FluentValidation.Results.ValidationFailure("Context", "Context must be a valid JSON object.") });
-            }
-        }
-
         var userAchievement = new UserAchievement
         {
             Id = Guid.NewGuid(),
             AuthUserId = user.AuthUserId,
             AchievementId = request.AchievementId,
             EarnedAt = DateTimeOffset.UtcNow,
-            Context = contextDict
+            Context = string.IsNullOrWhiteSpace(request.Context) ? string.Empty : request.Context
         };
 
         await _userAchievementRepository.AddAsync(userAchievement, cancellationToken);
