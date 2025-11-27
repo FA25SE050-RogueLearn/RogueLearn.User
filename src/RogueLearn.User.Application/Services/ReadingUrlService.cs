@@ -55,13 +55,6 @@ public class ReadingUrlService : IReadingUrlService
         _logger.LogInformation("🔍 Starting URL search | Topic: '{Topic}' | Context: '{Context}' | Category: {Category}",
             topic, subjectContext ?? "none", category);
 
-        var normalizedTopic = TopicNormalizer.Normalize(topic);
-        if (TopicNormalizer.IsMetaSession(normalizedTopic))
-        {
-            _logger.LogWarning("Skipping URL search for meta session: '{Topic}'", topic);
-            return null;
-        }
-
         // Extract technology keywords from context
         var technologyKeywords = ContextKeywordExtractor.ExtractTechnologyKeywords(subjectContext);
         _logger.LogDebug("Detected technologies: {Technologies}", string.Join(", ", technologyKeywords));
@@ -90,7 +83,7 @@ public class ReadingUrlService : IReadingUrlService
         try
         {
             // Build category-specific query
-            var searchQuery = SearchQueryBuilder.BuildContextAwareQuery(normalizedTopic, subjectContext, category);
+            var searchQuery = SearchQueryBuilder.BuildContextAwareQuery(topic, subjectContext, category);
             _logger.LogDebug("Search query: '{Query}'", searchQuery);
 
             var searchResults = await _webSearchService.SearchAsync(
@@ -99,19 +92,13 @@ public class ReadingUrlService : IReadingUrlService
             if (searchResults == null || !searchResults.Any())
             {
                 _logger.LogWarning("No search results returned");
-                if (category == SubjectCategory.Science)
-                {
-                    var altQuery = SearchQueryBuilder.BuildContextAwareQuery(normalizedTopic, null, SubjectCategory.General);
-                    _logger.LogDebug("Alternate search query: '{Query}'", altQuery);
-                    searchResults = await _webSearchService.SearchAsync(altQuery, count: 15, offset: 0, cancellationToken);
-                    if (searchResults == null || !searchResults.Any()) return null;
-                }
+                return null;
             }
 
             _logger.LogDebug("Found {Count} raw results, filtering for relevance...", searchResults.Count());
 
             // Filter and prioritize results
-            var relevantUrls = SearchResultFilter.FilterAndPrioritizeResults(searchResults, normalizedTopic, technologyKeywords, category, _logger);
+            var relevantUrls = SearchResultFilter.FilterAndPrioritizeResults(searchResults, topic, technologyKeywords, category, _logger);
 
             if (!relevantUrls.Any())
             {
