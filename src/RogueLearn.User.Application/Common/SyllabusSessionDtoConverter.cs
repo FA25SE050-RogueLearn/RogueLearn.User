@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using RogueLearn.User.Application.Models;
 
@@ -10,6 +10,20 @@ namespace RogueLearn.User.Application.Common;
 /// </summary>
 public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
 {
+    private static bool TryGetPropertyCaseInsensitive(JsonElement root, string name, out JsonElement value)
+    {
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
     public override SyllabusSessionDto Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -21,20 +35,20 @@ public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
             var session = new SyllabusSessionDto();
 
             // Parse SessionNumber (required)
-            if (root.TryGetProperty("SessionNumber", out var sessionNumberElement))
+            if (TryGetPropertyCaseInsensitive(root, "SessionNumber", out var sessionNumberElement))
             {
                 session.SessionNumber = sessionNumberElement.GetInt32();
             }
 
             // Parse Topic (optional)
-            if (root.TryGetProperty("Topic", out var topicElement) &&
+            if (TryGetPropertyCaseInsensitive(root, "Topic", out var topicElement) &&
                 topicElement.ValueKind != JsonValueKind.Null)
             {
                 session.Topic = topicElement.GetString() ?? string.Empty;
             }
 
             // Parse Activities (optional)
-            if (root.TryGetProperty("Activities", out var activitiesElement) &&
+            if (TryGetPropertyCaseInsensitive(root, "Activities", out var activitiesElement) &&
                 activitiesElement.ValueKind == JsonValueKind.Array)
             {
                 session.Activities = new List<string>();
@@ -48,7 +62,7 @@ public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
             }
 
             // Parse Readings (optional)
-            if (root.TryGetProperty("Readings", out var readingsElement) &&
+            if (TryGetPropertyCaseInsensitive(root, "Readings", out var readingsElement) &&
                 readingsElement.ValueKind == JsonValueKind.Array)
             {
                 session.Readings = new List<string>();
@@ -62,10 +76,14 @@ public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
             }
 
             // Parse SuggestedUrl (optional)
-            if (root.TryGetProperty("SuggestedUrl", out var suggestedUrlElement) &&
+            if (TryGetPropertyCaseInsensitive(root, "SuggestedUrl", out var suggestedUrlElement) &&
                 suggestedUrlElement.ValueKind != JsonValueKind.Null)
             {
-                session.SuggestedUrl = suggestedUrlElement.GetString();
+                var raw = suggestedUrlElement.GetString();
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    session.SuggestedUrl = raw.Replace("`", string.Empty).Trim();
+                }
             }
 
             return session;
