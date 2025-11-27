@@ -16,9 +16,9 @@ public class GetAllGuildsFullQueryHandler : IRequestHandler<GetAllGuildsFullQuer
     public async Task<IReadOnlyList<GuildFullDto>> Handle(GetAllGuildsFullQuery request, CancellationToken cancellationToken)
     {
         var all = await _guildRepository.GetAllAsync(cancellationToken);
-        var filtered = request.IncludePrivate ? all : all.Where(g => g.IsPublic);
+        // var filtered = request.IncludePrivate ? all : all.Where(g => g.IsPublic);
 
-        return filtered.Select(g => new GuildFullDto
+        return all.Select(g => new GuildFullDto
         {
             Id = g.Id,
             Name = g.Name,
@@ -28,6 +28,7 @@ public class GetAllGuildsFullQueryHandler : IRequestHandler<GetAllGuildsFullQuer
             CurrentMemberCount = g.CurrentMemberCount,
             MeritPoints = g.MeritPoints,
             IsPublic = g.IsPublic,
+            IsLecturerGuild = g.IsLecturerGuild,
             RequiresApproval = g.RequiresApproval,
             BannerImageUrl = g.BannerImageUrl,
             CreatedBy = g.CreatedBy,

@@ -9,6 +9,7 @@ public record GuildDto
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public bool IsPublic { get; init; }
+    public bool IsLecturerGuild { get; init; }
     public int MaxMembers { get; init; }
     public Guid CreatedBy { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
@@ -25,6 +26,7 @@ public record GuildFullDto
     public int CurrentMemberCount { get; init; }
     public int MeritPoints { get; init; }
     public bool IsPublic { get; init; }
+    public bool IsLecturerGuild { get; init; }
     public bool RequiresApproval { get; init; }
     public string? BannerImageUrl { get; init; }
     public Guid CreatedBy { get; init; }

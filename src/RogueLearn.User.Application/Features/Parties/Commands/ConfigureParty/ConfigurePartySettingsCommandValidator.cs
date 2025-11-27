@@ -13,7 +13,7 @@ public class ConfigurePartySettingsCommandValidator : AbstractValidator<Configur
             .NotEmpty();
 
         RuleFor(x => x.MaxMembers)
-            .GreaterThan(0)
+            .GreaterThan(2)
             .LessThanOrEqualTo(8);
 
         RuleFor(x => x.Privacy)

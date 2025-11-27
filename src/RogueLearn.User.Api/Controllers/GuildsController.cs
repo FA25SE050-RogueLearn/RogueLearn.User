@@ -187,7 +187,7 @@ public class GuildsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ConfigureGuildSettings([FromRoute] Guid guildId, [FromBody] ConfigureGuildSettingsCommand command, CancellationToken cancellationToken = default)
     {
-        var req = command with { GuildId = guildId };
+        var req = command with { GuildId = guildId, ActorAuthUserId = User.GetAuthUserId() };
         await _mediator.Send(req, cancellationToken);
         return NoContent();
     }
@@ -202,7 +202,7 @@ public class GuildsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ConfigureGuildSettingsAdmin([FromRoute] Guid guildId, [FromBody] ConfigureGuildSettingsCommand command, CancellationToken cancellationToken = default)
     {
-        var req = command with { GuildId = guildId };
+        var req = command with { GuildId = guildId, ActorAuthUserId = User.GetAuthUserId() };
         await _mediator.Send(req, cancellationToken);
         return NoContent();
     }

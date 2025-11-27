@@ -13,7 +13,7 @@ public class CreatePartyCommandValidator : AbstractValidator<CreatePartyCommand>
             .NotEmpty();
 
         RuleFor(x => x.MaxMembers)
-            .GreaterThan(0)
+            .GreaterThan(2)
             .LessThanOrEqualTo(8);
     }
 }

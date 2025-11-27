@@ -31,6 +31,9 @@ public class Guild : BaseEntity
     [Column("is_public")]
     public bool IsPublic { get; set; } = true;
 
+    [Column("is_lecturer_guild")]
+    public bool IsLecturerGuild { get; set; } = false;
+
     [Column("requires_approval")]
     public bool RequiresApproval { get; set; } = false;
 

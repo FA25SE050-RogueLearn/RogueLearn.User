@@ -14,6 +14,7 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IRoleRepository _roleRepository;
     private readonly IUserRoleRepository _userRoleRepository;
+    private readonly IGuildRepository _guildRepository;
     private readonly ILogger<ApproveLecturerVerificationRequestCommandHandler> _logger;
 
     public ApproveLecturerVerificationRequestCommandHandler(
@@ -21,12 +22,14 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
         IUserProfileRepository userProfileRepository,
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository,
+        IGuildRepository guildRepository,
         ILogger<ApproveLecturerVerificationRequestCommandHandler> logger)
     {
         _requestRepository = requestRepository;
         _userProfileRepository = userProfileRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
+        _guildRepository = guildRepository;
         _logger = logger;
     }
 
@@ -63,6 +66,17 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
                 AssignedAt = now,
                 AssignedBy = request.ReviewerAuthUserId
             }, cancellationToken);
+        }
+
+        var createdGuilds = await _guildRepository.GetGuildsByCreatorAsync(profile.AuthUserId, cancellationToken);
+        foreach (var g in createdGuilds)
+        {
+            if (!g.IsLecturerGuild)
+            {
+                g.IsLecturerGuild = true;
+                g.UpdatedAt = now;
+                await _guildRepository.UpdateAsync(g, cancellationToken);
+            }
         }
 
         _logger.LogInformation("Approved lecturer verification request {RequestId} for {AuthUserId}", entity.Id, entity.AuthUserId);
