@@ -88,6 +88,20 @@ public class AcceptGuildInvitationCommandHandler : IRequestHandler<AcceptGuildIn
         invitation.RespondedAt = DateTimeOffset.UtcNow;
         await _invitationRepository.UpdateAsync(invitation, cancellationToken);
 
+        var otherPending = await _invitationRepository.FindAsync(
+            i => i.InviteeId == request.AuthUserId && i.Status == InvitationStatus.Pending,
+            cancellationToken);
+        var toDecline = otherPending.Where(i => i.GuildId != request.GuildId).ToList();
+        if (toDecline.Any())
+        {
+            foreach (var inv in toDecline)
+            {
+                inv.Status = InvitationStatus.Declined;
+                inv.RespondedAt = DateTimeOffset.UtcNow;
+            }
+            await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
+        }
+
         return Unit.Value;
     }
 }
