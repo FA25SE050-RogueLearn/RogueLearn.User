@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/UrlValidationService.cs
+// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/UrlValidationService.cs
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -15,125 +15,7 @@ public class UrlValidationService : IUrlValidationService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UrlValidationService> _logger;
 
-    // Trusted domains that skip content length validation
-    // These are well-known educational/tutorial sites that may use JS rendering
-    private static readonly HashSet<string> _trustedDomains = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Programming Tutorials - Vietnamese
-        "viblo.asia",
-        "topdev.vn",
-        "200lab.io",
-        "techtalk.vn",
-        "techmaster.vn",
-        
-        // Programming Tutorials - International
-        "geeksforgeeks.org",
-        "w3schools.com",
-        "tutorialspoint.com",
-        "programiz.com",
-        "javatpoint.com",
-        "tutorialsteacher.com",
-        "guru99.com",
-        "studytonight.com",
-        "baeldung.com",         // Java tutorials
-        "jenkov.com",           // Java tutorials
-        "mkyong.com",           // Java/Spring tutorials
-        
-        // Developer Blogs
-        "dev.to",
-        "hashnode.dev",
-        "freecodecamp.org",
-        "digitalocean.com",
-        "css-tricks.com",
-        "smashingmagazine.com",
-        "logrocket.com",
-        "sitepoint.com",
-        
-        // Official Documentation
-        "developer.android.com",
-        "learn.microsoft.com",
-        "docs.microsoft.com",
-        "react.dev",
-        "reactjs.org",
-        "vuejs.org",
-        "angular.io",
-        "docs.oracle.com",
-        "oracle.com",
-        "developer.mozilla.org",
-        "nodejs.org",
-        "docs.python.org",
-        "kotlinlang.org",
-        "dart.dev",
-        "flutter.dev",
-        
-        // Vietnamese Educational Sites
-        "vietjack.com",
-        "tailieu.vn",
-        "123doc.net",
-        "hocmai.vn",
-        "tuyensinh247.com",
-        "loigiaihay.com",
-        
-        // Vietnamese News/Politics (for non-programming subjects)
-        "thuvienphapluat.vn",
-        "dangcongsan.vn",
-        "chinhphu.vn",
-        "nhandan.vn",
-        "vnexpress.net",
-        "thanhnien.vn",
-        "tuoitre.vn",
-        "dantri.com.vn",
-        "cafef.vn",
-        "baomoi.com",
-        
-        // Academic Sources
-        "wikipedia.org",
-        "britannica.com",
-        "khanacademy.org",
-        "coursera.org",
-        "edx.org",
-        "mit.edu",
-        "stanford.edu",
-        "berkeley.edu"
-    };
 
-    // Patterns indicating unavailable content
-    private static readonly string[] _notFoundIndicators = new[]
-    {
-        "page not found",
-        "404",
-        "page does not exist",
-        "page has been removed",
-        "page has moved",
-        "no longer available",
-        "content not found",
-        "this page doesn't exist",
-        "page cannot be found",
-        "requested page",
-        "error 404",
-        "not exist",
-        "we couldn't find that page",
-        "the page you requested"
-    };
-
-    // Patterns indicating paywalls or login requirements
-    private static readonly string[] _paywallIndicators = new[]
-    {
-        "member-only",
-        "members only",
-        "subscribe to read",
-        "subscription required",
-        "sign in to continue",
-        "login to continue",
-        "this article is for",
-        "premium content",
-        "become a member",
-        "upgrade to read",
-        "limited free article",
-        "free articles remaining",
-        "paywall",
-        "unlock this story"
-    };
 
     public UrlValidationService(IHttpClientFactory httpClientFactory, ILogger<UrlValidationService> logger)
     {
@@ -147,15 +29,7 @@ public class UrlValidationService : IUrlValidationService
     /// </summary>
     private bool IsTrustedDomain(string url)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return false;
-
-        var host = uri.Host.ToLowerInvariant();
-
-        // Check if host matches any trusted domain
-        // e.g., "developer.android.com" matches "android.com"
-        return _trustedDomains.Any(domain =>
-            host == domain || host.EndsWith($".{domain}"));
+        return UrlValidation.UrlHostUtils.IsTrustedDomain(url, UrlValidation.TrustedDomains.Set);
     }
 
     public async Task<bool> IsUrlAccessibleAsync(string url, CancellationToken cancellationToken = default)
@@ -250,7 +124,7 @@ public class UrlValidationService : IUrlValidationService
             var contentLower = contentSnippet.ToLowerInvariant();
 
             // Check for "not found" indicators
-            foreach (var indicator in _notFoundIndicators)
+            foreach (var indicator in UrlValidation.ContentIndicators.NotFoundIndicators)
             {
                 if (contentLower.Contains(indicator))
                 {
@@ -261,7 +135,7 @@ public class UrlValidationService : IUrlValidationService
             }
 
             // Check for paywall indicators
-            foreach (var indicator in _paywallIndicators)
+            foreach (var indicator in UrlValidation.ContentIndicators.PaywallIndicators)
             {
                 if (contentLower.Contains(indicator))
                 {
@@ -272,7 +146,7 @@ public class UrlValidationService : IUrlValidationService
             }
 
             // Check for minimal content (possible blank page or redirect stub)
-            var meaningfulText = ExtractTextFromHtml(contentSnippet);
+            var meaningfulText = UrlValidation.HtmlTextExtractor.Extract(contentSnippet, _logger);
 
             if (meaningfulText.Length < 200)
             {

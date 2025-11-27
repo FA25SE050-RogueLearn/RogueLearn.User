@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommandHandler.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommandHandler.cs
 //  OPTIMIZED: Added AI prompt compression (89% reduction), optimized serialization
 //  UPDATED: Added Hangfire progress tracking for real-time user updates
 //  UPDATED: Skills initialized at Level 0 (Discovered) instead of Level 1
@@ -571,24 +571,58 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 continue;
             }
 
-            // For Reading activities, check if URL exists
             if (activity.Type.Equals("Reading", StringComparison.OrdinalIgnoreCase))
             {
+                bool hasUrl = false;
+                string? url = null;
                 if (activity.Payload.TryGetProperty("url", out var urlElement))
                 {
-                    var url = urlElement.GetString();
-                    if (string.IsNullOrWhiteSpace(url))
-                    {
-                        readingsWithoutUrls++;
-                        _logger.LogWarning("Week {Week}: Reading {Id} has empty URL",
-                            weekNumber, finalActivityId);
-                    }
+                    url = urlElement.GetString();
+                    hasUrl = !string.IsNullOrWhiteSpace(url);
                 }
-                else
+
+                if (!hasUrl)
                 {
                     readingsWithoutUrls++;
-                    _logger.LogWarning("Week {Week}: Reading {Id} missing URL property",
+                    _logger.LogWarning("Week {Week}: Reading {Id} has empty URL",
                         weekNumber, finalActivityId);
+
+                    string skillIdStr = activity.Payload.TryGetProperty("skillId", out var skillIdEl)
+                        ? (skillIdEl.GetString() ?? string.Empty)
+                        : string.Empty;
+                    int kcXp = activity.Payload.TryGetProperty("experiencePoints", out var xpEl) && xpEl.TryGetInt32(out var xpVal)
+                        ? Math.Max(xpVal, 30)
+                        : 30;
+                    string topicText = activity.Payload.TryGetProperty("articleTitle", out var titleEl)
+                        ? (titleEl.GetString() ?? string.Empty)
+                        : string.Empty;
+                    if (string.IsNullOrWhiteSpace(topicText) && activity.Payload.TryGetProperty("summary", out var summaryEl))
+                    {
+                        topicText = summaryEl.GetString() ?? string.Empty;
+                    }
+
+                    var kcPayload = new Dictionary<string, object>
+                    {
+                        ["skillId"] = skillIdStr,
+                        ["experiencePoints"] = kcXp,
+                        ["topic"] = string.IsNullOrWhiteSpace(topicText) ? "Knowledge Check" : topicText,
+                        ["questions"] = new List<Dictionary<string, object>>
+                        {
+                            new() { ["question"] = string.IsNullOrWhiteSpace(topicText) ? "Define the key concept discussed." : $"Define {topicText}." },
+                            new() { ["question"] = string.IsNullOrWhiteSpace(topicText) ? "State one important property." : $"State one property related to {topicText}." },
+                            new() { ["question"] = string.IsNullOrWhiteSpace(topicText) ? "Give an example to illustrate the idea." : $"Give an example illustrating {topicText}." }
+                        }
+                    };
+
+                    var kcDict = new Dictionary<string, object>
+                    {
+                        ["activityId"] = finalActivityId,
+                        ["type"] = "KnowledgeCheck",
+                        ["payload"] = kcPayload
+                    };
+
+                    validatedActivities.Add(kcDict);
+                    continue;
                 }
             }
 
@@ -647,6 +681,15 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             if (activityDict != null)
             {
                 activityDict["activityId"] = finalActivityId;
+                if (activity.Type.Equals("Reading", StringComparison.OrdinalIgnoreCase) &&
+                    activityDict.TryGetValue("payload", out var payloadObj) &&
+                    payloadObj is Dictionary<string, object> payloadDict &&
+                    payloadDict.TryGetValue("url", out var urlObj) &&
+                    urlObj is string urlStr)
+                {
+                    var normalizedUrl = urlStr.Replace("`", string.Empty).Trim();
+                    payloadDict["url"] = normalizedUrl;
+                }
                 validatedActivities.Add(activityDict);
             }
         }
