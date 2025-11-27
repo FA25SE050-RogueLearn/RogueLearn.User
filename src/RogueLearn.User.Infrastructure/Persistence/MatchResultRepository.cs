@@ -30,4 +30,15 @@ public class MatchResultRepository : GenericRepository<MatchResult>, IMatchResul
             .Get(cancellationToken);
         return response.Models;
     }
+
+    public async Task<List<MatchResult>> GetMatchesByUserAsync(Guid userId, int limit = 10, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<MatchResult>()
+            .Where(x => x.UserId == userId)
+            .Order("created_at", Supabase.Postgrest.Constants.Ordering.Descending)
+            .Limit(limit)
+            .Get(cancellationToken);
+        return response.Models;
+    }
 }

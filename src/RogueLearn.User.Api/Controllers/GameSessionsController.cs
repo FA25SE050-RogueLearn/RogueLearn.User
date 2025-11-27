@@ -53,6 +53,7 @@ namespace RogueLearn.User.Api.Controllers
         {
             [JsonPropertyName("relay_join_code"), JsonProperty("relay_join_code")] public string? RelayJoinCode { get; set; }
             [JsonPropertyName("pack_spec"), JsonProperty("pack_spec")] public PackSpecDto? PackSpec { get; set; }
+            [JsonPropertyName("user_id"), JsonProperty("user_id")] public string? UserId { get; set; }
         }
 
         public class CompletionRequest
@@ -220,10 +221,18 @@ namespace RogueLearn.User.Api.Controllers
                 }
                 catch { }
 
+                // Parse user_id if provided
+                Guid? userId = null;
+                if (!string.IsNullOrEmpty(request?.UserId) && Guid.TryParse(request.UserId, out var parsedUserId))
+                {
+                    userId = parsedUserId;
+                }
+
                 // Create game session entity
                 var gameSession = new RogueLearn.User.Domain.Entities.GameSession
                 {
                     SessionId = sessionId,
+                    UserId = userId,
                     RelayJoinCode = request?.RelayJoinCode?.Trim(),
                     PackId = packId,
                     Subject = subject,
@@ -409,6 +418,17 @@ namespace RogueLearn.User.Api.Controllers
                     ? totalPlayersEl.GetInt32()
                     : 0;
 
+                // Extract user_id if provided (from frontend)
+                Guid? userId = null;
+                if (root.TryGetProperty("userId", out var userIdEl) && userIdEl.ValueKind == JsonValueKind.String)
+                {
+                    var userIdStr = userIdEl.GetString();
+                    if (!string.IsNullOrEmpty(userIdStr) && Guid.TryParse(userIdStr, out var parsedUserId))
+                    {
+                        userId = parsedUserId;
+                    }
+                }
+
                 // Create match result entity
                 var matchResult = new RogueLearn.User.Domain.Entities.MatchResult
                 {
@@ -418,6 +438,7 @@ namespace RogueLearn.User.Api.Controllers
                     Result = result ?? "unknown",
                     Scene = scene ?? "unknown",
                     TotalPlayers = totalPlayers,
+                    UserId = userId,
                     MatchDataJson = jsonString // Store full JSON as string
                 };
 
@@ -811,13 +832,23 @@ namespace RogueLearn.User.Api.Controllers
         }
 
         // MVP: Get Unity match results from database
-        // GET /api/quests/game/sessions/unity-matches?limit=10
+        // GET /api/quests/game/sessions/unity-matches?limit=10&userId=xxx
         [HttpGet("unity-matches")]
-        public async Task<IActionResult> GetUnityMatches([FromQuery] int limit = 10)
+        public async Task<IActionResult> GetUnityMatches([FromQuery] int limit = 10, [FromQuery] string? userId = null)
         {
             try
             {
-                var matchResults = await _matchResultRepository.GetRecentMatchesAsync(limit);
+                // Parse userId if provided
+                Guid? userIdGuid = null;
+                if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out var parsedUserId))
+                {
+                    userIdGuid = parsedUserId;
+                }
+
+                // Get matches (filtered by user if userId provided)
+                var matchResults = userIdGuid.HasValue
+                    ? await _matchResultRepository.GetMatchesByUserAsync(userIdGuid.Value, limit)
+                    : await _matchResultRepository.GetRecentMatchesAsync(limit);
 
                 // Return JSON strings directly (no need to serialize since they're already JSON)
                 var matchesJson = matchResults

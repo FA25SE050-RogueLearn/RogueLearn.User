@@ -9,6 +9,9 @@ public class GameSession : BaseEntity
     [Column("session_id")]
     public Guid SessionId { get; set; }
 
+    [Column("user_id")]
+    public Guid? UserId { get; set; }
+
     [Column("relay_join_code")]
     public string? RelayJoinCode { get; set; }
 

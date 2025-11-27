@@ -24,6 +24,9 @@ public class MatchResult : BaseEntity
     [Column("total_players")]
     public int TotalPlayers { get; set; }
 
+    [Column("user_id")]
+    public Guid? UserId { get; set; }
+
     // Store full match data as raw JSON string (avoids JsonElement serialization issues)
     [Column("match_data")]
     public string? MatchDataJson { get; set; }
