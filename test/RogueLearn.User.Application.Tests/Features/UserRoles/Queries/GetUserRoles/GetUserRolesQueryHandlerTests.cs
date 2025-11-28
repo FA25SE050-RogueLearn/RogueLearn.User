@@ -43,7 +43,7 @@ public class GetUserRolesQueryHandlerTests
         var roleId1 = Guid.NewGuid();
         var roleId2 = Guid.NewGuid();
 
-        var query = new GetUserRolesQuery { UserId = userId };
+        var query = new GetUserRolesQuery { AuthUserId = authUserId };
 
         var user = new UserProfile { Id = userId, AuthUserId = authUserId };
 
@@ -86,7 +86,7 @@ public class GetUserRolesQueryHandlerTests
             }
         };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(authUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _mockUserRoleRepository.Setup(x => x.GetRolesForUserAsync(authUserId, It.IsAny<CancellationToken>()))
@@ -129,9 +129,9 @@ public class GetUserRolesQueryHandlerTests
     public async Task Handle_UserNotFound_ShouldThrowNotFoundException()
     {
         // Arrange
-        var query = new GetUserRolesQuery { UserId = Guid.NewGuid() };
+        var query = new GetUserRolesQuery { AuthUserId = Guid.NewGuid() };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(query.UserId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(query.AuthUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserProfile?)null);
 
         // Act & Assert
@@ -139,7 +139,7 @@ public class GetUserRolesQueryHandlerTests
             () => _handler.Handle(query, CancellationToken.None));
 
         exception.Message.Should().Contain("User");
-        exception.Message.Should().Contain(query.UserId.ToString());
+        exception.Message.Should().Contain(query.AuthUserId.ToString());
     }
 
     [Fact]
@@ -149,11 +149,11 @@ public class GetUserRolesQueryHandlerTests
         var userId = Guid.NewGuid();
         var authUserId = Guid.NewGuid();
 
-        var query = new GetUserRolesQuery { UserId = userId };
+        var query = new GetUserRolesQuery { AuthUserId = authUserId };
 
         var user = new UserProfile { Id = userId, AuthUserId = authUserId };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(authUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _mockUserRoleRepository.Setup(x => x.GetRolesForUserAsync(authUserId, It.IsAny<CancellationToken>()))

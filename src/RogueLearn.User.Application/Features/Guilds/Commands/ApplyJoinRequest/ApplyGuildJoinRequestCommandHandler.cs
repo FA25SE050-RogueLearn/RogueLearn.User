@@ -10,6 +10,8 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
     private readonly IGuildRepository _guildRepository;
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildJoinRequestRepository _joinRequestRepository;
+    private readonly IRoleRepository? _roleRepository;
+    private readonly IUserRoleRepository? _userRoleRepository;
 
     public ApplyGuildJoinRequestCommandHandler(
         IGuildRepository guildRepository,
@@ -19,6 +21,20 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
         _guildRepository = guildRepository;
         _memberRepository = memberRepository;
         _joinRequestRepository = joinRequestRepository;
+    }
+
+    public ApplyGuildJoinRequestCommandHandler(
+        IGuildRepository guildRepository,
+        IGuildMemberRepository memberRepository,
+        IGuildJoinRequestRepository joinRequestRepository,
+        IRoleRepository roleRepository,
+        IUserRoleRepository userRoleRepository)
+    {
+        _guildRepository = guildRepository;
+        _memberRepository = memberRepository;
+        _joinRequestRepository = joinRequestRepository;
+        _roleRepository = roleRepository;
+        _userRoleRepository = userRoleRepository;
     }
 
     public async Task<Unit> Handle(ApplyGuildJoinRequestCommand request, CancellationToken cancellationToken)
@@ -47,11 +63,27 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
             throw new Exceptions.BadRequestException("Guild creators cannot join other guilds.");
         }
 
-        // Capacity check
         var activeCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
-        if (activeCount >= guild.MaxMembers)
+        var cap = guild.MaxMembers;
+        if (_roleRepository != null && _userRoleRepository != null)
         {
-            throw new Exceptions.BadRequestException("Guild is at maximum capacity.");
+            var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+            var master = members.FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+            var verifiedLecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
+            var isMasterVerifiedLecturer = false;
+            if (master != null && verifiedLecturerRole != null)
+            {
+                var masterRoles = await _userRoleRepository.GetRolesForUserAsync(master.AuthUserId, cancellationToken);
+                isMasterVerifiedLecturer = masterRoles.Any(r => r.RoleId == verifiedLecturerRole.Id);
+            }
+            if (!isMasterVerifiedLecturer)
+            {
+                cap = Math.Min(guild.MaxMembers, 50);
+            }
+        }
+        if (activeCount >= cap)
+        {
+            throw new Exceptions.UnprocessableEntityException("Join requests are disabled until a Verified Lecturer is GuildMaster.");
         }
 
         // Check for existing pending request
@@ -80,6 +112,26 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
                 guild.CurrentMemberCount = newActiveCount;
                 guild.UpdatedAt = DateTimeOffset.UtcNow;
                 await _guildRepository.UpdateAsync(guild, cancellationToken);
+
+                var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+                var activeOrdered = members
+                    .Where(m => m.Status == MemberStatus.Active)
+                    .OrderByDescending(m => m.ContributionPoints)
+                    .ThenBy(m => m.JoinedAt)
+                    .ToList();
+
+                for (int i = 0; i < activeOrdered.Count; i++)
+                {
+                    activeOrdered[i].RankWithinGuild = i + 1;
+                }
+
+                var nonActive = members.Where(m => m.Status != MemberStatus.Active).ToList();
+                foreach (var m in nonActive)
+                {
+                    m.RankWithinGuild = null;
+                }
+
+                await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
             }
 
             if (existingForGuild is null)

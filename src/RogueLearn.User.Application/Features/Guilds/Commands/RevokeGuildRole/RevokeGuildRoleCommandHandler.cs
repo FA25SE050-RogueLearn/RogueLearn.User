@@ -39,7 +39,7 @@ public class RevokeGuildRoleCommandHandler : IRequestHandler<RevokeGuildRoleComm
 
         if (request.RoleToRevoke == GuildRole.GuildMaster)
         {
-            throw new BadRequestException("Cannot revoke GuildMaster via role management. Use transfer leadership endpoint.");
+            throw new UnprocessableEntityException("Cannot revoke GuildMaster via role management. Use transfer leadership endpoint.");
         }
 
         // Idempotency: if member doesn't have the role, no-op
@@ -51,7 +51,7 @@ public class RevokeGuildRoleCommandHandler : IRequestHandler<RevokeGuildRoleComm
         // Ensure baseline role remains; cannot revoke baseline Member or Recruit (would leave no role)
         if (request.RoleToRevoke == GuildRole.Member || request.RoleToRevoke == GuildRole.Recruit)
         {
-            throw new BadRequestException("Cannot revoke baseline role. To remove a member, use remove member endpoint.");
+            throw new UnprocessableEntityException("Cannot revoke baseline role. To remove a member, use remove member endpoint.");
         }
 
         var oldRole = member.Role;

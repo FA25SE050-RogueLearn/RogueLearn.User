@@ -6,9 +6,9 @@ public class RemoveRoleFromUserCommandValidator : AbstractValidator<RemoveRoleFr
 {
     public RemoveRoleFromUserCommandValidator()
     {
-        RuleFor(x => x.UserId)
+        RuleFor(x => x.AuthUserId)
             .NotEmpty()
-            .WithMessage("User ID is required.");
+            .WithMessage("Auth user ID is required.");
 
         RuleFor(x => x.RoleId)
             .NotEmpty()

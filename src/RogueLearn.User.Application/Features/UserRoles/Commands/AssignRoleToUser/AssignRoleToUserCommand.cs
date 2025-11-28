@@ -4,6 +4,6 @@ namespace RogueLearn.User.Application.Features.UserRoles.Commands.AssignRoleToUs
 
 public class AssignRoleToUserCommand : IRequest
 {
-    public Guid UserId { get; set; }
+    public Guid AuthUserId { get; set; }
     public Guid RoleId { get; set; }
 }

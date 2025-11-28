@@ -11,15 +11,21 @@ public class CreateLecturerVerificationRequestCommandHandler : IRequestHandler<C
 {
     private readonly ILecturerVerificationRequestRepository _requestRepository;
     private readonly IUserProfileRepository _userProfileRepository;
+    private readonly IRoleRepository _roleRepository;
+    private readonly IUserRoleRepository _userRoleRepository;
     private readonly ILogger<CreateLecturerVerificationRequestCommandHandler> _logger;
 
     public CreateLecturerVerificationRequestCommandHandler(
         ILecturerVerificationRequestRepository requestRepository,
         IUserProfileRepository userProfileRepository,
+        IRoleRepository roleRepository,
+        IUserRoleRepository userRoleRepository,
         ILogger<CreateLecturerVerificationRequestCommandHandler> logger)
     {
         _requestRepository = requestRepository;
         _userProfileRepository = userProfileRepository;
+        _roleRepository = roleRepository;
+        _userRoleRepository = userRoleRepository;
         _logger = logger;
     }
 
@@ -39,10 +45,20 @@ public class CreateLecturerVerificationRequestCommandHandler : IRequestHandler<C
             throw new ConflictException("You already have a pending verification request.");
         }
 
-        var hasApproved = await _requestRepository.AnyApprovedAsync(request.AuthUserId, cancellationToken);
-        if (hasApproved)
+        var approvedRequests = await _requestRepository.FindAsync(r => r.AuthUserId == request.AuthUserId && r.Status == VerificationStatus.Approved, cancellationToken);
+        if (approvedRequests.Any(r => r.ReviewedAt == null))
         {
             throw new ConflictException("You already have an approved verification request.");
+        }
+
+        var lecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
+        if (lecturerRole != null)
+        {
+            var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.AuthUserId, cancellationToken);
+            if (userRoles.Any(ur => ur.RoleId == lecturerRole.Id))
+            {
+                throw new ConflictException("You already have an approved verification request.");
+            }
         }
 
         var entity = new LecturerVerificationRequest

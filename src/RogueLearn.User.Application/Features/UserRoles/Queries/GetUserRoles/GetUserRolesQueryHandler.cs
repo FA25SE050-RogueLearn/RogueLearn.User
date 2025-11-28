@@ -30,15 +30,13 @@ public class GetUserRolesQueryHandler : IRequestHandler<GetUserRolesQuery, GetUs
 
   public async Task<GetUserRolesResponse> Handle(GetUserRolesQuery request, CancellationToken cancellationToken)
   {
-    // Verify user exists
-    var user = await _userProfileRepository.GetByIdAsync(request.UserId, cancellationToken);
+    var user = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
     if (user == null)
     {
-      throw new NotFoundException("User", request.UserId);
+      throw new NotFoundException("User", request.AuthUserId);
     }
 
-    // Get user roles
-    var userRoles = await _userRoleRepository.GetRolesForUserAsync(user.AuthUserId, cancellationToken);
+    var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.AuthUserId, cancellationToken);
 
     var userRoleDtos = new List<UserRoleDto>();
 
@@ -55,11 +53,11 @@ public class GetUserRolesQueryHandler : IRequestHandler<GetUserRolesQuery, GetUs
       }
     }
 
-    _logger.LogInformation("Retrieved {RoleCount} roles for user {UserId}", userRoleDtos.Count, request.UserId);
+    _logger.LogInformation("Retrieved {RoleCount} roles for auth user {AuthUserId}", userRoleDtos.Count, request.AuthUserId);
 
     return new GetUserRolesResponse
     {
-      UserId = request.UserId,
+      UserId = user.Id,
       Roles = userRoleDtos
     };
   }
