@@ -91,15 +91,15 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("3. **Activity Count:** Generate **6 to 9** activities total.");
         if (weekContext.AvailableResources.Any())
         {
-            prompt.AppendLine("   - 2-4 `Reading` activities");
-            prompt.AppendLine("   - 1-2 `KnowledgeCheck`");
+            prompt.AppendLine("   - 0-3 `Reading` activities (use only approved URLs; do not invent or duplicate)");
+            prompt.AppendLine("   - 2-4 `KnowledgeCheck` activities (3-5 questions each)");
             prompt.AppendLine("   - 1 `Quiz` (10-15 questions)");
         }
         else
         {
-            prompt.AppendLine("   - 0 `Reading` activities");
-            prompt.AppendLine("   - 3-4 `KnowledgeCheck` activities (3-5 questions each)");
-            prompt.AppendLine("   - 2 `Quiz` activities (10-15 questions each)");
+            prompt.AppendLine("   - 0 `Reading` activities (no URLs provided)");
+            prompt.AppendLine("   - 3-5 `KnowledgeCheck` activities (3-5 questions each)");
+            prompt.AppendLine("   - 1-2 `Quiz` activities (10-15 questions each)");
         }
         prompt.AppendLine("4. **No Coding:** Do not generate coding activities.");
         prompt.AppendLine("5. **JSON Only:** Output valid JSON matching the schema below. No markdown.");
