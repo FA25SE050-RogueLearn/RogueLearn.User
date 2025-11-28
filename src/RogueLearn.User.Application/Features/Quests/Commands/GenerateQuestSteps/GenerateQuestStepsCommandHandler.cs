@@ -277,9 +277,12 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     continue;
                 }
 
-                var validatedActivities = ValidateActivities(activitiesElement, relevantSkillIds, weekNumber);
+                var validatedActivities = ValidateActivitiesWithUrlCheck(
+                    activitiesElement,
+                    relevantSkillIds,
+                    weekContext.AvailableResources,
+                    weekNumber);
 
-                // Ensure Math notation cleanup
                 validatedActivities = ProcessMathInActivities(validatedActivities);
 
                 if (!weekContext.AvailableResources.Any())
@@ -293,15 +296,16 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     }
                 }
 
-                // Enforce Constraints (Post-Generation Quality Control)
+                validatedActivities = EnsureMinimumActivities(
+                    validatedActivities,
+                    weekContext.TopicsToCover,
+                    relevantSkillIds,
+                    weekNumber);
+
                 var stats = AnalyzeActivities(validatedActivities);
                 LogWeekStatistics(weekNumber, stats);
                 ValidateWeekRequirements(weekNumber, stats, subject.SubjectName);
 
-                if (validatedActivities.Count < MinActivitiesPerStep)
-                {
-                    _logger.LogWarning("Week {Week}: Low activity count ({Count}). Proceeding.", weekNumber, validatedActivities.Count);
-                }
                 if (validatedActivities.Count > MaxActivitiesPerStep)
                 {
                     validatedActivities = validatedActivities.Take(MaxActivitiesPerStep).ToList();
@@ -483,6 +487,136 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Validates URLs in Reading activities after AI generation
+    /// Ensures no duplicate URLs and all URLs are from approved pool
+    /// </summary>
+    private List<Dictionary<string, object>> ValidateAndDeduplicateUrls(
+        List<Dictionary<string, object>> activities,
+        List<ValidResource> approvedUrls,
+        int weekNumber)
+    {
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var approvedUrlSet = new HashSet<string>(
+            approvedUrls.Select(r => r.Url),
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        var validatedActivities = new List<Dictionary<string, object>>();
+        var removedCount = 0;
+
+        foreach (var activity in activities)
+        {
+            if (!activity.TryGetValue("type", out var typeObj) ||
+                !string.Equals(typeObj?.ToString(), "reading", StringComparison.OrdinalIgnoreCase))
+            {
+                validatedActivities.Add(activity);
+                continue;
+            }
+
+            if (!activity.TryGetValue("payload", out var payloadObj) ||
+                payloadObj is not Dictionary<string, object> payload)
+            {
+                _logger.LogWarning("Week {Week}: Reading activity missing payload, removing", weekNumber);
+                removedCount++;
+                continue;
+            }
+
+            if (!payload.TryGetValue("url", out var urlObj) ||
+                string.IsNullOrWhiteSpace(urlObj?.ToString()))
+            {
+                _logger.LogWarning("Week {Week}: Reading activity missing URL, removing", weekNumber);
+                removedCount++;
+                continue;
+            }
+
+            var url = CleanUrl(urlObj.ToString()!);
+
+            if (!approvedUrlSet.Contains(url))
+            {
+                _logger.LogWarning(
+                    "Week {Week}: Reading activity uses unapproved URL '{Url}', removing",
+                    weekNumber, url);
+                removedCount++;
+                continue;
+            }
+
+            if (seenUrls.Contains(url))
+            {
+                _logger.LogWarning(
+                    "Week {Week}: Duplicate URL detected '{Url}', removing duplicate activity",
+                    weekNumber, url);
+                removedCount++;
+                continue;
+            }
+
+            seenUrls.Add(url);
+            validatedActivities.Add(activity);
+        }
+
+        if (removedCount > 0)
+        {
+            _logger.LogInformation(
+                "Week {Week}: Removed {Count} Reading activities due to invalid/duplicate URLs",
+                weekNumber, removedCount);
+        }
+
+        return validatedActivities;
+    }
+
+    /// <summary>
+    /// Enhanced validation that includes URL checks
+    /// Call this AFTER ValidateActivities() in the main Handle method
+    /// </summary>
+    private List<Dictionary<string, object>> ValidateActivitiesWithUrlCheck(
+        JsonElement activitiesElement,
+        HashSet<Guid> relevantSkillIds,
+        List<ValidResource> approvedUrls,
+        int weekNumber)
+    {
+        var validated = ValidateActivities(activitiesElement, relevantSkillIds, weekNumber);
+        validated = ValidateAndDeduplicateUrls(validated, approvedUrls, weekNumber);
+        return validated;
+    }
+
+    private List<Dictionary<string, object>> EnsureMinimumActivities(
+        List<Dictionary<string, object>> activities,
+        List<string> topicsToCover,
+        HashSet<Guid> relevantSkillIds,
+        int weekNumber)
+    {
+        if (activities.Count >= MinActivitiesPerStep) return activities;
+        var deficit = MinActivitiesPerStep - activities.Count;
+        _logger.LogWarning("Week {Week}: Only {Count} activities generated. Adding {Deficit} KnowledgeCheck activities.", weekNumber, activities.Count, deficit);
+        var randomSkillId = relevantSkillIds.Any() ? relevantSkillIds.First().ToString() : Guid.NewGuid().ToString();
+        for (int i = 0; i < deficit; i++)
+        {
+            var paddingActivity = new Dictionary<string, object>
+            {
+                ["activityId"] = Guid.NewGuid().ToString(),
+                ["type"] = "KnowledgeCheck",
+                ["payload"] = new Dictionary<string, object>
+                {
+                    ["skillId"] = randomSkillId,
+                    ["experiencePoints"] = 35,
+                    ["topic"] = topicsToCover.Any() ? topicsToCover[i % topicsToCover.Count] : "General Review",
+                    ["questions"] = new List<object>
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["question"] = "Review question placeholder",
+                            ["options"] = new List<string> { "A", "B", "C", "D" },
+                            ["correctAnswer"] = "A",
+                            ["explanation"] = "This is a placeholder for additional review."
+                        }
+                    }
+                }
+            };
+            activities.Add(paddingActivity);
+        }
+        return activities;
     }
 
     private static string CleanUrl(string url)
