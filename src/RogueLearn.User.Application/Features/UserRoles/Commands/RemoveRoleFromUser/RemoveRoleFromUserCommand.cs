@@ -4,6 +4,6 @@ namespace RogueLearn.User.Application.Features.UserRoles.Commands.RemoveRoleFrom
 
 public class RemoveRoleFromUserCommand : IRequest
 {
-    public Guid UserId { get; set; }
+    public Guid AuthUserId { get; set; }
     public Guid RoleId { get; set; }
 }

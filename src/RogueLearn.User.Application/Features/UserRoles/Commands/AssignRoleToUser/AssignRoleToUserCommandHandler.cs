@@ -27,11 +27,10 @@ public class AssignRoleToUserCommandHandler : IRequestHandler<AssignRoleToUserCo
 
     public async Task Handle(AssignRoleToUserCommand request, CancellationToken cancellationToken)
     {
-        // Verify user exists
-        var user = await _userProfileRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var user = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
         if (user == null)
         {
-            throw new NotFoundException("User", request.UserId);
+            throw new NotFoundException("User", request.AuthUserId);
         }
 
         // Verify role exists
@@ -42,7 +41,7 @@ public class AssignRoleToUserCommandHandler : IRequestHandler<AssignRoleToUserCo
         }
 
         // Check if user already has this role
-        var existingUserRoles = await _userRoleRepository.GetRolesForUserAsync(user.AuthUserId, cancellationToken);
+        var existingUserRoles = await _userRoleRepository.GetRolesForUserAsync(request.AuthUserId, cancellationToken);
         if (existingUserRoles.Any(ur => ur.RoleId == request.RoleId))
         {
             throw new BadRequestException($"User already has the role '{role.Name}'.");
@@ -52,14 +51,14 @@ public class AssignRoleToUserCommandHandler : IRequestHandler<AssignRoleToUserCo
         var userRole = new UserRole
         {
             Id = Guid.NewGuid(),
-            AuthUserId = user.AuthUserId,
+            AuthUserId = request.AuthUserId,
             RoleId = request.RoleId,
             AssignedAt = DateTimeOffset.UtcNow
         };
 
         await _userRoleRepository.AddAsync(userRole, cancellationToken);
 
-        _logger.LogInformation("Role '{RoleName}' assigned to user '{Username}' (AuthUserId: {AuthUserId})",
-            role.Name, user.Username, user.AuthUserId);
+        _logger.LogInformation("Role '{RoleName}' assigned to auth user {AuthUserId} (username '{Username}')",
+            role.Name, request.AuthUserId, user.Username);
     }
 }

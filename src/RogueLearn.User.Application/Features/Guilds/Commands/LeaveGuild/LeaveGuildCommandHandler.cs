@@ -39,6 +39,26 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
         guild.CurrentMemberCount = newActiveCount;
         guild.UpdatedAt = DateTimeOffset.UtcNow;
         await _guildRepository.UpdateAsync(guild, cancellationToken);
+
+        var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+        var activeOrdered = members
+            .Where(m => m.Status == MemberStatus.Active)
+            .OrderByDescending(m => m.ContributionPoints)
+            .ThenBy(m => m.JoinedAt)
+            .ToList();
+
+        for (int i = 0; i < activeOrdered.Count; i++)
+        {
+            activeOrdered[i].RankWithinGuild = i + 1;
+        }
+
+        var nonActive = members.Where(m => m.Status != MemberStatus.Active).ToList();
+        foreach (var m in nonActive)
+        {
+            m.RankWithinGuild = null;
+        }
+
+        await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
         return Unit.Value;
     }
 }

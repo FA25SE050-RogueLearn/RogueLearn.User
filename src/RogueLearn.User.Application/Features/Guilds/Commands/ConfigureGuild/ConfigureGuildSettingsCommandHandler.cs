@@ -32,6 +32,11 @@ public class ConfigureGuildSettingsCommandHandler : IRequestHandler<ConfigureGui
         var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.ActorAuthUserId, cancellationToken);
         var isVerifiedLecturer = verifiedLecturerRole != null && userRoles.Any(ur => ur.RoleId == verifiedLecturerRole.Id);
         var maxAllowed = isVerifiedLecturer ? 100 : 50;
+
+        if (!isVerifiedLecturer && guild.CurrentMemberCount >= 50)
+        {
+            throw new Application.Exceptions.UnprocessableEntityException("Guild settings are locked until a Verified Lecturer is GuildMaster.");
+        }
         if (request.MaxMembers > maxAllowed)
         {
             throw new Application.Exceptions.BadRequestException($"Max guild members cannot exceed {maxAllowed} for your role.");

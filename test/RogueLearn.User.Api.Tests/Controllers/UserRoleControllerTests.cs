@@ -69,7 +69,7 @@ public class UserRoleControllerTests : IClassFixture<WebApplicationFactory<Progr
         // Arrange
         var request = new AssignRoleToUserCommand
         {
-            UserId = Guid.NewGuid(),
+            AuthUserId = Guid.NewGuid(),
             RoleId = Guid.NewGuid()
         };
 
@@ -108,7 +108,7 @@ public class UserRoleControllerTests : IClassFixture<WebApplicationFactory<Progr
 
         var request = new AssignRoleToUserCommand
         {
-            UserId = Guid.NewGuid(),
+            AuthUserId = Guid.NewGuid(),
             RoleId = Guid.NewGuid()
         };
 
@@ -147,7 +147,7 @@ public class UserRoleControllerTests : IClassFixture<WebApplicationFactory<Progr
 
         var request = new RemoveRoleFromUserCommand
         {
-            UserId = Guid.NewGuid(),
+            AuthUserId = Guid.NewGuid(),
             RoleId = Guid.NewGuid()
         };
 
@@ -216,7 +216,7 @@ public class UserRoleControllerTests : IClassFixture<WebApplicationFactory<Progr
 
         var request = new AssignRoleToUserCommand
         {
-            UserId = Guid.NewGuid(),
+            AuthUserId = Guid.NewGuid(),
             RoleId = Guid.NewGuid()
         };
 

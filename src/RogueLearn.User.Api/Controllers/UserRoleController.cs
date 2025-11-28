@@ -8,7 +8,7 @@ using RogueLearn.User.Application.Features.UserRoles.Queries.GetUserRoles;
 namespace RogueLearn.User.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/admin/users")]
 [AdminOnly]
 public class UserRoleController : ControllerBase
 {
@@ -50,16 +50,16 @@ public class UserRoleController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all roles for a specific user (Admin only)
+    /// Gets all roles for a specific user by auth user id (Admin only)
     /// </summary>
-    /// <param name="userId">The user ID</param>
+    /// <param name="authUserId">The auth user ID</param>
     /// <returns>User roles response</returns>
-    [HttpGet("user/{userId:guid}/roles")]
+    [HttpGet("{authUserId:guid}/roles")]
     [ProducesResponseType(typeof(GetUserRolesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetUserRoles(Guid userId)
+    public async Task<IActionResult> GetUserRoles(Guid authUserId)
     {
-        var query = new GetUserRolesQuery { UserId = userId };
+        var query = new GetUserRolesQuery { AuthUserId = authUserId };
         var result = await _mediator.Send(query);
         return Ok(result);
     }

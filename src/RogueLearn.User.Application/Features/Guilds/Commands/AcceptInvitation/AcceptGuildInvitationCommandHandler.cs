@@ -77,11 +77,30 @@ public class AcceptGuildInvitationCommandHandler : IRequestHandler<AcceptGuildIn
             };
             await _memberRepository.AddAsync(member, cancellationToken);
 
-            // Update guild current member count after successful addition
             var newActiveCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
             guild.CurrentMemberCount = newActiveCount;
             guild.UpdatedAt = DateTimeOffset.UtcNow;
             await _guildRepository.UpdateAsync(guild, cancellationToken);
+
+            var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+            var activeOrdered = members
+                .Where(m => m.Status == MemberStatus.Active)
+                .OrderByDescending(m => m.ContributionPoints)
+                .ThenBy(m => m.JoinedAt)
+                .ToList();
+
+            for (int i = 0; i < activeOrdered.Count; i++)
+            {
+                activeOrdered[i].RankWithinGuild = i + 1;
+            }
+
+            var nonActive = members.Where(m => m.Status != MemberStatus.Active).ToList();
+            foreach (var m in nonActive)
+            {
+                m.RankWithinGuild = null;
+            }
+
+            await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
         }
 
         invitation.Status = InvitationStatus.Accepted;
