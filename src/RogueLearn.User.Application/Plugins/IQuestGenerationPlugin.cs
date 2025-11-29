@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User.Application/Plugins/IQuestGenerationPlugin.cs
+// src/RogueLearn.User.Application/Plugins/IQuestGenerationPlugin.cs
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 
@@ -28,5 +28,6 @@ public interface IQuestGenerationPlugin
         List<Skill> relevantSkills,
         string subjectName,
         string courseDescription,
+        AcademicContext academicContext,
         CancellationToken cancellationToken = default);
 }
