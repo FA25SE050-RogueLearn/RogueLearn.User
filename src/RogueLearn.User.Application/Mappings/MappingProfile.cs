@@ -154,7 +154,9 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
 
         // Meetings mappings
-        CreateMap<Meeting, MeetingDto>().ReverseMap();
+        CreateMap<Meeting, MeetingDto>()
+            .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status ?? RogueLearn.User.Domain.Enums.MeetingStatus.Scheduled))
+            .ReverseMap();
         CreateMap<MeetingParticipant, MeetingParticipantDto>().ReverseMap();
     }
     private static object? ParseJsonContent(object? content)

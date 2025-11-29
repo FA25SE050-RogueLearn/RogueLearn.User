@@ -47,7 +47,7 @@ public class Meeting : BaseModel
 
     [Column("meeting_status")]
     [JsonConverter(typeof(StringEnumConverter))]
-    public MeetingStatus Status { get; set; } = MeetingStatus.Scheduled;
+    public MeetingStatus? Status { get; set; } = MeetingStatus.Scheduled;
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
