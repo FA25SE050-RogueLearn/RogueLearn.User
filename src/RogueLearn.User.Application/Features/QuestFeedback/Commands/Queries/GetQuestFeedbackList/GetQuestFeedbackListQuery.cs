@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User.Application/Features/QuestFeedback/Queries/GetQuestFeedbackList/GetQuestFeedbackListQuery.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestFeedback/Queries/GetQuestFeedbackList/GetQuestFeedbackListQuery.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.QuestFeedback.Queries.GetQuestFeedbackList;
@@ -6,7 +6,13 @@ namespace RogueLearn.User.Application.Features.QuestFeedback.Queries.GetQuestFee
 public class GetQuestFeedbackListQuery : IRequest<List<QuestFeedbackDto>>
 {
     public bool UnresolvedOnly { get; set; } = true;
+
+    // Optional filters
     public Guid? QuestId { get; set; }
+
+    // This filter allows admins to pull all feedback for a master subject,
+    // aggregating reports from different users' quests.
+    public Guid? SubjectId { get; set; }
 }
 
 public class QuestFeedbackDto
@@ -14,6 +20,7 @@ public class QuestFeedbackDto
     public Guid Id { get; set; }
     public Guid QuestId { get; set; }
     public Guid StepId { get; set; }
+    public Guid SubjectId { get; set; } // Useful for UI grouping
     public Guid AuthUserId { get; set; }
     public int Rating { get; set; }
     public string Category { get; set; } = string.Empty;
