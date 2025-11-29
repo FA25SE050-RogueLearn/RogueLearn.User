@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/SearchResultFilter.cs
 using Microsoft.Extensions.Logging;
 
 namespace RogueLearn.User.Application.Services;
@@ -96,118 +97,166 @@ public static class SearchResultFilter
     public static bool IsWrongFramework(string url, List<string> technologyKeywords, SubjectCategory category, string topic, ILogger logger)
     {
         var urlLower = url.ToLowerInvariant();
+        var uri = new Uri(url);
+        var path = uri.AbsolutePath.ToLowerInvariant();
 
-        if (category == SubjectCategory.Programming)
+        if (category == SubjectCategory.Programming || category == SubjectCategory.ComputerScience)
         {
+            // 1. C & C++ Strict Filtering
+            if (technologyKeywords.Contains("c") || technologyKeywords.Contains("c++"))
+            {
+                // Block Python
+                if (!technologyKeywords.Contains("python") && (path.Contains("/python/") || path.Contains("/py/") || urlLower.Contains("pypi.org") || urlLower.Contains("docs.python.org")))
+                {
+                    logger.LogDebug("❌ Wrong language: Python path detected in C/C++ context");
+                    return true;
+                }
+
+                // Block Java
+                if (!technologyKeywords.Contains("java") && (path.Contains("/java/") || urlLower.Contains("baeldung.com") || urlLower.Contains("docs.oracle.com")))
+                {
+                    logger.LogDebug("❌ Wrong language: Java path detected in C/C++ context");
+                    return true;
+                }
+
+                // Block .NET/C#
+                if (!technologyKeywords.Contains("c#") && !technologyKeywords.Contains(".net") &&
+                   (path.Contains("/csharp/") || path.Contains("/dotnet/") || path.Contains("/aspnet/") || path.Contains("learn.microsoft.com")))
+                {
+                    logger.LogDebug("❌ Wrong language: C#/.NET path detected in C/C++ context");
+                    return true;
+                }
+
+                // Block JS/Web
+                if (!technologyKeywords.Contains("javascript") &&
+                   (path.Contains("/javascript/") || path.Contains("/js/") || path.Contains("/react/") || path.Contains("/angular/") || path.Contains("/vue/")))
+                {
+                    logger.LogDebug("❌ Wrong language: JS/Web path detected in C/C++ context");
+                    return true;
+                }
+
+                // W3Schools/Programiz section check
+                if (urlLower.Contains("w3schools.com") && !path.Contains("/c/") && !path.Contains("/cpp/"))
+                {
+                    logger.LogDebug("❌ Wrong W3Schools section for C/C++");
+                    return true;
+                }
+                if (urlLower.Contains("programiz.com") && !path.Contains("/c-programming") && !path.Contains("/cpp-programming"))
+                {
+                    logger.LogDebug("❌ Wrong Programiz section for C/C++");
+                    return true;
+                }
+            }
+
+            // 2. Java Strict Filtering
             if (technologyKeywords.Contains("java") && !technologyKeywords.Contains("javascript"))
             {
-                var uri = new Uri(url);
-                var path = uri.AbsolutePath.ToLowerInvariant();
-
-                var dotNetPaths = new[] {
-                    "/asp/", "/aspnet/", "/dotnet/", "/csharp/", "/cs/",
-                    "/asp.net/", "/c-sharp/", "/vb.net/"
-                };
-
+                var dotNetPaths = new[] { "/asp/", "/aspnet/", "/dotnet/", "/csharp/", "/cs/", "/asp.net/", "/c-sharp/", "/vb.net/" };
                 if (dotNetPaths.Any(pattern => path.Contains(pattern)))
                 {
-                    logger.LogDebug("❌ Wrong language path: .NET/C# (expected Java) - Path: {Path}", path);
+                    logger.LogDebug("❌ Wrong language path: .NET/C# (expected Java)");
                     return true;
                 }
 
-                if (urlLower.Contains("w3schools.com") &&
-                    (path.Contains("/asp/") || path.Contains("/cs/")))
+                var jsPaths = new[] { "/javascript/", "/js/", "/react/", "/angular/", "/vue/" };
+                if (jsPaths.Any(pattern => path.Contains(pattern)))
                 {
-                    logger.LogDebug("❌ W3Schools .NET page (expected Java)");
+                    logger.LogDebug("❌ Wrong language path: JavaScript/Web (expected Java)");
                     return true;
                 }
 
-                var phpPaths = new[] { "/php/", "/php5/", "/php7/" };
-                if (phpPaths.Any(pattern => path.Contains(pattern)))
+                if (urlLower.Contains("w3schools.com") && !path.Contains("/java/"))
                 {
-                    logger.LogDebug("❌ Wrong language: PHP (expected Java)");
-                    return true;
-                }
-
-                var topicLower = topic.ToLowerInvariant();
-                var isPythonPath = path.Contains("/python/") || path.Contains("/py/");
-                var isComparisonTopic = topicLower.Contains("comparison") || topicLower.Contains("vs") ||
-                                       topicLower.Contains("difference");
-
-                if (isPythonPath && !isComparisonTopic)
-                {
-                    logger.LogDebug("❌ Wrong language: Python tutorial (expected Java)");
+                    logger.LogDebug("❌ Wrong W3Schools section (expected Java)");
                     return true;
                 }
             }
 
-            if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#") || technologyKeywords.Contains(".net"))
+            // 3. C# / .NET Strict Filtering
+            if (technologyKeywords.Contains("c#") || technologyKeywords.Contains(".net") || technologyKeywords.Contains("asp.net"))
             {
-                var uri = new Uri(url);
-                var path = uri.AbsolutePath.ToLowerInvariant();
-
-                var javaPaths = new[] {
-                    "/java/", "/jsp/", "/servlet/", "/spring/",
-                    "/java-ee/", "/jakarta/"
-                };
-
+                var javaPaths = new[] { "/java/", "/jsp/", "/servlet/", "/spring/", "/jakarta/" };
                 if (javaPaths.Any(pattern => path.Contains(pattern)))
                 {
-                    logger.LogDebug("❌ Wrong language path: Java (expected ASP.NET/C#) - Path: {Path}", path);
+                    logger.LogDebug("❌ Wrong language path: Java (expected C#/.NET)");
+                    return true;
+                }
+
+                if (urlLower.Contains("docs.oracle.com"))
+                {
+                    logger.LogDebug("❌ Wrong doc site: Oracle (expected Microsoft)");
                     return true;
                 }
             }
 
-            if (technologyKeywords.Contains("android") || technologyKeywords.Contains("kotlin") || technologyKeywords.Contains("mobile"))
+            // 4. Python Strict Filtering
+            if (technologyKeywords.Contains("python"))
             {
-                if (urlLower.Contains("flutter") || urlLower.Contains("/flutter/"))
+                var otherLangPaths = new[] { "/java/", "/csharp/", "/cpp/", "/golang/", "/ruby/" };
+                if (otherLangPaths.Any(pattern => path.Contains(pattern)))
                 {
-                    logger.LogDebug("❌ Wrong framework: Flutter (expected Android)");
-                    return true;
-                }
-
-                if (urlLower.Contains("react-native") || urlLower.Contains("reactnative"))
-                {
-                    logger.LogDebug("❌ Wrong framework: React Native (expected Android)");
-                    return true;
-                }
-
-                if (urlLower.Contains("xamarin"))
-                {
-                    logger.LogDebug("❌ Wrong framework: Xamarin (expected Android)");
-                    return true;
-                }
-
-                if (urlLower.Contains("localstorage") || urlLower.Contains("local-storage") || urlLower.Contains("sessionstorage"))
-                {
-                    logger.LogDebug("❌ Web content (expected Android native)");
-                    return true;
-                }
-
-                if (urlLower.Contains("chrome-extension") || urlLower.Contains("chrome/extension"))
-                {
-                    logger.LogDebug("❌ Chrome extension content (expected Android)");
+                    logger.LogDebug("❌ Wrong language path (expected Python)");
                     return true;
                 }
             }
 
+            // 5. Mobile (Android/Kotlin/Flutter) Filtering
+            if (technologyKeywords.Contains("android") || technologyKeywords.Contains("kotlin"))
+            {
+                if (!technologyKeywords.Contains("flutter") && (urlLower.Contains("flutter") || path.Contains("/flutter/")))
+                {
+                    logger.LogDebug("❌ Wrong framework: Flutter (expected Native Android)");
+                    return true;
+                }
+                if (!technologyKeywords.Contains("react") && (urlLower.Contains("react-native") || urlLower.Contains("reactnative")))
+                {
+                    logger.LogDebug("❌ Wrong framework: React Native (expected Native Android)");
+                    return true;
+                }
+            }
+
+            if (technologyKeywords.Contains("flutter"))
+            {
+                if (!technologyKeywords.Contains("kotlin") && !technologyKeywords.Contains("java") && (path.Contains("/android/") || path.Contains("/kotlin/")))
+                {
+                    // Allow if it's explicitly comparing, otherwise block native docs
+                    if (!urlLower.Contains("vs") && !urlLower.Contains("comparison"))
+                    {
+                        logger.LogDebug("❌ Wrong framework: Native Android (expected Flutter)");
+                        return true;
+                    }
+                }
+            }
+
+            // 6. SQL Filtering
+            if (technologyKeywords.Contains("sql") || technologyKeywords.Contains("database"))
+            {
+                // Avoid NoSQL if strictly SQL context
+                if (!technologyKeywords.Contains("nosql") && !technologyKeywords.Contains("mongo") &&
+                   (path.Contains("/mongodb/") || path.Contains("/dynamodb/") || urlLower.Contains("mongoose")))
+                {
+                    logger.LogDebug("❌ Wrong DB type: NoSQL (expected SQL)");
+                    return true;
+                }
+            }
+
+            // 7. Web Frontend (React/Vue/Angular)
             if (technologyKeywords.Contains("react"))
             {
-                var uri = new Uri(url);
-                var path = uri.AbsolutePath.ToLowerInvariant();
-
-                if (path.Contains("/angular/") || path.Contains("/vue/"))
+                if (!technologyKeywords.Contains("angular") && (path.Contains("/angular/") || urlLower.Contains("angular.io")))
                 {
-                    logger.LogDebug("❌ Wrong framework (expected React)");
+                    logger.LogDebug("❌ Wrong framework: Angular (expected React)");
+                    return true;
+                }
+                if (!technologyKeywords.Contains("vue") && (path.Contains("/vue/") || urlLower.Contains("vuejs.org")))
+                {
+                    logger.LogDebug("❌ Wrong framework: Vue (expected React)");
                     return true;
                 }
             }
 
             if (technologyKeywords.Contains("vue"))
             {
-                var uri = new Uri(url);
-                var path = uri.AbsolutePath.ToLowerInvariant();
-
                 if (path.Contains("/react/") || path.Contains("/angular/"))
                 {
                     logger.LogDebug("❌ Wrong framework (expected Vue)");
@@ -217,83 +266,10 @@ public static class SearchResultFilter
 
             if (technologyKeywords.Contains("angular"))
             {
-                var uri = new Uri(url);
-                var path = uri.AbsolutePath.ToLowerInvariant();
-
                 if (path.Contains("/react/") || path.Contains("/vue/"))
                 {
                     logger.LogDebug("❌ Wrong framework (expected Angular)");
                     return true;
-                }
-            }
-
-            if (technologyKeywords.Contains("python"))
-            {
-                var uri = new Uri(url);
-                var path = uri.AbsolutePath.ToLowerInvariant();
-
-                var otherLanguagePaths = new[] { "/java/", "/csharp/", "/asp/", "/dotnet/" };
-                if (otherLanguagePaths.Any(pattern => path.Contains(pattern)))
-                {
-                    logger.LogDebug("❌ Wrong language (expected Python)");
-                    return true;
-                }
-            }
-        }
-
-        if (category == SubjectCategory.ComputerScience)
-        {
-            var topicLower = topic.ToLowerInvariant();
-
-            if (urlLower.Contains("w3schools.com"))
-            {
-                if (topicLower.Contains("assembly") || topicLower.Contains("architecture") ||
-                    topicLower.Contains("operating system") || topicLower.Contains("computer organization"))
-                {
-                    var webDevSections = new[] { "/html/", "/css/", "/js/", "/javascript/", "/react/", "/vue/", "/angular/", "/bootstrap/" };
-                    if (webDevSections.Any(section => urlLower.Contains(section)))
-                    {
-                        logger.LogDebug("❌ Wrong W3Schools section: {Url} (expected CS theory, got web dev)", url);
-                        return true;
-                    }
-                }
-
-                if (topicLower.Contains("data structure") || topicLower.Contains("algorithm"))
-                {
-                    var webDevSections = new[] { "/html/", "/css/", "/js/", "/javascript/", "/react/", "/vue/", "/sql/" };
-                    if (webDevSections.Any(section => urlLower.Contains(section)))
-                    {
-                        logger.LogDebug("❌ Wrong W3Schools section: {Url} (expected DS/Algo, got web dev)", url);
-                        return true;
-                    }
-                }
-            }
-
-            if (urlLower.Contains("tutorialspoint.com"))
-            {
-                if (topicLower.Contains("assembly") || topicLower.Contains("architecture") ||
-                    topicLower.Contains("operating system") || topicLower.Contains("computer organization"))
-                {
-                    var webDevSections = new[] { "/html/", "/css/", "/javascript/", "/reactjs/", "/vuejs/", "/angular/" };
-                    if (webDevSections.Any(section => urlLower.Contains(section)))
-                    {
-                        logger.LogDebug("❌ Wrong TutorialsPoint section: {Url} (expected CS theory, got web dev)", url);
-                        return true;
-                    }
-                }
-            }
-
-            if (urlLower.Contains("geeksforgeeks.org"))
-            {
-                if (topicLower.Contains("assembly") || topicLower.Contains("architecture") ||
-                    topicLower.Contains("operating system"))
-                {
-                    var webDevKeywords = new[] { "-html-", "-css-", "-javascript-", "-react-", "-vue-" };
-                    if (webDevKeywords.Any(keyword => urlLower.Contains(keyword)))
-                    {
-                        logger.LogDebug("❌ Wrong GeeksforGeeks article: {Url} (expected CS theory, got web dev)", url);
-                        return true;
-                    }
                 }
             }
         }

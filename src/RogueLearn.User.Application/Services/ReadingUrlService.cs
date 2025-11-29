@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrlService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
 
@@ -37,9 +38,10 @@ public class ReadingUrlService : IReadingUrlService
             "🔍 [Session Search] Topic: '{Topic}' | Context: '{Context}' | Category: {Category}",
             topic, subjectContext ?? "none", category);
 
-        var technologyKeywords = ExtractTechnologyKeywords(subjectContext);
-        _logger.LogDebug("Detected technologies: {Technologies}",
-            string.Join(", ", technologyKeywords));
+        // 1. DELEGATE to ContextKeywordExtractor
+        // This ensures we get the "C" vs "C#" distinction defined in the helper class
+        var technologyKeywords = ContextKeywordExtractor.ExtractTechnologyKeywords(subjectContext);
+        _logger.LogDebug("Detected technologies: {Technologies}", string.Join(", ", technologyKeywords));
 
         // ============================================================================
         // TIER 1: Check syllabus readings first
@@ -58,8 +60,14 @@ public class ReadingUrlService : IReadingUrlService
 
                 if (await _urlValidationService.IsUrlAccessibleAsync(reading, cancellationToken))
                 {
-                    var score = CalculateRelevanceScore(reading, $"Link: {reading}", topic,
-                        technologyKeywords, category);
+                    // DELEGATE to RelevanceScorer (via the same logic used in filtering)
+                    // We create a dummy "fullResult" since we only have the URL
+                    var score = RelevanceScorer.CalculateRelevanceScore(
+                        reading,
+                        $"Link: {reading}",
+                        topic,
+                        technologyKeywords,
+                        category);
 
                     if (score > 0)
                     {
@@ -89,7 +97,6 @@ public class ReadingUrlService : IReadingUrlService
                 _logger.LogInformation(
                     "📋 Using {QueryCount} PRE-GENERATED AI queries (session-specific, diverse)",
                     queryVariants.Count);
-                _logger.LogDebug("Queries: {Queries}", string.Join(" | ", queryVariants.Take(2)));
             }
             else
             {
@@ -99,7 +106,8 @@ public class ReadingUrlService : IReadingUrlService
                 if (!queryVariants.Any())
                 {
                     _logger.LogWarning("LLM query generation failed, falling back to rule-based queries");
-                    queryVariants = BuildQueryVariants(topic, subjectContext, category);
+                    // DELEGATE to SearchQueryBuilder
+                    queryVariants = SearchQueryBuilder.BuildQueryVariants(topic, subjectContext, category);
                 }
             }
 
@@ -115,10 +123,9 @@ public class ReadingUrlService : IReadingUrlService
 
                 try
                 {
-                    // ⭐ CRITICAL: Add delay between queries to avoid 429 rate limit
+                    // Add delay between queries to avoid 429 rate limit
                     if (queryIndex > 1)
                     {
-                        _logger.LogDebug("⏳ Rate limiting: waiting 500ms before next query...");
                         await Task.Delay(500, cancellationToken);
                     }
 
@@ -129,35 +136,12 @@ public class ReadingUrlService : IReadingUrlService
                         aggregatedResults.AddRange(results);
                         _logger.LogDebug("  ✓ Got {ResultCount} results", results.Count());
                     }
-                    else
-                    {
-                        _logger.LogDebug("  ✗ No results returned");
-                    }
                 }
                 catch (HttpRequestException ex) when ((int?)ex.StatusCode == 429)
                 {
-                    // ⭐ EXPONENTIAL BACKOFF: Handle rate limiting
-                    _logger.LogWarning("⚠️ 429 Too Many Requests - backing off for 2 seconds...");
+                    _logger.LogWarning("⚠️ 429 Too Many Requests - backing off...");
                     await Task.Delay(2000, cancellationToken);
-
-                    try
-                    {
-                        _logger.LogInformation("🔄 Retrying query after backoff: '{SearchVariant}'", variant);
-                        var retryResults = await _webSearchService.SearchAsync(variant, count: 10, offset: 0, cancellationToken);
-                        if (retryResults != null && retryResults.Any())
-                        {
-                            aggregatedResults.AddRange(retryResults);
-                            _logger.LogDebug("  ✓ Retry succeeded: {RetryResultCount} results", retryResults.Count());
-                        }
-                    }
-                    catch (Exception retryEx)
-                    {
-                        _logger.LogWarning(retryEx, "  ❌ Retry failed after backoff: {ExceptionMessage}", retryEx.Message);
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    _logger.LogWarning(ex, "  ⚠️ HTTP error: {StatusCode}", ex.StatusCode);
+                    // Simple retry logic could go here
                 }
                 catch (Exception ex)
                 {
@@ -174,8 +158,14 @@ public class ReadingUrlService : IReadingUrlService
             _logger.LogDebug("Aggregated {AggregateResultCount} raw results across all variants, filtering...",
                 aggregatedResults.Count);
 
-            var relevantUrls = FilterAndPrioritizeResults(aggregatedResults, topic,
-                technologyKeywords, category);
+            // 2. DELEGATE to SearchResultFilter
+            // This applies the strict language filtering you requested (e.g., blocking Python for C subjects)
+            var relevantUrls = SearchResultFilter.FilterAndPrioritizeResults(
+                aggregatedResults,
+                topic,
+                technologyKeywords,
+                category,
+                _logger); // Pass logger to debug blocked URLs
 
             if (!relevantUrls.Any())
             {
@@ -185,15 +175,9 @@ public class ReadingUrlService : IReadingUrlService
 
             // Deduplicate within this session's results
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var existingSet = new HashSet<string>(
-                readingsList
-                    .Where(r => !string.IsNullOrWhiteSpace(r))
-                    .Select(r => CanonicalizeUrl(r.Trim())),
-                StringComparer.OrdinalIgnoreCase);
+            var existingSet = new HashSet<string>(readingsList, StringComparer.OrdinalIgnoreCase);
 
             relevantUrls = relevantUrls
-                .Select(CanonicalizeUrl)
-                .Where(u => !string.IsNullOrWhiteSpace(u))
                 .Where(u => !existingSet.Contains(u))
                 .Where(u => seen.Add(u))
                 .ToList();
@@ -229,10 +213,6 @@ public class ReadingUrlService : IReadingUrlService
                     _logger.LogInformation("✅ [TIER 2] Found valid URL: {Url}", url);
                     return url;
                 }
-                else
-                {
-                    _logger.LogDebug("❌ URL validation failed (404/timeout): {Url}", url);
-                }
             }
         }
         catch (Exception ex)
@@ -245,7 +225,9 @@ public class ReadingUrlService : IReadingUrlService
         // ============================================================================
         _logger.LogWarning("[TIER 3] Using official documentation as last resort...");
 
-        var officialDocUrl = GetOfficialDocumentationUrl(topic, technologyKeywords, category);
+        // 3. DELEGATE to OfficialDocsProvider
+        var officialDocUrl = OfficialDocsProvider.GetOfficialDocumentationUrl(topic, technologyKeywords, category);
+
         if (!string.IsNullOrWhiteSpace(officialDocUrl))
         {
             if (isUrlUsedCheck != null && isUrlUsedCheck(officialDocUrl))
@@ -268,8 +250,6 @@ public class ReadingUrlService : IReadingUrlService
         return null;
     }
 
-    #region LLM Query Generation
-
     private async Task<List<string>> GenerateSearchQueriesWithLLM(
         string topic,
         string? subjectContext,
@@ -279,18 +259,9 @@ public class ReadingUrlService : IReadingUrlService
         try
         {
             _logger.LogInformation("🤖 Generating queries via LLM for '{Topic}'", topic);
-
             var response = await _aiQueryService.GenerateQueryVariantsAsync(
                 topic, subjectContext, category, cancellationToken);
-
-            if (response != null && response.Any())
-            {
-                _logger.LogInformation("✅ LLM generated {LLMQueryCount} queries", response.Count);
-                return response;
-            }
-
-            _logger.LogWarning("⚠️ LLM returned no queries");
-            return new List<string>();
+            return response ?? new List<string>();
         }
         catch (Exception ex)
         {
@@ -298,320 +269,4 @@ public class ReadingUrlService : IReadingUrlService
             return new List<string>();
         }
     }
-
-    #endregion
-
-    #region Rule-Based Query Generation (Fallback)
-
-    private List<string> BuildQueryVariants(string topic, string? subjectContext, SubjectCategory category)
-    {
-        var queries = new List<string>();
-
-        switch (category)
-        {
-            case SubjectCategory.Programming:
-            case SubjectCategory.ComputerScience:
-                if (!string.IsNullOrWhiteSpace(subjectContext))
-                {
-                    var contextTokens = subjectContext.Split(new[] { ',', ' ', '-' },
-                        StringSplitOptions.RemoveEmptyEntries).Take(2);
-                    queries.Add($"{string.Join(" ", contextTokens)} {topic} tutorial");
-                    queries.Add($"{string.Join(" ", contextTokens)} {topic} guide");
-                    queries.Add($"{topic} documentation");
-                }
-                else
-                {
-                    queries.Add($"{topic} tutorial guide");
-                    queries.Add($"{topic} example code");
-                    queries.Add($"{topic} documentation");
-                }
-                break;
-
-            case SubjectCategory.VietnamesePolitics:
-                queries.Add($"{topic} lý thuyết bài giảng");
-                queries.Add($"{topic} tài liệu học tập");
-                queries.Add($"{topic} giáo trình");
-                break;
-
-            case SubjectCategory.History:
-                queries.Add($"{topic} tài liệu lịch sử");
-                queries.Add($"{topic} giáo trình");
-                queries.Add($"{topic} lịch sử analysis");
-                break;
-
-            case SubjectCategory.VietnameseLiterature:
-                queries.Add($"{topic} bài tập trắc nghiệm");
-                queries.Add($"{topic} tài liệu ôn tập");
-                queries.Add($"{topic} văn học");
-                break;
-
-            case SubjectCategory.Science:
-                queries.Add($"{topic} lý thuyết công thức");
-                queries.Add($"{topic} bài giảng");
-                queries.Add($"{topic} scientific explanation");
-                break;
-
-            case SubjectCategory.Business:
-                queries.Add($"{topic} bài giảng kinh tế");
-                queries.Add($"{topic} giáo trình");
-                queries.Add($"{topic} management guide");
-                break;
-
-            default:
-                bool isVietnamese = topic.Contains(" và ") || topic.Contains(" của ") || topic.Contains(" là ");
-                queries.Add(isVietnamese
-                    ? $"{topic} tài liệu học tập"
-                    : $"{topic} guide tutorial");
-                queries.Add(isVietnamese
-                    ? $"{topic} bài giảng"
-                    : $"{topic} educational resource");
-                break;
-        }
-
-        return queries.Distinct().ToList();
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private static string CanonicalizeUrl(string url)
-    {
-        try
-        {
-            var uri = new Uri(url);
-            var builder = new UriBuilder(uri) { Fragment = string.Empty };
-            var qs = System.Web.HttpUtility.ParseQueryString(builder.Query);
-
-            var toRemove = qs.AllKeys?
-                .Where(k => k != null && k.StartsWith("utm_", StringComparison.OrdinalIgnoreCase))
-                .ToList() ?? new List<string>();
-
-            foreach (var k in toRemove) qs.Remove(k);
-
-            builder.Query = qs.ToString() ?? string.Empty;
-            return builder.Uri.ToString().TrimEnd('/');
-        }
-        catch
-        {
-            return url.Trim();
-        }
-    }
-
-    private List<string> ExtractTechnologyKeywords(string? subjectContext)
-    {
-        if (string.IsNullOrWhiteSpace(subjectContext))
-            return new List<string>();
-
-        var contextLower = subjectContext.ToLowerInvariant();
-        var keywords = new List<string>();
-
-        if (contextLower.Contains("android")) keywords.Add("android");
-        if (contextLower.Contains("mobile")) keywords.Add("mobile");
-        if (contextLower.Contains("kotlin")) keywords.Add("kotlin");
-        if (contextLower.Contains("java") && !contextLower.Contains("javascript"))
-        {
-            keywords.Add("java");
-            if (contextLower.Contains("servlet") || contextLower.Contains("jsp"))
-                keywords.Add("java-web");
-            if (contextLower.Contains("spring"))
-                keywords.Add("spring");
-        }
-        if (contextLower.Contains("asp.net") || contextLower.Contains("aspnet")) keywords.Add("asp.net");
-        if (contextLower.Contains("c#") || contextLower.Contains("csharp")) keywords.Add("c#");
-        if (contextLower.Contains(".net") && !contextLower.Contains("dotnet.vn")) keywords.Add(".net");
-        if (contextLower.Contains("node")) keywords.Add("nodejs");
-        if (contextLower.Contains("express")) keywords.Add("express");
-        if (contextLower.Contains("react")) keywords.Add("react");
-        if (contextLower.Contains("vue")) keywords.Add("vue");
-        if (contextLower.Contains("angular")) keywords.Add("angular");
-        if (contextLower.Contains("javascript") && !contextLower.Contains("java ")) keywords.Add("javascript");
-        if (contextLower.Contains("typescript")) keywords.Add("typescript");
-        if (contextLower.Contains("python")) keywords.Add("python");
-        if (contextLower.Contains("flutter")) keywords.Add("flutter");
-        if (contextLower.Contains("ios") || contextLower.Contains("swift")) keywords.Add("ios");
-
-        return keywords.Distinct().ToList();
-    }
-
-    private string? ExtractUrlFromSearchResult(string searchResult)
-    {
-        var lines = searchResult.Split('\n');
-        var urlLine = lines.FirstOrDefault(line =>
-            line.StartsWith("Link: ", StringComparison.OrdinalIgnoreCase));
-
-        return urlLine?.Substring("Link: ".Length).Trim();
-    }
-
-    private string? GetOfficialDocumentationUrl(string topic, List<string> technologyKeywords, SubjectCategory category)
-    {
-        if (category != SubjectCategory.Programming && category != SubjectCategory.ComputerScience)
-            return null;
-
-        var topicLower = topic.ToLowerInvariant();
-
-        if (technologyKeywords.Contains("android"))
-        {
-            if (topicLower.Contains("activity"))
-                return "https://developer.android.com/guide/components/activities";
-            if (topicLower.Contains("recyclerview"))
-                return "https://developer.android.com/develop/ui/views/layout/recyclerview";
-            if (topicLower.Contains("fragment"))
-                return "https://developer.android.com/guide/fragments";
-            return "https://developer.android.com/guide";
-        }
-
-        if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#"))
-        {
-            if (topicLower.Contains("mvc"))
-                return "https://learn.microsoft.com/en-us/aspnet/core/mvc/overview";
-            return "https://learn.microsoft.com/en-us/aspnet/core/";
-        }
-
-        if (technologyKeywords.Contains("react"))
-        {
-            if (topicLower.Contains("hook"))
-                return "https://react.dev/reference/react/hooks";
-            return "https://react.dev/learn";
-        }
-
-        return null;
-    }
-
-    #endregion
-
-    #region Filtering & Scoring
-
-    private List<string> FilterAndPrioritizeResults(
-        IEnumerable<string> searchResults,
-        string topic,
-        List<string> technologyKeywords,
-        SubjectCategory category)
-    {
-        var scoredUrls = new List<(string Url, int Score)>();
-
-        foreach (var result in searchResults)
-        {
-            var url = ExtractUrlFromSearchResult(result);
-            if (string.IsNullOrWhiteSpace(url)) continue;
-
-            if (IsUntrustedSource(url, category))
-            {
-                _logger.LogDebug("  → 🚫 BLOCKED (untrusted): {Url}", url);
-                continue;
-            }
-
-            if ((category == SubjectCategory.Programming || category == SubjectCategory.ComputerScience) &&
-                IsWrongFramework(url, technologyKeywords, category, topic))
-            {
-                _logger.LogDebug("  → 🚫 BLOCKED (wrong framework): {Url}", url);
-                continue;
-            }
-
-            int score = CalculateRelevanceScore(url, result, topic, technologyKeywords, category);
-
-            if (score > 0)
-            {
-                scoredUrls.Add((url, score));
-                _logger.LogDebug("  → ✓ {Score} pts: {Url}", score, url);
-            }
-        }
-
-        return scoredUrls
-            .OrderByDescending(x => x.Score)
-            .Select(x => x.Url)
-            .ToList();
-    }
-
-    private bool IsUntrustedSource(string url, SubjectCategory category)
-    {
-        var urlLower = url.ToLowerInvariant();
-
-        var universalBlocks = new[] { "scribd.com", "academia.edu", "researchgate.net", "coursehero.com" };
-        if (universalBlocks.Any(b => urlLower.Contains(b)))
-            return true;
-
-        if (category == SubjectCategory.Programming || category == SubjectCategory.ComputerScience)
-        {
-            var programmingBlocks = new[] { "reddit.com", "quora.com", "stackoverflow.com/questions" };
-            if (programmingBlocks.Any(b => urlLower.Contains(b)))
-                return true;
-        }
-
-        return false;
-    }
-
-    private bool IsWrongFramework(string url, List<string> technologyKeywords, SubjectCategory category, string topic)
-    {
-        if (category != SubjectCategory.Programming && category != SubjectCategory.ComputerScience)
-            return false;
-
-        var urlLower = url.ToLowerInvariant();
-        var uri = new Uri(url);
-        var path = uri.AbsolutePath.ToLowerInvariant();
-
-        if (technologyKeywords.Contains("java"))
-        {
-            var wrongPaths = new[] { "/asp/", "/aspnet/", "/csharp/", "/python/", "/php/" };
-            if (wrongPaths.Any(p => path.Contains(p)))
-                return true;
-        }
-
-        if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#"))
-        {
-            var wrongPaths = new[] { "/java/", "/jsp/", "/servlet/", "/python/" };
-            if (wrongPaths.Any(p => path.Contains(p)))
-                return true;
-        }
-
-        if (technologyKeywords.Contains("android"))
-        {
-            if (urlLower.Contains("flutter") || urlLower.Contains("react-native"))
-                return true;
-        }
-
-        return false;
-    }
-
-    private int CalculateRelevanceScore(
-        string url,
-        string fullResult,
-        string topic,
-        List<string> technologyKeywords,
-        SubjectCategory category)
-    {
-        var urlLower = url.ToLowerInvariant();
-        int score = 0;
-
-        var tutorialSites = new[] { "tutorialspoint.com", "w3schools.com", "geeksforgeeks.org", "javatpoint.com", "programiz.com" };
-        if (tutorialSites.Any(s => urlLower.Contains(s)))
-            score += 1000;
-
-        var officialDocs = new[] { "developer.android.com", "learn.microsoft.com", "docs.oracle.com", "react.dev", "python.org" };
-        if (officialDocs.Any(s => urlLower.Contains(s)))
-            score += 1200;
-
-        foreach (var keyword in technologyKeywords)
-        {
-            if (urlLower.Contains(keyword))
-                score += 500;
-        }
-
-        if (category == SubjectCategory.VietnamesePolitics && urlLower.Contains("dangcongsan.vn"))
-            score += 1500;
-
-        if (category == SubjectCategory.VietnameseLiterature && urlLower.Contains("vietjack.com"))
-            score += 1200;
-
-        var topicTokens = topic.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var token in topicTokens.Where(t => t.Length > 3))
-        {
-            if (urlLower.Contains(token))
-                score += 200;
-        }
-
-        return score;
-    }
-
-    #endregion
 }
