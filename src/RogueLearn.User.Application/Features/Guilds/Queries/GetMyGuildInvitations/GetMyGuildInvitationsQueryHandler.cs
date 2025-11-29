@@ -8,11 +8,13 @@ public class GetMyGuildInvitationsQueryHandler : IRequestHandler<GetMyGuildInvit
 {
     private readonly IGuildInvitationRepository _guildInvitationRepository;
     private readonly IGuildRepository _guildRepository;
+    private readonly IUserProfileRepository _userProfileRepository;
 
-    public GetMyGuildInvitationsQueryHandler(IGuildInvitationRepository guildInvitationRepository, IGuildRepository guildRepository)
+    public GetMyGuildInvitationsQueryHandler(IGuildInvitationRepository guildInvitationRepository, IGuildRepository guildRepository, IUserProfileRepository userProfileRepository)
     {
         _guildInvitationRepository = guildInvitationRepository;
         _guildRepository = guildRepository;
+        _userProfileRepository = userProfileRepository;
     }
 
     public async Task<IReadOnlyList<GuildInvitationDto>> Handle(GetMyGuildInvitationsQuery request, CancellationToken cancellationToken)
@@ -27,6 +29,17 @@ public class GetMyGuildInvitationsQueryHandler : IRequestHandler<GetMyGuildInvit
         var guilds = await _guildRepository.GetByIdsAsync(invitations.Select(x => x.GuildId).Distinct(), cancellationToken);
         var guildNameById = guilds.ToDictionary(g => g.Id, g => g.Name);
 
+        var inviteeIds = invitations.Select(x => x.InviteeId).Distinct().ToList();
+        var inviteeNameById = new Dictionary<Guid, string>();
+        foreach (var id in inviteeIds)
+        {
+            var profile = await _userProfileRepository.GetByAuthIdAsync(id, cancellationToken);
+            var name = (string.IsNullOrWhiteSpace(profile?.FirstName) && string.IsNullOrWhiteSpace(profile?.LastName))
+                ? (profile?.Username ?? string.Empty)
+                : $"{profile?.FirstName} {profile?.LastName}".Trim();
+            inviteeNameById[id] = name;
+        }
+
         return invitations.Select(i => new GuildInvitationDto
         {
             InvitationId = i.Id,
@@ -39,7 +52,8 @@ public class GetMyGuildInvitationsQueryHandler : IRequestHandler<GetMyGuildInvit
             CreatedAt = i.CreatedAt,
             RespondedAt = i.RespondedAt,
             ExpiresAt = i.ExpiresAt,
-            GuildName = guildNameById.TryGetValue(i.GuildId, out var name) ? name : string.Empty
+            GuildName = guildNameById.TryGetValue(i.GuildId, out var name) ? name : string.Empty,
+            InviteeName = inviteeNameById.TryGetValue(i.InviteeId, out var iname) ? iname : string.Empty
         }).ToList();
     }
 }

@@ -9,11 +9,13 @@ public class GetMyPendingInvitationsQueryHandler : IRequestHandler<GetMyPendingI
 {
     private readonly IPartyInvitationRepository _invitationRepository;
     private readonly IPartyRepository _partyRepository;
+    private readonly IUserProfileRepository _userProfileRepository;
 
-    public GetMyPendingInvitationsQueryHandler(IPartyInvitationRepository invitationRepository, IPartyRepository partyRepository)
+    public GetMyPendingInvitationsQueryHandler(IPartyInvitationRepository invitationRepository, IPartyRepository partyRepository, IUserProfileRepository userProfileRepository)
     {
         _invitationRepository = invitationRepository;
         _partyRepository = partyRepository;
+        _userProfileRepository = userProfileRepository;
     }
 
     public async Task<IReadOnlyList<PartyInvitationDto>> Handle(GetMyPendingInvitationsQuery request, CancellationToken cancellationToken)
@@ -21,6 +23,17 @@ public class GetMyPendingInvitationsQueryHandler : IRequestHandler<GetMyPendingI
         var invitations = await _invitationRepository.GetPendingInvitationsByInviteeAsync(request.AuthUserId, cancellationToken);
         var parties = await _partyRepository.GetByIdsAsync(invitations.Select(x => x.PartyId).Distinct(), cancellationToken);
         var partyNameById = parties.ToDictionary(p => p.Id, p => p.Name);
+
+        var inviteeIds = invitations.Select(x => x.InviteeId).Distinct().ToList();
+        var inviteeNameById = new Dictionary<Guid, string>();
+        foreach (var id in inviteeIds)
+        {
+            var profile = await _userProfileRepository.GetByAuthIdAsync(id, cancellationToken);
+            var name = (string.IsNullOrWhiteSpace(profile?.FirstName) && string.IsNullOrWhiteSpace(profile?.LastName))
+                ? (profile?.Username ?? string.Empty)
+                : $"{profile?.FirstName} {profile?.LastName}".Trim();
+            inviteeNameById[id] = name;
+        }
 
         return invitations.Select(i => new PartyInvitationDto(
             i.Id,
@@ -32,7 +45,8 @@ public class GetMyPendingInvitationsQueryHandler : IRequestHandler<GetMyPendingI
             i.InvitedAt,
             i.RespondedAt,
             i.ExpiresAt,
-            partyNameById.TryGetValue(i.PartyId, out var name) ? name : string.Empty
+            partyNameById.TryGetValue(i.PartyId, out var name) ? name : string.Empty,
+            inviteeNameById.TryGetValue(i.InviteeId, out var iname) ? iname : string.Empty
         )).ToList();
     }
 }
