@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/GoogleWebSearchService.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Plugins/GoogleWebSearchService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
 using System.Text;
@@ -194,9 +194,12 @@ namespace RogueLearn.User.Application.Plugins
             }
             else
             {
-                // For non-Vietnamese queries, boost international community sites
-                // Don't use site: restriction - just boost these in ranking
-                enhancedQuery.Append(" (geeksforgeeks OR dev.to OR freecodecamp OR w3schools OR programiz)");
+                // For non-Vietnamese queries, boost international community/tutorial sites
+                // Also add software requirements engineering sources if query looks like SE/requirements
+                var seBoost = LooksLikeRequirements(query)
+                    ? " OR visual-paradigm.com OR atlassian.com OR lucidchart.com OR smartsheet.com OR productplan.com OR geeksforgeeks.org/software-engineering"
+                    : string.Empty;
+                enhancedQuery.Append($" (geeksforgeeks OR dev.to OR freecodecamp OR w3schools OR programiz{seBoost})");
             }
 
             return enhancedQuery.ToString();
@@ -209,6 +212,12 @@ namespace RogueLearn.User.Application.Plugins
         {
             // Check for Vietnamese diacritics
             return Regex.IsMatch(query, @"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđĐ]");
+        }
+
+        private bool LooksLikeRequirements(string query)
+        {
+            var q = query.ToLowerInvariant();
+            return q.Contains("requirement") || q.Contains("requirements") || q.Contains("use case") || q.Contains("acceptance criteria") || q.Contains("elicitation") || q.Contains("validation") || q.Contains("vision and scope");
         }
 
         /// <summary>

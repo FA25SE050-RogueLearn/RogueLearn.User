@@ -92,6 +92,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
         services.AddScoped<QuestStepsPromptBuilder>();
         services.AddScoped<IAcademicContextBuilder, AcademicContextBuilder>();
+        services.AddSingleton<IMemoryStore, InMemoryStore>();
+        services.AddScoped<IAiQueryClassificationService, AiQueryClassificationService>();
 
         return services;
     }

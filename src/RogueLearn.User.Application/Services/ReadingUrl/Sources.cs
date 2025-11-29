@@ -1,3 +1,4 @@
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/Sources.cs
 namespace RogueLearn.User.Application.Services;
 
 public static class Sources
@@ -81,6 +82,7 @@ public static class Sources
         "forum.freecodecamp.org",
         "discuss.codecademy.com",
         "answers.unity.com",
+        "community.atlassian.com", // ⭐ ADDED: Block Jira/Atlassian community threads
         "/forum/",
         "/forums/",
         "/discussion/",
