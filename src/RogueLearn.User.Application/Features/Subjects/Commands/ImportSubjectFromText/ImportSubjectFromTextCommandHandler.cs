@@ -262,7 +262,10 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             "🔄 Processing {Count} sessions with parallel URL search (max 5 concurrent)...",
             syllabusData.Content.SessionSchedule.Count);
 
-        var semaphore = new SemaphoreSlim(5, 5);
+        // ⭐ RATE LIMITING: Reduce from 5 to 2 concurrent searches
+        // This prevents hammering Google API with 15+ simultaneous requests
+        var semaphore = new SemaphoreSlim(2, 2);
+
 
         var enrichmentTasks = syllabusData.Content.SessionSchedule.Select(async session =>
         {

@@ -1,22 +1,8 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrlService.cs
-
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Services;
 
-/// <summary>
-/// Sources valid, accessible URLs with CONTEXT-AWARE and CATEGORY-AWARE relevance checking.
-/// Now integrates with per-session AI-generated queries to guarantee diverse results.
-/// 
-/// RACE CONDITION FIX: Uses ConcurrentDictionary + live check delegate for thread-safe URL uniqueness.
-/// 
-/// FLOW:
-/// 1. Receives topic + pre-generated AI queries (from batch generation)
-/// 2. Receives live URL check delegate from handler (concurrent safety)
-/// 3. Searches with SPECIFIC queries instead of generic ones
-/// 4. Different queries for each session = Different URLs (no duplicates!)
-/// </summary>
 public class ReadingUrlService : IReadingUrlService
 {
     private readonly IWebSearchService _webSearchService;
@@ -36,18 +22,13 @@ public class ReadingUrlService : IReadingUrlService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Main entry point: Get valid URL for a single session's topic.
-    /// NOW: Accepts pre-generated specific queries that guarantee diversity.
-    /// NOW: Accepts live URL check delegate for concurrent thread safety.
-    /// </summary>
     public async Task<string?> GetValidUrlForTopicAsync(
         string topic,
         IEnumerable<string> readings,
         string? subjectContext = null,
         SubjectCategory category = SubjectCategory.General,
-        List<string>? overrideQueries = null,  // ✅ KEY: Pre-generated AI queries from batch
-        Func<string, bool>? isUrlUsedCheck = null, // ✅ KEY: Live uniqueness check (thread-safe)
+        List<string>? overrideQueries = null,
+        Func<string, bool>? isUrlUsedCheck = null,
         CancellationToken cancellationToken = default)
     {
         var readingsList = readings?.ToList() ?? new List<string>();
@@ -56,7 +37,6 @@ public class ReadingUrlService : IReadingUrlService
             "🔍 [Session Search] Topic: '{Topic}' | Context: '{Context}' | Category: {Category}",
             topic, subjectContext ?? "none", category);
 
-        // Extract technology keywords from context
         var technologyKeywords = ExtractTechnologyKeywords(subjectContext);
         _logger.LogDebug("Detected technologies: {Technologies}",
             string.Join(", ", technologyKeywords));
@@ -64,13 +44,11 @@ public class ReadingUrlService : IReadingUrlService
         // ============================================================================
         // TIER 1: Check syllabus readings first
         // ============================================================================
-        _logger.LogDebug("[TIER 1] Checking {Count} existing syllabus readings...", readingsList.Count);
+        _logger.LogDebug("[TIER 1] Checking {ReadingCount} existing syllabus readings...", readingsList.Count);
 
         foreach (var reading in readingsList)
         {
             if (string.IsNullOrWhiteSpace(reading)) continue;
-
-            // ⭐ CRITICAL FIX: Just-in-time duplicate check via live delegate
             if (isUrlUsedCheck != null && isUrlUsedCheck(reading)) continue;
 
             if (Uri.TryCreate(reading, UriKind.Absolute, out var uriResult) &&
@@ -97,7 +75,7 @@ public class ReadingUrlService : IReadingUrlService
         }
 
         // ============================================================================
-        // TIER 2: Web search with specific, AI-generated queries
+        // TIER 2: Web search with rate limiting
         // ============================================================================
         _logger.LogInformation("[TIER 2] Searching with AI-generated queries to find diverse URLs...");
 
@@ -105,18 +83,16 @@ public class ReadingUrlService : IReadingUrlService
         {
             List<string> queryVariants;
 
-            // ✅ KEY DIFFERENCE: Use pre-provided queries (from batch generation)
             if (overrideQueries != null && overrideQueries.Any())
             {
                 queryVariants = overrideQueries;
                 _logger.LogInformation(
-                    "📋 Using {Count} PRE-GENERATED AI queries (session-specific, diverse)",
+                    "📋 Using {QueryCount} PRE-GENERATED AI queries (session-specific, diverse)",
                     queryVariants.Count);
                 _logger.LogDebug("Queries: {Queries}", string.Join(" | ", queryVariants.Take(2)));
             }
             else
             {
-                // Fallback: Generate inline (if no pre-generated queries provided)
                 _logger.LogWarning("⚠️ No pre-generated queries provided. Generating inline...");
                 queryVariants = await GenerateSearchQueriesWithLLM(topic, subjectContext, category, cancellationToken);
 
@@ -127,34 +103,65 @@ public class ReadingUrlService : IReadingUrlService
                 }
             }
 
-            _logger.LogDebug("Final query set: {Variants}", string.Join(" || ", queryVariants.Take(2)));
-
-            // Execute searches with each query variant
+            // ⭐ RATE LIMITING: Execute searches with delays
             var aggregatedResults = new List<string>();
             int queryIndex = 0;
 
             foreach (var variant in queryVariants)
             {
                 queryIndex++;
-                _logger.LogDebug("[Query {Index}/{Total}] Searching: '{Variant}'",
+                _logger.LogDebug("[Query {QueryIndex}/{QueryTotal}] Searching: '{SearchVariant}'",
                     queryIndex, queryVariants.Count, variant);
 
                 try
                 {
+                    // ⭐ CRITICAL: Add delay between queries to avoid 429 rate limit
+                    if (queryIndex > 1)
+                    {
+                        _logger.LogDebug("⏳ Rate limiting: waiting 500ms before next query...");
+                        await Task.Delay(500, cancellationToken);
+                    }
+
                     var results = await _webSearchService.SearchAsync(variant, count: 10, offset: 0, cancellationToken);
 
                     if (results != null && results.Any())
                     {
                         aggregatedResults.AddRange(results);
+                        _logger.LogDebug("  ✓ Got {ResultCount} results", results.Count());
                     }
                     else
                     {
                         _logger.LogDebug("  ✗ No results returned");
                     }
                 }
+                catch (HttpRequestException ex) when ((int?)ex.StatusCode == 429)
+                {
+                    // ⭐ EXPONENTIAL BACKOFF: Handle rate limiting
+                    _logger.LogWarning("⚠️ 429 Too Many Requests - backing off for 2 seconds...");
+                    await Task.Delay(2000, cancellationToken);
+
+                    try
+                    {
+                        _logger.LogInformation("🔄 Retrying query after backoff: '{SearchVariant}'", variant);
+                        var retryResults = await _webSearchService.SearchAsync(variant, count: 10, offset: 0, cancellationToken);
+                        if (retryResults != null && retryResults.Any())
+                        {
+                            aggregatedResults.AddRange(retryResults);
+                            _logger.LogDebug("  ✓ Retry succeeded: {RetryResultCount} results", retryResults.Count());
+                        }
+                    }
+                    catch (Exception retryEx)
+                    {
+                        _logger.LogWarning(retryEx, "  ❌ Retry failed after backoff: {ExceptionMessage}", retryEx.Message);
+                    }
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogWarning(ex, "  ⚠️ HTTP error: {StatusCode}", ex.StatusCode);
+                }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "  ⚠️ Query search failed");
+                    _logger.LogWarning(ex, "  ⚠️ Query search failed: {ExceptionMessage}", ex.Message);
                 }
             }
 
@@ -164,10 +171,9 @@ public class ReadingUrlService : IReadingUrlService
                 return null;
             }
 
-            _logger.LogDebug("Aggregated {Count} raw results across all variants, filtering...",
+            _logger.LogDebug("Aggregated {AggregateResultCount} raw results across all variants, filtering...",
                 aggregatedResults.Count);
 
-            // Filter and prioritize results
             var relevantUrls = FilterAndPrioritizeResults(aggregatedResults, topic,
                 technologyKeywords, category);
 
@@ -177,10 +183,8 @@ public class ReadingUrlService : IReadingUrlService
                 return null;
             }
 
-            // Deduplicate within this session's results + canonicalize
+            // Deduplicate within this session's results
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            // ⭐ CRITICAL FIX: Canonicalize existing URLs before creating the HashSet
             var existingSet = new HashSet<string>(
                 readingsList
                     .Where(r => !string.IsNullOrWhiteSpace(r))
@@ -190,7 +194,7 @@ public class ReadingUrlService : IReadingUrlService
             relevantUrls = relevantUrls
                 .Select(CanonicalizeUrl)
                 .Where(u => !string.IsNullOrWhiteSpace(u))
-                .Where(u => !existingSet.Contains(u)) // Check against canonicalized set
+                .Where(u => !existingSet.Contains(u))
                 .Where(u => seen.Add(u))
                 .ToList();
 
@@ -200,13 +204,12 @@ public class ReadingUrlService : IReadingUrlService
                 return null;
             }
 
-            _logger.LogInformation("✅ Filtering result: {RelevantCount}/{TotalCount} URLs passed relevance & dedup",
+            _logger.LogInformation("✅ Filtering result: {RelevantUrlCount}/{TotalResultCount} URLs passed relevance & dedup",
                 relevantUrls.Count, aggregatedResults.Count);
 
             // Validate top URLs
             foreach (var url in relevantUrls)
             {
-                // ⭐ CRITICAL: Just-in-time check against concurrent threads
                 if (isUrlUsedCheck != null && isUrlUsedCheck(url))
                 {
                     _logger.LogDebug("⏭️ Skipping URL found in concurrent execution: {Url}", url);
@@ -217,7 +220,6 @@ public class ReadingUrlService : IReadingUrlService
 
                 if (await _urlValidationService.IsUrlAccessibleAsync(url, cancellationToken))
                 {
-                    // Double check in case another thread snatched it while we were validating
                     if (isUrlUsedCheck != null && isUrlUsedCheck(url))
                     {
                         _logger.LogDebug("⏭️ Another thread took this URL before we could return it: {Url}", url);
@@ -235,7 +237,7 @@ public class ReadingUrlService : IReadingUrlService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Web search failed");
+            _logger.LogError(ex, "❌ Web search failed: {ExceptionMessage}", ex.Message);
         }
 
         // ============================================================================
@@ -246,7 +248,6 @@ public class ReadingUrlService : IReadingUrlService
         var officialDocUrl = GetOfficialDocumentationUrl(topic, technologyKeywords, category);
         if (!string.IsNullOrWhiteSpace(officialDocUrl))
         {
-            // Check uniqueness for official doc too
             if (isUrlUsedCheck != null && isUrlUsedCheck(officialDocUrl))
             {
                 _logger.LogWarning("⏭️ Skipping official doc (already used): {Url}", officialDocUrl);
@@ -269,9 +270,6 @@ public class ReadingUrlService : IReadingUrlService
 
     #region LLM Query Generation
 
-    /// <summary>
-    /// Generate search queries using LLM (only used if no pre-generated queries provided).
-    /// </summary>
     private async Task<List<string>> GenerateSearchQueriesWithLLM(
         string topic,
         string? subjectContext,
@@ -287,7 +285,7 @@ public class ReadingUrlService : IReadingUrlService
 
             if (response != null && response.Any())
             {
-                _logger.LogInformation("✅ LLM generated {Count} queries", response.Count);
+                _logger.LogInformation("✅ LLM generated {LLMQueryCount} queries", response.Count);
                 return response;
             }
 
@@ -296,7 +294,7 @@ public class ReadingUrlService : IReadingUrlService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ LLM query generation failed");
+            _logger.LogError(ex, "❌ LLM query generation failed: {ExceptionMessage}", ex.Message);
             return new List<string>();
         }
     }
@@ -305,9 +303,6 @@ public class ReadingUrlService : IReadingUrlService
 
     #region Rule-Based Query Generation (Fallback)
 
-    /// <summary>
-    /// Build search query variants using rule-based logic (fallback only).
-    /// </summary>
     private List<string> BuildQueryVariants(string topic, string? subjectContext, SubjectCategory category)
     {
         var queries = new List<string>();
@@ -388,7 +383,6 @@ public class ReadingUrlService : IReadingUrlService
             var builder = new UriBuilder(uri) { Fragment = string.Empty };
             var qs = System.Web.HttpUtility.ParseQueryString(builder.Query);
 
-            // Remove tracking params
             var toRemove = qs.AllKeys?
                 .Where(k => k != null && k.StartsWith("utm_", StringComparison.OrdinalIgnoreCase))
                 .ToList() ?? new List<string>();
@@ -412,12 +406,9 @@ public class ReadingUrlService : IReadingUrlService
         var contextLower = subjectContext.ToLowerInvariant();
         var keywords = new List<string>();
 
-        // Mobile/Android
         if (contextLower.Contains("android")) keywords.Add("android");
         if (contextLower.Contains("mobile")) keywords.Add("mobile");
         if (contextLower.Contains("kotlin")) keywords.Add("kotlin");
-
-        // Java (NOT JavaScript)
         if (contextLower.Contains("java") && !contextLower.Contains("javascript"))
         {
             keywords.Add("java");
@@ -426,24 +417,16 @@ public class ReadingUrlService : IReadingUrlService
             if (contextLower.Contains("spring"))
                 keywords.Add("spring");
         }
-
-        // .NET
         if (contextLower.Contains("asp.net") || contextLower.Contains("aspnet")) keywords.Add("asp.net");
         if (contextLower.Contains("c#") || contextLower.Contains("csharp")) keywords.Add("c#");
         if (contextLower.Contains(".net") && !contextLower.Contains("dotnet.vn")) keywords.Add(".net");
-
-        // Node.js
         if (contextLower.Contains("node")) keywords.Add("nodejs");
         if (contextLower.Contains("express")) keywords.Add("express");
-
-        // Frontend
         if (contextLower.Contains("react")) keywords.Add("react");
         if (contextLower.Contains("vue")) keywords.Add("vue");
         if (contextLower.Contains("angular")) keywords.Add("angular");
         if (contextLower.Contains("javascript") && !contextLower.Contains("java ")) keywords.Add("javascript");
         if (contextLower.Contains("typescript")) keywords.Add("typescript");
-
-        // Other
         if (contextLower.Contains("python")) keywords.Add("python");
         if (contextLower.Contains("flutter")) keywords.Add("flutter");
         if (contextLower.Contains("ios") || contextLower.Contains("swift")) keywords.Add("ios");
@@ -467,7 +450,6 @@ public class ReadingUrlService : IReadingUrlService
 
         var topicLower = topic.ToLowerInvariant();
 
-        // Android
         if (technologyKeywords.Contains("android"))
         {
             if (topicLower.Contains("activity"))
@@ -479,7 +461,6 @@ public class ReadingUrlService : IReadingUrlService
             return "https://developer.android.com/guide";
         }
 
-        // ASP.NET
         if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#"))
         {
             if (topicLower.Contains("mvc"))
@@ -487,7 +468,6 @@ public class ReadingUrlService : IReadingUrlService
             return "https://learn.microsoft.com/en-us/aspnet/core/";
         }
 
-        // React
         if (technologyKeywords.Contains("react"))
         {
             if (topicLower.Contains("hook"))
@@ -547,12 +527,10 @@ public class ReadingUrlService : IReadingUrlService
     {
         var urlLower = url.ToLowerInvariant();
 
-        // Universal blocks
         var universalBlocks = new[] { "scribd.com", "academia.edu", "researchgate.net", "coursehero.com" };
         if (universalBlocks.Any(b => urlLower.Contains(b)))
             return true;
 
-        // Programming/CS: Block forums
         if (category == SubjectCategory.Programming || category == SubjectCategory.ComputerScience)
         {
             var programmingBlocks = new[] { "reddit.com", "quora.com", "stackoverflow.com/questions" };
@@ -572,7 +550,6 @@ public class ReadingUrlService : IReadingUrlService
         var uri = new Uri(url);
         var path = uri.AbsolutePath.ToLowerInvariant();
 
-        // Java subjects: Block .NET/Python
         if (technologyKeywords.Contains("java"))
         {
             var wrongPaths = new[] { "/asp/", "/aspnet/", "/csharp/", "/python/", "/php/" };
@@ -580,7 +557,6 @@ public class ReadingUrlService : IReadingUrlService
                 return true;
         }
 
-        // .NET subjects: Block Java/Python
         if (technologyKeywords.Contains("asp.net") || technologyKeywords.Contains("c#"))
         {
             var wrongPaths = new[] { "/java/", "/jsp/", "/servlet/", "/python/" };
@@ -588,7 +564,6 @@ public class ReadingUrlService : IReadingUrlService
                 return true;
         }
 
-        // Android: Block Flutter/React Native
         if (technologyKeywords.Contains("android"))
         {
             if (urlLower.Contains("flutter") || urlLower.Contains("react-native"))
@@ -608,31 +583,26 @@ public class ReadingUrlService : IReadingUrlService
         var urlLower = url.ToLowerInvariant();
         int score = 0;
 
-        // Tutorial sites (high trust)
         var tutorialSites = new[] { "tutorialspoint.com", "w3schools.com", "geeksforgeeks.org", "javatpoint.com", "programiz.com" };
         if (tutorialSites.Any(s => urlLower.Contains(s)))
             score += 1000;
 
-        // Official docs (highest priority)
         var officialDocs = new[] { "developer.android.com", "learn.microsoft.com", "docs.oracle.com", "react.dev", "python.org" };
         if (officialDocs.Any(s => urlLower.Contains(s)))
             score += 1200;
 
-        // Technology keyword matches
         foreach (var keyword in technologyKeywords)
         {
             if (urlLower.Contains(keyword))
                 score += 500;
         }
 
-        // Category-specific boosts
         if (category == SubjectCategory.VietnamesePolitics && urlLower.Contains("dangcongsan.vn"))
             score += 1500;
 
         if (category == SubjectCategory.VietnameseLiterature && urlLower.Contains("vietjack.com"))
             score += 1200;
 
-        // Topic keyword matching (weight by word length)
         var topicTokens = topic.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         foreach (var token in topicTokens.Where(t => t.Length > 3))
         {
