@@ -73,6 +73,8 @@ public record GuildInvitationDto
     public InvitationStatus Status { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? RespondedAt { get; init; }
+    public string GuildName { get; init; } = string.Empty;
+    public string InviteeName { get; init; } = string.Empty;
 }
 
 public record GuildJoinRequestDto
@@ -85,6 +87,7 @@ public record GuildJoinRequestDto
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? RespondedAt { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
+    public string RequesterName { get; init; } = string.Empty;
 }
 
 public record GuildDashboardDto
