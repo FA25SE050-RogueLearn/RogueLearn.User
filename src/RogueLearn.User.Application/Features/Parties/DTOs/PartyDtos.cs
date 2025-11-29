@@ -30,7 +30,8 @@ public record PartyInvitationDto(
     string? Message,
     DateTimeOffset InvitedAt,
     DateTimeOffset? RespondedAt,
-    DateTimeOffset ExpiresAt
+    DateTimeOffset ExpiresAt,
+    string PartyName
 );
 public record PartyStashItemDto(Guid Id, Guid PartyId, Guid OriginalNoteId, Guid SharedByUserId, string Title, object? Content, IReadOnlyList<string>? Tags, DateTimeOffset SharedAt, DateTimeOffset UpdatedAt);
 public record InviteMemberRequest(IReadOnlyList<InviteTarget> Targets, string? Message, DateTimeOffset? ExpiresAt);

@@ -7,10 +7,12 @@ namespace RogueLearn.User.Application.Features.Guilds.Queries.GetMyGuildInvitati
 public class GetMyGuildInvitationsQueryHandler : IRequestHandler<GetMyGuildInvitationsQuery, IReadOnlyList<GuildInvitationDto>>
 {
     private readonly IGuildInvitationRepository _guildInvitationRepository;
+    private readonly IGuildRepository _guildRepository;
 
-    public GetMyGuildInvitationsQueryHandler(IGuildInvitationRepository guildInvitationRepository)
+    public GetMyGuildInvitationsQueryHandler(IGuildInvitationRepository guildInvitationRepository, IGuildRepository guildRepository)
     {
         _guildInvitationRepository = guildInvitationRepository;
+        _guildRepository = guildRepository;
     }
 
     public async Task<IReadOnlyList<GuildInvitationDto>> Handle(GetMyGuildInvitationsQuery request, CancellationToken cancellationToken)
@@ -21,6 +23,9 @@ public class GetMyGuildInvitationsQueryHandler : IRequestHandler<GetMyGuildInvit
         {
             invitations = invitations.Where(i => i.Status == RogueLearn.User.Domain.Enums.InvitationStatus.Pending);
         }
+
+        var guilds = await _guildRepository.GetByIdsAsync(invitations.Select(x => x.GuildId).Distinct(), cancellationToken);
+        var guildNameById = guilds.ToDictionary(g => g.Id, g => g.Name);
 
         return invitations.Select(i => new GuildInvitationDto
         {
@@ -33,7 +38,8 @@ public class GetMyGuildInvitationsQueryHandler : IRequestHandler<GetMyGuildInvit
             Status = i.Status,
             CreatedAt = i.CreatedAt,
             RespondedAt = i.RespondedAt,
-            ExpiresAt = i.ExpiresAt
+            ExpiresAt = i.ExpiresAt,
+            GuildName = guildNameById.TryGetValue(i.GuildId, out var name) ? name : string.Empty
         }).ToList();
     }
 }

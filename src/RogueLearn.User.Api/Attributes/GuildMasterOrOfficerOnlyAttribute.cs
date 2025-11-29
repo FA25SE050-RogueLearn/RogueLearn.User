@@ -1,3 +1,4 @@
+using BuildingBlocks.Shared.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -42,10 +43,15 @@ public class GuildMasterOrOfficerOnlyAttribute : Attribute, IAsyncAuthorizationF
             return;
         }
 
-        var authUserIdClaim = user.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == "auth_user_id")?.Value;
-        if (!Guid.TryParse(authUserIdClaim, out var authUserId))
+        // Extract auth user id using shared extension (consistent with AdminOnlyAttribute)
+        Guid authUserId;
+        try
         {
-            context.Result = new UnauthorizedObjectResult("Invalid or missing user identifier.");
+            authUserId = context.HttpContext.User.GetAuthUserId();
+        }
+        catch
+        {
+            context.Result = new UnauthorizedResult();
             return;
         }
 

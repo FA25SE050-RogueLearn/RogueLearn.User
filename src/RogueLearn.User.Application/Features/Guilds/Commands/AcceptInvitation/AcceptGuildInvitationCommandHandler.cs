@@ -107,10 +107,12 @@ public class AcceptGuildInvitationCommandHandler : IRequestHandler<AcceptGuildIn
         invitation.RespondedAt = DateTimeOffset.UtcNow;
         await _invitationRepository.UpdateAsync(invitation, cancellationToken);
 
-        var otherPending = await _invitationRepository.FindAsync(
-            i => i.InviteeId == request.AuthUserId && i.Status == InvitationStatus.Pending,
+        var otherForInvitee = await _invitationRepository.FindAsync(
+            i => i.InviteeId == request.AuthUserId,
             cancellationToken);
-        var toDecline = otherPending.Where(i => i.GuildId != request.GuildId).ToList();
+        var toDecline = otherForInvitee
+            .Where(i => i.Status == InvitationStatus.Pending && i.GuildId != request.GuildId)
+            .ToList();
         if (toDecline.Any())
         {
             foreach (var inv in toDecline)
