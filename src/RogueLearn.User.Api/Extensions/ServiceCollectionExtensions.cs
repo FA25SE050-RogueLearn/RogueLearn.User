@@ -91,6 +91,7 @@ public static class ServiceCollectionExtensions
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
         services.AddScoped<QuestStepsPromptBuilder>();
+        services.AddScoped<IAcademicContextBuilder, AcademicContextBuilder>();
 
         return services;
     }

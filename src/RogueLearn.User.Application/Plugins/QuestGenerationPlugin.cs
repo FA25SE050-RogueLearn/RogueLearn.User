@@ -1,4 +1,4 @@
-﻿// src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
+// src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Models;
@@ -30,13 +30,13 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     /// Generates quest steps for a SINGLE week using AI.
     /// This method is called multiple times (once per week) to generate all quest steps.
     /// </summary>
-    // In your QuestGenerationPlugin.cs - replace the GenerateQuestStepsJsonAsync method:
 public async Task<string> GenerateQuestStepsJsonAsync(
     WeekContext weekContext,
     string userContext,
     List<Skill> relevantSkills,
     string subjectName,
     string courseDescription,
+    AcademicContext academicContext,
     CancellationToken cancellationToken)
 {
     const int maxAttempts = 3;
@@ -54,12 +54,26 @@ public async Task<string> GenerateQuestStepsJsonAsync(
             // Build prompt with error feedback on retries
             var errorHint = attempt > 1 ? BuildRetryErrorHint(lastError) : null;
 
+            var gpaBucket = academicContext.CurrentGpa >= 8.5 ? "High" : academicContext.CurrentGpa >= 7.0 ? "Good" : academicContext.CurrentGpa > 0 ? "Support" : "Unknown";
+            var strengthsPreview = string.Join(", ", academicContext.StrengthAreas.Take(3));
+            var improvementsPreview = string.Join(", ", academicContext.ImprovementAreas.Take(3));
+            var weakPrereqCount = academicContext.PrerequisiteHistory.Count(p => p.PerformanceLevel == "Weak");
+            _logger.LogInformation(
+                "Personalization Context: GPA={Gpa:F2} ({Bucket}), Attempt={Reason}, WeakPrereqs={WeakCount}, Strengths=[{Strengths}], Improvements=[{Improvements}]",
+                academicContext.CurrentGpa,
+                gpaBucket,
+                academicContext.AttemptReason,
+                weakPrereqCount,
+                strengthsPreview,
+                improvementsPreview);
+
             var prompt = _promptBuilder.BuildPrompt(
                 weekContext,
                 userContext,
                 relevantSkills,
                 subjectName,
                 courseDescription,
+                academicContext,
                 errorHint: errorHint
             );
 

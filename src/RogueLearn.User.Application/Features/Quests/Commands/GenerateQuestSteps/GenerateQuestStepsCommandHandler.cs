@@ -45,6 +45,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IPromptBuilder _promptBuilder;
     private readonly IUserSkillRepository _userSkillRepository;
+    private readonly IAcademicContextBuilder _academicContextBuilder;
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
@@ -58,7 +59,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         ISkillRepository skillRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IPromptBuilder promptBuilder,
-        IUserSkillRepository userSkillRepository)
+        IUserSkillRepository userSkillRepository,
+        IAcademicContextBuilder academicContextBuilder)
     {
         _questRepository = questRepository;
         _questStepRepository = questStepRepository;
@@ -72,6 +74,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _promptBuilder = promptBuilder;
         _userSkillRepository = userSkillRepository;
+        _academicContextBuilder = academicContextBuilder;
     }
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
@@ -109,6 +112,21 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         {
             throw new BadRequestException("No syllabus content available for this quest's subject.");
         }
+
+        var academicContext = await _academicContextBuilder.BuildContextAsync(
+            request.AuthUserId,
+            quest.SubjectId.Value,
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Academic Context for Quest {QuestId}: GPA={Gpa:F2}, Reason={Reason}, PrevAttempts={Attempts}, Strengths=[{Strengths}], Improvements=[{Improvements}]",
+            request.QuestId,
+            academicContext.CurrentGpa,
+            academicContext.AttemptReason,
+            academicContext.PreviousAttempts,
+            string.Join(", ", academicContext.StrengthAreas),
+            string.Join(", ", academicContext.ImprovementAreas)
+        );
 
         // ========== 2. PREPARE SYLLABUS SESSIONS ==========
         // Serialize full content with Newtonsoft to preserve JToken/JArray structures, then parse with STJ
@@ -154,6 +172,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             .Where(s => relevantSkillIds.Contains(s.Id))
             .ToList();
 
+        _logger.LogInformation("Skill Mapping: {Count} skills linked to subject", relevantSkills.Count);
+
         // Unlock skills (Level 0)
         var existingUserSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
         var existingSkillIds = existingUserSkills.Select(us => us.SkillId).ToHashSet();
@@ -184,7 +204,25 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
         UpdateHangfireJobProgress(request.HangfireJobId, 0, weeksToGenerate, "Starting quest generation...");
 
-        var userContextString = await _promptBuilder.GenerateAsync(userProfile, userClass, cancellationToken);
+        var userContextString = await _promptBuilder.GenerateAsync(
+            userProfile,
+            userClass,
+            academicContext,
+            cancellationToken);
+
+        var gpaBucket = academicContext.CurrentGpa >= 8.5 ? "High" : academicContext.CurrentGpa >= 7.0 ? "Good" : academicContext.CurrentGpa > 0 ? "Support" : "Unknown";
+        var weakPrereqCodes = academicContext.PrerequisiteHistory.Where(p => p.PerformanceLevel == "Weak").Select(p => p.SubjectCode).Take(3).ToList();
+        var strengthsPreview = string.Join(", ", academicContext.StrengthAreas.Take(3));
+        var improvementsPreview = string.Join(", ", academicContext.ImprovementAreas.Take(3));
+        _logger.LogInformation(
+            "Personalization Summary: GPA Bucket={Bucket}, Attempt={Reason}, WeakPrereqs={WeakCount}:{Codes}, Strengths=[{Strengths}], Improvements=[{Improvements}], UserContextLen={Len}",
+            gpaBucket,
+            academicContext.AttemptReason,
+            weakPrereqCodes.Count,
+            string.Join("|", weakPrereqCodes),
+            strengthsPreview,
+            improvementsPreview,
+            userContextString.Length);
 
         var createdSteps = new List<QuestStep>();
         int skippedWeeks = 0;
@@ -244,6 +282,24 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                         weekNumber, sampleTopics, sampleUrls);
                 }
 
+                if (weekContext.AvailableResources.Any())
+                {
+                    _logger.LogInformation("Week {Week}: Rules → Reading 0-3, KC 2-4, Quiz 1", weekNumber);
+                }
+                else
+                {
+                    _logger.LogInformation("Week {Week}: Rules → Reading 0, KC 3-5, Quiz 1-2", weekNumber);
+                }
+
+                _logger.LogInformation(
+                    "Week {Week}: Personalization applied → Reason={Reason}, GPA={Gpa:F2}, WeakPrereqs={WeakCount}, Strengths=[{Strengths}], Improvements=[{Improvements}]",
+                    weekNumber,
+                    academicContext.AttemptReason,
+                    academicContext.CurrentGpa,
+                    weakPrereqCodes.Count,
+                    strengthsPreview,
+                    improvementsPreview);
+
                 // Call Plugin with WeekContext
                 var generatedJson = await _questGenerationPlugin.GenerateQuestStepsJsonAsync(
                     weekContext,
@@ -251,6 +307,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     relevantSkills,
                     subject.SubjectName,
                     subject.Description ?? "",
+                    academicContext,
                     cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(generatedJson))

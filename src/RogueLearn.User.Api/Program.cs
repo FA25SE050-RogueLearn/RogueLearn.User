@@ -53,6 +53,7 @@ try
         options.ListenAnyIP(6968, listenOptions =>
         {
             listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+            listenOptions.UseHttps();
         });
 
         // Port 6969: HTTP/2 only for pure gRPC clients
