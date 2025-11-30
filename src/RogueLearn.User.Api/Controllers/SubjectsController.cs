@@ -11,7 +11,6 @@ using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromTe
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Queries.GetSubjectSkillMappings;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.AddSubjectSkillMapping;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.RemoveSubjectSkillMapping;
-using BuildingBlocks.Shared.Authentication; // Ensure this is present
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -27,10 +26,6 @@ public class SubjectsController : ControllerBase
         _mediator = mediator;
     }
 
-    /// <summary>
-    /// Imports a single subject from raw text, creating or updating it in the master catalog.
-    /// This is the primary endpoint for populating syllabus content.
-    /// </summary>
     [HttpPost("import-from-text")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
@@ -46,16 +41,12 @@ public class SubjectsController : ControllerBase
         var command = new ImportSubjectFromTextCommand
         {
             RawText = request.RawText,
-            Semester = request.Semester // Pass the semester to the command
+            Semester = request.Semester
         };
         var result = await _mediator.Send(command, cancellationToken);
         return Ok(result);
     }
 
-    /// <summary>
-    /// Imports or updates a single subject from raw text. This endpoint is idempotent.
-    /// This is a semantic alias for the POST endpoint, both perform an upsert.
-    /// </summary>
     [HttpPut("import-from-text")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
@@ -66,12 +57,23 @@ public class SubjectsController : ControllerBase
         return await ImportFromText(request, cancellationToken);
     }
 
+    /// <summary>
+    /// Retrieves paginated subjects with optional search.
+    /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(List<SubjectDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PaginatedSubjectsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<List<SubjectDto>>> GetAllSubjects()
+    public async Task<ActionResult<PaginatedSubjectsResponse>> GetAllSubjects(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null)
     {
-        var query = new GetAllSubjectsQuery();
+        var query = new GetAllSubjectsQuery
+        {
+            Page = page,
+            PageSize = pageSize,
+            Search = search
+        };
         var result = await _mediator.Send(query);
         return Ok(result);
     }
@@ -124,9 +126,6 @@ public class SubjectsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Gets all skill mappings for a specific subject.
-    /// </summary>
     [HttpGet("{subjectId:guid}/skills")]
     [ProducesResponseType(typeof(List<SubjectSkillMappingDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSkillMappings(Guid subjectId, CancellationToken cancellationToken)
@@ -135,9 +134,6 @@ public class SubjectsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Maps a skill to a subject with a specific relevance weight.
-    /// </summary>
     [HttpPost("{subjectId:guid}/skills")]
     [ProducesResponseType(typeof(AddSubjectSkillMappingResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -149,9 +145,6 @@ public class SubjectsController : ControllerBase
         return CreatedAtAction(nameof(GetSkillMappings), new { subjectId = result.SubjectId }, result);
     }
 
-    /// <summary>
-    /// Removes a skill mapping from a subject.
-    /// </summary>
     [HttpDelete("{subjectId:guid}/skills/{skillId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
