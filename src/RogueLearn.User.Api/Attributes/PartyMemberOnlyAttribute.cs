@@ -2,16 +2,17 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using BuildingBlocks.Shared.Authentication;
 using System.Security.Claims;
 
 namespace RogueLearn.User.Api.Attributes;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class PartyLeaderOrCoLeaderOnlyAttribute : Attribute, IAsyncAuthorizationFilter
+public class PartyMemberOnlyAttribute : Attribute, IAsyncAuthorizationFilter
 {
     private readonly string _routeParameterName;
 
-    public PartyLeaderOrCoLeaderOnlyAttribute(string routeParameterName = "partyId")
+    public PartyMemberOnlyAttribute(string routeParameterName = "partyId")
     {
         _routeParameterName = routeParameterName;
     }
@@ -37,12 +38,12 @@ public class PartyLeaderOrCoLeaderOnlyAttribute : Attribute, IAsyncAuthorization
             return;
         }
 
-        var authUserIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                            ?? user.FindFirst("sub")?.Value
-                            ?? user.FindFirst("user_id")?.Value
-                            ?? user.FindFirst("auth_user_id")?.Value;
-
-        if (!Guid.TryParse(authUserIdClaim, out var authUserId))
+        Guid authUserId;
+        try
+        {
+            authUserId = context.HttpContext.User.GetAuthUserId();
+        }
+        catch
         {
             context.Result = new UnauthorizedResult();
             return;
@@ -62,10 +63,6 @@ public class PartyLeaderOrCoLeaderOnlyAttribute : Attribute, IAsyncAuthorization
             return;
         }
 
-        if (member.Role != PartyRole.Leader && member.Role != PartyRole.CoLeader)
-        {
-            context.Result = new ForbidResult();
-            return;
-        }
+        // Active member authorized (Leader or Member)
     }
 }

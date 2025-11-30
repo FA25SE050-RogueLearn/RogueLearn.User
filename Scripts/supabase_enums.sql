@@ -24,7 +24,7 @@ CREATE TYPE quest_status AS ENUM ('NotStarted', 'InProgress', 'Completed', 'Aban
 
 -- Social interaction enums
 CREATE TYPE party_type AS ENUM ('StudyGroup', 'ProjectTeam', 'PeerReview', 'Casual', 'Competition');
-CREATE TYPE party_role AS ENUM ('Leader', 'CoLeader', 'Member');
+CREATE TYPE party_role AS ENUM ('Leader', 'Member');
 CREATE TYPE guild_role AS ENUM ('GuildMaster', 'Officer', 'Veteran', 'Member', 'Recruit');
 CREATE TYPE member_status AS ENUM ('Active', 'Inactive', 'Suspended', 'Left');
 CREATE TYPE invitation_status AS ENUM ('Pending', 'Accepted', 'Declined', 'Expired', 'Cancelled');

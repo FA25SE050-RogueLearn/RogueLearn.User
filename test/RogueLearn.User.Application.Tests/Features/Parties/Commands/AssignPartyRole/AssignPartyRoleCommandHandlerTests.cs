@@ -14,7 +14,7 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.AssignPart
 public class AssignPartyRoleCommandHandlerTests
 {
     [Fact]
-    public async Task AssignPartyRole_Succeeds_ForLeader()
+    public async Task AssignPartyRole_Idempotent_ForLeader_ShouldNotUpdate()
     {
         var repo = new Mock<IPartyMemberRepository>(MockBehavior.Strict);
         var partyId = Guid.NewGuid();
@@ -24,13 +24,11 @@ public class AssignPartyRoleCommandHandlerTests
         repo.Setup(r => r.IsLeaderAsync(partyId, actorId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         repo.Setup(r => r.GetMemberAsync(partyId, memberId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.Member });
-        repo.Setup(r => r.UpdateAsync(It.IsAny<PartyMember>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PartyMember m, CancellationToken _) => m);
 
         var handler = new AssignPartyRoleCommandHandler(repo.Object);
-        await handler.Handle(new AssignPartyRoleCommand(partyId, memberId, PartyRole.CoLeader, actorId), CancellationToken.None);
+        await handler.Handle(new AssignPartyRoleCommand(partyId, memberId, PartyRole.Member, actorId), CancellationToken.None);
 
-        repo.Verify(r => r.UpdateAsync(It.Is<PartyMember>(m => m.Role == PartyRole.CoLeader), It.IsAny<CancellationToken>()), Times.Once);
+        repo.Verify(r => r.UpdateAsync(It.IsAny<PartyMember>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -44,7 +42,7 @@ public class AssignPartyRoleCommandHandlerTests
         repo.Setup(r => r.IsLeaderAsync(partyId, actorId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var handler = new AssignPartyRoleCommandHandler(repo.Object);
-        await Assert.ThrowsAsync<ForbiddenException>(() => handler.Handle(new AssignPartyRoleCommand(partyId, memberId, PartyRole.CoLeader, actorId), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => handler.Handle(new AssignPartyRoleCommand(partyId, memberId, PartyRole.Member, actorId), CancellationToken.None));
     }
 
     [Fact]
