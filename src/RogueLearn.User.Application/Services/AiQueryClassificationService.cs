@@ -18,8 +18,10 @@ public interface IAiQueryClassificationService
         List<SyllabusSessionDto> sessions,
         string subjectContext,
         SubjectCategory category,
+        List<string> technologyKeywords,  // ← ✅ ADD THIS LINE
         CancellationToken cancellationToken);
 }
+
 
 public interface IMemoryStore
 {
@@ -80,16 +82,20 @@ public class AiQueryClassificationService : IAiQueryClassificationService
         sb.AppendLine("- Business (Business management, marketing, MBA topics)");
         sb.AppendLine("- General (Everything else)");
         sb.AppendLine();
-        sb.AppendLine("Subject Information:");
+        sb.AppendLine("CRITICAL LANGUAGE GUIDELINES:"); 
+        sb.AppendLine("- C/C++/Java courses → Programming (hands-on development)");
+        sb.AppendLine("- Python/JavaScript/Web courses → Programming (hands-on development)");
+        sb.AppendLine("- .NET/ASP.NET courses → Programming (hands-on development)");
+        sb.AppendLine("- Operating Systems THEORY → ComputerScience (NOT programming)");
+        sb.AppendLine("- Algorithms THEORY → ComputerScience (NOT programming)");
+        sb.AppendLine("- Networks THEORY → ComputerScience (NOT programming)");
+        sb.AppendLine();
+        sb.AppendLine("KEY RULE: If course teaches hands-on CODING (practicum) → Programming");
+        sb.AppendLine("KEY RULE: If course teaches CONCEPTS ONLY (no coding) → ComputerScience");
+        sb.AppendLine();
+        sb.AppendLine("Subject Information:");  
         sb.AppendLine($"- Name: {subjectName}");
-        sb.AppendLine($"- Code: {subjectCode}");
-        sb.AppendLine($"- Description: {description}");
-        sb.AppendLine();
-        sb.AppendLine("IMPORTANT DISTINCTION:");
-        sb.AppendLine("- ComputerScience = theory, architecture, concepts (e.g., 'Computer Organization', 'Operating Systems Fundamentals', 'Network Theory')");
-        sb.AppendLine("- Programming = hands-on coding, frameworks, development (e.g., 'Android Programming', 'Web Development with React', 'ASP.NET Core')");
-        sb.AppendLine();
-        sb.AppendLine("Respond with ONLY the category name (no markdown, no extra text).");
+
         var prompt = sb.ToString();
 
         for (int attempt = 1; attempt <= MaxRetries; attempt++)
@@ -114,8 +120,116 @@ public class AiQueryClassificationService : IAiQueryClassificationService
             }
         }
 
-        _logger.LogWarning("AI classification failed after retries. Defaulting to General");
+        // ============================================================================
+        // FALLBACK HEURISTICS - Try pattern matching before defaulting to General
+        // ============================================================================
+        _logger.LogWarning("AI classification failed after retries. Attempting fallback heuristics...");
+
+        var combined = (subjectName + " " + subjectCode + " " + description).ToLowerInvariant();
+
+        // 1. C Language Detection - FIRST PRIORITY
+        if ((combined.Contains("c language") ||
+             combined.Contains("c programming") ||
+             (Regex.IsMatch(combined, @"\bc\b") &&
+              !combined.Contains("c#") &&
+              !combined.Contains("c++"))) &&
+            combined.Contains("programming"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: C language course → Programming");
+            await _memoryStore.SetAsync(cacheKey, "Programming", cancellationToken);
+            return SubjectCategory.Programming;
+        }
+
+        // 2. Java/Python/C# Hands-On Programming Detection
+        if ((combined.Contains("java programming") ||
+             combined.Contains("java development") ||
+             combined.Contains("python programming") ||
+             combined.Contains("python development") ||
+             combined.Contains("csharp") ||
+             combined.Contains("c# programming") ||
+             combined.Contains(".net programming")) &&
+            !combined.Contains("theory only"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: {Name} → Programming");
+            await _memoryStore.SetAsync(cacheKey, "Programming", cancellationToken);
+            return SubjectCategory.Programming;
+        }
+
+        // 3. Generic Programming Detection
+        if ((combined.Contains("programming") || combined.Contains("software development")) &&
+            !combined.Contains("theory only") &&
+            !combined.Contains("purely theoretical") &&
+            !combined.Contains("fundamentals only"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: Generic programming → Programming");
+            await _memoryStore.SetAsync(cacheKey, "Programming", cancellationToken);
+            return SubjectCategory.Programming;
+        }
+
+        // 4. ComputerScience Theory Detection
+        if ((combined.Contains("operating system") ||
+             combined.Contains("algorithm") ||
+             combined.Contains("data structure") ||
+             combined.Contains("computer architecture") ||
+             combined.Contains("network theory")) &&
+            (combined.Contains("theory") || combined.Contains("fundamental")))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: CS theory → ComputerScience");
+            await _memoryStore.SetAsync(cacheKey, "ComputerScience", cancellationToken);
+            return SubjectCategory.ComputerScience;
+        }
+
+        // 5. Vietnamese Politics Detection
+        if (combined.Contains("chính trị") || combined.Contains("marxism") ||
+            combined.Contains("hồ chí minh") || combined.Contains("đảng"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: Vietnamese politics → VietnamesePolitics");
+            await _memoryStore.SetAsync(cacheKey, "VietnamesePolitics", cancellationToken);
+            return SubjectCategory.VietnamesePolitics;
+        }
+
+        // 6. Vietnamese Literature Detection
+        if (combined.Contains("văn học") || combined.Contains("ngữ văn") ||
+            combined.Contains("literature") || combined.Contains("tiếng việt"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: Vietnamese literature → VietnameseLiterature");
+            await _memoryStore.SetAsync(cacheKey, "VietnameseLiterature", cancellationToken);
+            return SubjectCategory.VietnameseLiterature;
+        }
+
+        // 7. History Detection
+        if (combined.Contains("history") || combined.Contains("lịch sử") ||
+            combined.Contains("historical") || combined.Contains("war"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: History → History");
+            await _memoryStore.SetAsync(cacheKey, "History", cancellationToken);
+            return SubjectCategory.History;
+        }
+
+        // 8. Science Detection (Math, Physics, Chemistry, Biology)
+        if (combined.Contains("mathematics") || combined.Contains("physics") ||
+            combined.Contains("chemistry") || combined.Contains("biology") ||
+            combined.Contains("toán") || combined.Contains("vật lý"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: Science → Science");
+            await _memoryStore.SetAsync(cacheKey, "Science", cancellationToken);
+            return SubjectCategory.Science;
+        }
+
+        // 9. Business Detection
+        if (combined.Contains("business") || combined.Contains("management") ||
+            combined.Contains("marketing") || combined.Contains("kinh doanh"))
+        {
+            _logger.LogInformation("✅ Fallback heuristic matched: Business → Business");
+            await _memoryStore.SetAsync(cacheKey, "Business", cancellationToken);
+            return SubjectCategory.Business;
+        }
+
+        // Default fallback - all heuristics failed
+        _logger.LogWarning("❌ All fallback heuristics failed. Defaulting to General");
+        await _memoryStore.SetAsync(cacheKey, "General", cancellationToken);
         return SubjectCategory.General;
+
     }
 
     public async Task<string> GenerateSearchQueryAsync(string topic, string subjectContext, SubjectCategory category, CancellationToken cancellationToken)
@@ -374,6 +488,7 @@ public class AiQueryClassificationService : IAiQueryClassificationService
         List<SyllabusSessionDto> sessions,
         string subjectContext,
         SubjectCategory category,
+        List<string> technologyKeywords,
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<int, List<string>>();
@@ -396,6 +511,7 @@ public class AiQueryClassificationService : IAiQueryClassificationService
                 chunk.ToArray(),
                 subjectContext,
                 category,
+                technologyKeywords,
                 cancellationToken);
 
             foreach (var kvp in chunkResult)
@@ -444,9 +560,10 @@ public class AiQueryClassificationService : IAiQueryClassificationService
         SyllabusSessionDto[] sessions,
         string subjectContext,
         SubjectCategory category,
+        List<string> technologyKeywords,
         CancellationToken cancellationToken)
     {
-        var prompt = BuildBatchQueryPrompt(sessions, subjectContext, category);
+        var prompt = BuildBatchQueryPrompt(sessions, subjectContext, category, technologyKeywords);
 
         for (int attempt = 1; attempt <= MaxRetries; attempt++)
         {
@@ -521,7 +638,7 @@ public class AiQueryClassificationService : IAiQueryClassificationService
         return new Dictionary<int, List<string>>();
     }
 
-    private string BuildBatchQueryPrompt(SyllabusSessionDto[] sessions, string subjectContext, SubjectCategory category)
+    private string BuildBatchQueryPrompt(SyllabusSessionDto[] sessions, string subjectContext, SubjectCategory category, List<string> technologyKeywords)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Generate optimized Google Search queries for each syllabus session to find ACADEMIC/TUTORIAL resources.");
@@ -529,7 +646,17 @@ public class AiQueryClassificationService : IAiQueryClassificationService
         sb.AppendLine("📚 Context:");
         sb.AppendLine($"- Subject: {subjectContext}");
         sb.AppendLine($"- Category: {category}");
-
+        // ← ✅ ADD THIS ENTIRE SECTION (NEW):
+        if (technologyKeywords != null && technologyKeywords.Any())
+        {
+            var techList = string.Join(", ", technologyKeywords);
+            sb.AppendLine($"- Technologies: {techList}");
+            sb.AppendLine($"- ⭐⭐⭐ CRITICAL REQUIREMENT ⭐⭐⭐");
+            sb.AppendLine($"  EVERY single query MUST explicitly mention one or more of: {techList}");
+            sb.AppendLine($"  DO NOT generate generic queries that could apply to any language/technology");
+            sb.AppendLine($"  Example (BAD): 'Function definitions tutorial'");
+            sb.AppendLine($"  Example (GOOD): 'C function definitions tutorial'");
+        }
         var hints = BuildCategoryHints(category);
         if (!string.IsNullOrWhiteSpace(hints))
         {

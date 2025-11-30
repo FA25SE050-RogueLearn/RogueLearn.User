@@ -1,5 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommandHandler.cs
-
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -79,6 +77,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         }
 
         var rawTextHash = ComputeSha256Hash(cleanText);
+    
         string? extractedJson = await _storage.TryGetCachedSyllabusDataAsync(rawTextHash, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(extractedJson))
@@ -221,6 +220,15 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         // STEP 2: Build subject context
         var subjectContext = BuildSubjectContext(syllabusData);
 
+        // ✅ STEP 2B (NEW): Extract technology keywords from subject context
+        // This is the CRITICAL FIX that enables language-specific query generation
+        var technologyKeywords = ContextKeywordExtractor.ExtractTechnologyKeywords(subjectContext);
+        _logger.LogInformation(
+            "🔧 Detected technologies for batch query generation: {Technologies}",
+            technologyKeywords != null && technologyKeywords.Any()
+                ? string.Join(", ", technologyKeywords)
+                : "none");
+
         // STEP 3: BATCH QUERY GENERATION (all sessions at once)
         _logger.LogInformation(
             "🤖 Generating AI queries for ALL {Count} sessions (batch mode)...",
@@ -241,6 +249,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 sessionDtos,
                 subjectContext,
                 subjectCategory,
+                technologyKeywords,  // ✅ NEW: Pass technology keywords to AI service
                 cancellationToken);
 
             _logger.LogInformation(
