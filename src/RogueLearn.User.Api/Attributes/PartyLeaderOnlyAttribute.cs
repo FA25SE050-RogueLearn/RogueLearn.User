@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using RogueLearn.User.Domain.Interfaces;
+using BuildingBlocks.Shared.Authentication;
 using System.Security.Claims;
 
 namespace RogueLearn.User.Api.Attributes;
@@ -47,12 +48,12 @@ public class PartyLeaderOnlyAttribute : Attribute, IAsyncAuthorizationFilter
 
         // Resolve repository and check leader role
         var partyMemberRepo = context.HttpContext.RequestServices.GetRequiredService<IPartyMemberRepository>();
-        var authUserIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                            ?? user.FindFirst("sub")?.Value
-                            ?? user.FindFirst("user_id")?.Value
-                            ?? user.FindFirst("auth_user_id")?.Value;
-
-        if (authUserIdClaim is null || !Guid.TryParse(authUserIdClaim, out var authUserId))
+        Guid authUserId;
+        try
+        {
+            authUserId = context.HttpContext.User.GetAuthUserId();
+        }
+        catch
         {
             context.Result = new UnauthorizedResult();
             return;

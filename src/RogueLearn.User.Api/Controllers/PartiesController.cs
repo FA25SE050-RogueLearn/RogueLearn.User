@@ -150,7 +150,7 @@ public class PartiesController : ControllerBase
     /// Configure party settings.
     /// </summary>
     [HttpPut("{partyId:guid}")]
-    [PartyLeaderOrCoLeaderOnly("partyId")]
+    [PartyLeaderOnly("partyId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -273,7 +273,7 @@ public class PartiesController : ControllerBase
     /// Add a resource to party stash. Requires party leader.
     /// </summary>
     [HttpPost("{partyId:guid}/stash")]
-    [PartyLeaderOrCoLeaderOnly("partyId")]
+    [PartyMemberOnly("partyId")]
     [ProducesResponseType(typeof(PartyStashItemDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -328,7 +328,7 @@ public class PartiesController : ControllerBase
     /// Update a stash item in a party (Party Leader only).
     /// </summary>
     [HttpPut("{partyId:guid}/stash/{stashItemId:guid}")]
-    [PartyLeaderOrCoLeaderOnly("partyId")]
+    [PartyMemberOnly("partyId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -343,7 +343,7 @@ public class PartiesController : ControllerBase
     /// Delete a stash item from a party (Party Leader only).
     /// </summary>
     [HttpDelete("{partyId:guid}/stash/{stashItemId:guid}")]
-    [PartyLeaderOrCoLeaderOnly("partyId")]
+    [PartyMemberOnly("partyId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
