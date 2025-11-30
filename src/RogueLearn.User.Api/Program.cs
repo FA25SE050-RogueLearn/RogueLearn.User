@@ -64,12 +64,15 @@ try
             listenOptions.Protocols = HttpProtocols.Http2;
         });
 
-        // Port 5051: HTTPS for local development (Swagger root on /)
-        options.ListenLocalhost(5051, listenOptions =>
+        // Port 5051: HTTPS for local development only (Swagger root on /)
+        if (builder.Environment.IsDevelopment())
         {
-            listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
-            listenOptions.UseHttps();
-        });
+            options.ListenLocalhost(5051, listenOptions =>
+            {
+                listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
+                listenOptions.UseHttps();
+            });
+        }
     });
 
 
