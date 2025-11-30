@@ -132,6 +132,18 @@ public class ExceptionHandlingMiddleware
                 };
                 break;
 
+            case UnprocessableEntityException:
+                context.Response.StatusCode = (int)HttpStatusCode.UnprocessableContent;
+                response = new
+                {
+                    error = new
+                    {
+                        message = exception.Message,
+                        details = exception.InnerException?.Message
+                    }
+                };
+                break;
+
             default:
                 context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
                 response = new

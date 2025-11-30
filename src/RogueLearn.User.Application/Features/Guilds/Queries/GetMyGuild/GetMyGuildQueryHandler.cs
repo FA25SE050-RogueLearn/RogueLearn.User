@@ -38,6 +38,7 @@ public class GetMyGuildQueryHandler : IRequestHandler<GetMyGuildQuery, GuildDto?
             Name = guild.Name,
             Description = guild.Description,
             IsPublic = guild.IsPublic,
+            IsLecturerGuild = guild.IsLecturerGuild,
             MaxMembers = guild.MaxMembers,
             CreatedAt = guild.CreatedAt,
             CreatedBy = guild.CreatedBy,

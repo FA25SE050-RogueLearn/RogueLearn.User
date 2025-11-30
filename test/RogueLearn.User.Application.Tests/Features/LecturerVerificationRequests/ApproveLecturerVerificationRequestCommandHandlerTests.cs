@@ -11,11 +11,12 @@ public class ApproveLecturerVerificationRequestCommandHandlerTests
     private readonly Mock<IUserProfileRepository> _profileRepo = new();
     private readonly Mock<IRoleRepository> _roleRepo = new();
     private readonly Mock<IUserRoleRepository> _userRoleRepo = new();
+    private readonly Mock<IGuildRepository> _guildRepo = new();
     private readonly ApproveLecturerVerificationRequestCommandHandler _handler;
 
     public ApproveLecturerVerificationRequestCommandHandlerTests()
     {
-        _handler = new ApproveLecturerVerificationRequestCommandHandler(_reqRepo.Object, _profileRepo.Object, _roleRepo.Object, _userRoleRepo.Object, Mock.Of<Microsoft.Extensions.Logging.ILogger<ApproveLecturerVerificationRequestCommandHandler>>());
+        _handler = new ApproveLecturerVerificationRequestCommandHandler(_reqRepo.Object, _profileRepo.Object, _roleRepo.Object, _userRoleRepo.Object, _guildRepo.Object, Mock.Of<Microsoft.Extensions.Logging.ILogger<ApproveLecturerVerificationRequestCommandHandler>>());
     }
 
     [Fact]

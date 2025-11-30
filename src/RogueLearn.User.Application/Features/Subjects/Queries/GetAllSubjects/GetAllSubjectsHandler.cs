@@ -1,15 +1,13 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Queries/GetAllSubjects/GetAllSubjectsHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 
-/// <summary>
-/// Handles retrieval of all Subjects.
-/// Emits structured logs for observability and returns a list of SubjectDto.
-/// </summary>
-public class GetAllSubjectsHandler : IRequestHandler<GetAllSubjectsQuery, List<SubjectDto>>
+public class GetAllSubjectsHandler : IRequestHandler<GetAllSubjectsQuery, PaginatedSubjectsResponse>
 {
     private readonly ISubjectRepository _subjectRepository;
     private readonly IMapper _mapper;
@@ -22,17 +20,25 @@ public class GetAllSubjectsHandler : IRequestHandler<GetAllSubjectsQuery, List<S
         _logger = logger;
     }
 
-    /// <summary>
-    /// Retrieves all subjects.
-    /// </summary>
-    public async Task<List<SubjectDto>> Handle(GetAllSubjectsQuery request, CancellationToken cancellationToken)
+    public async Task<PaginatedSubjectsResponse> Handle(GetAllSubjectsQuery request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Handling GetAllSubjectsQuery");
+        _logger.LogInformation("Handling GetAllSubjectsQuery. Page: {Page}, Size: {Size}, Search: {Search}", request.Page, request.PageSize, request.Search);
 
-        var subjects = await _subjectRepository.GetAllAsync(cancellationToken);
-        var result = _mapper.Map<List<SubjectDto>>(subjects) ?? new List<SubjectDto>();
+        var (subjects, totalCount) = await _subjectRepository.GetPagedSubjectsAsync(request.Search, request.Page, request.PageSize, cancellationToken);
 
-        _logger.LogInformation("Retrieved {Count} subjects", result.Count);
-        return result;
+        var dtos = _mapper.Map<List<SubjectDto>>(subjects) ?? new List<SubjectDto>();
+
+        _logger.LogInformation("Retrieved {Count} subjects out of {Total}", dtos.Count, totalCount);
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
+
+        return new PaginatedSubjectsResponse
+        {
+            Items = dtos,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
     }
 }

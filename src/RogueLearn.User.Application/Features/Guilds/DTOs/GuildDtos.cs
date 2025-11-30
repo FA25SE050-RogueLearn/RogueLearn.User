@@ -9,6 +9,7 @@ public record GuildDto
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public bool IsPublic { get; init; }
+    public bool IsLecturerGuild { get; init; }
     public int MaxMembers { get; init; }
     public Guid CreatedBy { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
@@ -25,6 +26,7 @@ public record GuildFullDto
     public int CurrentMemberCount { get; init; }
     public int MeritPoints { get; init; }
     public bool IsPublic { get; init; }
+    public bool IsLecturerGuild { get; init; }
     public bool RequiresApproval { get; init; }
     public string? BannerImageUrl { get; init; }
     public Guid CreatedBy { get; init; }
@@ -71,6 +73,8 @@ public record GuildInvitationDto
     public InvitationStatus Status { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? RespondedAt { get; init; }
+    public string GuildName { get; init; } = string.Empty;
+    public string InviteeName { get; init; } = string.Empty;
 }
 
 public record GuildJoinRequestDto
@@ -83,6 +87,7 @@ public record GuildJoinRequestDto
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? RespondedAt { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
+    public string RequesterName { get; init; } = string.Empty;
 }
 
 public record GuildDashboardDto

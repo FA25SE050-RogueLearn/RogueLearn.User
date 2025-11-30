@@ -38,6 +38,22 @@ public class CreateGuildCommandHandler : IRequestHandler<CreateGuildCommand, Cre
             throw new Exceptions.BadRequestException("User has already created a guild and cannot create another.");
         }
 
+        // Role-based max members constraints
+        var verifiedLecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
+        var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.CreatorAuthUserId, cancellationToken);
+        var isVerifiedLecturer = verifiedLecturerRole != null && userRoles.Any(ur => ur.RoleId == verifiedLecturerRole.Id);
+        var maxAllowed = isVerifiedLecturer ? 100 : 50;
+        if (request.MaxMembers > maxAllowed)
+        {
+            throw new Exceptions.BadRequestException($"Max guild members cannot exceed {maxAllowed} for your role.");
+        }
+
+        // Ensure max members is greater than current members (creator counts as 1)
+        if (request.MaxMembers <= 1)
+        {
+            throw new Exceptions.BadRequestException("Max members must be greater than the current member count (1).");
+        }
+
         var isPublic = request.Privacy.Equals("public", StringComparison.OrdinalIgnoreCase);
 
         var guild = new Guild
@@ -47,6 +63,7 @@ public class CreateGuildCommandHandler : IRequestHandler<CreateGuildCommand, Cre
             GuildType = GuildType.Study,
             MaxMembers = request.MaxMembers,
             IsPublic = isPublic,
+            IsLecturerGuild = isVerifiedLecturer,
             CreatedBy = request.CreatorAuthUserId,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -95,6 +112,7 @@ public class CreateGuildCommandHandler : IRequestHandler<CreateGuildCommand, Cre
             Name = guild.Name,
             Description = guild.Description,
             IsPublic = guild.IsPublic,
+            IsLecturerGuild = guild.IsLecturerGuild,
             MaxMembers = guild.MaxMembers,
             CreatedBy = guild.CreatedBy,
             CreatedAt = guild.CreatedAt,

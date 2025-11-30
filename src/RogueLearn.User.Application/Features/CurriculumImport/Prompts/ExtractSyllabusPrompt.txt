@@ -10,6 +10,7 @@ Your output MUST conform to this exact structure:
   "approvedDate": "string (YYYY-MM-DD format, from the 'effective date' or 'approved date' in the text)",
   "preRequisite": "string (The raw text of the prerequisites, e.g., 'PRO192, DBI202')",
   "semester": integer (The semester number if available, otherwise null),
+  "technologyStack": "string (The primary programming languages or frameworks taught, e.g., 'C Language', 'Java, Spring Boot', 'React'. Infer this from the content if not explicit)",
   "content": {
     "courseDescription": "string (A concise summary of the course)",
     "courseLearningOutcomes": [
@@ -39,12 +40,13 @@ Your output MUST conform to this exact structure:
 ## CRITICAL RULES ##
 1.  **Output Format:** Return ONLY the raw JSON object. Do not include any commentary, explanations, or markdown fences.
 2.  **Credits Extraction:** You MUST find the numeric value for "NoCredit" in the source text and place it in the top-level `credits` field. This is mandatory.
-3.  **Constructive Questions Placement:**
+3.  **Technology Stack:** You MUST infer the specific programming language (e.g. "C", "Java", "C#") if this is a programming course.
+4.  **Constructive Questions Placement:**
     *   Scan the entire document for all "Constructive Questions" or "CQ" sections.
     *   Extract every question you find and place it into the single, top-level `content.constructiveQuestions` array.
     *   If a question is associated with a specific session number, include that number.
     *   **Deduplication:** Ensure the final `constructiveQuestions` array does not contain duplicate question strings.
-4.  **No Mapped Skills:** Do NOT generate a "mappedSkills" array. This field has been deprecated.
+5.  **No Mapped Skills:** Do NOT generate a "mappedSkills" array. This field has been deprecated.
 
 ## OTHER EXTRACTION RULES ##
 1.  **Subject Identification:** Extract the `subjectCode` and `subjectName`.

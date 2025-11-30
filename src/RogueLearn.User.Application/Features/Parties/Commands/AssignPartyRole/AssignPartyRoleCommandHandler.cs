@@ -46,6 +46,12 @@ public class AssignPartyRoleCommandHandler : IRequestHandler<AssignPartyRoleComm
             throw new UnprocessableEntityException("Cannot assign Leader via role management. Use transfer leadership endpoint.");
         }
 
+        // Safeguards: cannot change an existing Leader via role management
+        if (member.Role == PartyRole.Leader)
+        {
+            throw new UnprocessableEntityException("Cannot modify Leader role via role management. Use transfer leadership endpoint.");
+        }
+
         // Idempotency: if role already equals requested role, return 204 via no-op
         if (member.Role == request.RoleToAssign)
         {

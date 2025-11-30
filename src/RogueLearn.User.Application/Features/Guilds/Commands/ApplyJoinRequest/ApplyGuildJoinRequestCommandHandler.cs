@@ -10,6 +10,8 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
     private readonly IGuildRepository _guildRepository;
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildJoinRequestRepository _joinRequestRepository;
+    private readonly IRoleRepository? _roleRepository;
+    private readonly IUserRoleRepository? _userRoleRepository;
 
     public ApplyGuildJoinRequestCommandHandler(
         IGuildRepository guildRepository,
@@ -19,6 +21,20 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
         _guildRepository = guildRepository;
         _memberRepository = memberRepository;
         _joinRequestRepository = joinRequestRepository;
+    }
+
+    public ApplyGuildJoinRequestCommandHandler(
+        IGuildRepository guildRepository,
+        IGuildMemberRepository memberRepository,
+        IGuildJoinRequestRepository joinRequestRepository,
+        IRoleRepository roleRepository,
+        IUserRoleRepository userRoleRepository)
+    {
+        _guildRepository = guildRepository;
+        _memberRepository = memberRepository;
+        _joinRequestRepository = joinRequestRepository;
+        _roleRepository = roleRepository;
+        _userRoleRepository = userRoleRepository;
     }
 
     public async Task<Unit> Handle(ApplyGuildJoinRequestCommand request, CancellationToken cancellationToken)
@@ -47,24 +63,39 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
             throw new Exceptions.BadRequestException("Guild creators cannot join other guilds.");
         }
 
-        // Capacity check
         var activeCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
-        if (activeCount >= guild.MaxMembers)
+        var cap = guild.MaxMembers;
+        if (_roleRepository != null && _userRoleRepository != null)
         {
-            throw new Exceptions.BadRequestException("Guild is at maximum capacity.");
+            var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+            var master = members.FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+            var verifiedLecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
+            var isMasterVerifiedLecturer = false;
+            if (master != null && verifiedLecturerRole != null)
+            {
+                var masterRoles = await _userRoleRepository.GetRolesForUserAsync(master.AuthUserId, cancellationToken);
+                isMasterVerifiedLecturer = masterRoles.Any(r => r.RoleId == verifiedLecturerRole.Id);
+            }
+            if (!isMasterVerifiedLecturer)
+            {
+                cap = Math.Min(guild.MaxMembers, 50);
+            }
+        }
+        if (activeCount >= cap)
+        {
+            throw new Exceptions.UnprocessableEntityException("Join requests are disabled until a Verified Lecturer is GuildMaster.");
         }
 
         // Check for existing pending request
         var myRequests = await _joinRequestRepository.GetRequestsByRequesterAsync(request.AuthUserId, cancellationToken);
-        var existingPendingForGuild = myRequests.FirstOrDefault(r => r.GuildId == request.GuildId && r.Status == GuildJoinRequestStatus.Pending);
-        if (existingPendingForGuild is not null)
+        var existingForGuild = myRequests.FirstOrDefault(r => r.GuildId == request.GuildId);
+        if (existingForGuild is not null && existingForGuild.Status == GuildJoinRequestStatus.Pending)
         {
             throw new Exceptions.BadRequestException("You already have a pending join request for this guild.");
         }
 
         if (!guild.RequiresApproval && guild.IsPublic)
         {
-            // Auto-join: create membership and record an accepted request for audit
             if (existingMember is null)
             {
                 var newMember = new GuildMember
@@ -77,36 +108,84 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
                 };
                 await _memberRepository.AddAsync(newMember, cancellationToken);
 
-                // Update guild current member count after successful auto-join
                 var newActiveCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
                 guild.CurrentMemberCount = newActiveCount;
                 guild.UpdatedAt = DateTimeOffset.UtcNow;
                 await _guildRepository.UpdateAsync(guild, cancellationToken);
+
+                var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+                var activeOrdered = members
+                    .Where(m => m.Status == MemberStatus.Active)
+                    .OrderByDescending(m => m.ContributionPoints)
+                    .ThenBy(m => m.JoinedAt)
+                    .ToList();
+
+                for (int i = 0; i < activeOrdered.Count; i++)
+                {
+                    activeOrdered[i].RankWithinGuild = i + 1;
+                }
+
+                var nonActive = members.Where(m => m.Status != MemberStatus.Active).ToList();
+                foreach (var m in nonActive)
+                {
+                    m.RankWithinGuild = null;
+                }
+
+                await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
             }
 
-            var acceptedRecord = new GuildJoinRequest
+            if (existingForGuild is null)
             {
-                GuildId = request.GuildId,
-                RequesterId = request.AuthUserId,
-                Message = request.Message,
-                Status = GuildJoinRequestStatus.Accepted,
-                CreatedAt = DateTimeOffset.UtcNow,
-                RespondedAt = DateTimeOffset.UtcNow
-            };
-            await _joinRequestRepository.AddAsync(acceptedRecord, cancellationToken);
+                var acceptedRecord = new GuildJoinRequest
+                {
+                    GuildId = request.GuildId,
+                    RequesterId = request.AuthUserId,
+                    Message = request.Message,
+                    Status = GuildJoinRequestStatus.Accepted,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    RespondedAt = DateTimeOffset.UtcNow
+                };
+                await _joinRequestRepository.AddAsync(acceptedRecord, cancellationToken);
+            }
+            else
+            {
+                existingForGuild.Status = GuildJoinRequestStatus.Accepted;
+                existingForGuild.Message = request.Message;
+                existingForGuild.RespondedAt = DateTimeOffset.UtcNow;
+                await _joinRequestRepository.UpdateAsync(existingForGuild, cancellationToken);
+            }
+
+            var otherRequests = await _joinRequestRepository.GetRequestsByRequesterAsync(request.AuthUserId, cancellationToken);
+            var toRemove = otherRequests.Where(r => r.GuildId != request.GuildId && r.Status == GuildJoinRequestStatus.Pending).Select(r => r.Id).ToList();
+            if (toRemove.Any())
+            {
+                await _joinRequestRepository.DeleteRangeAsync(toRemove, cancellationToken);
+            }
         }
         else
         {
-            // Create a pending request for approval
-            var reqEntity = new GuildJoinRequest
+            if (existingForGuild is null)
             {
-                GuildId = request.GuildId,
-                RequesterId = request.AuthUserId,
-                Message = request.Message,
-                Status = GuildJoinRequestStatus.Pending,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            await _joinRequestRepository.AddAsync(reqEntity, cancellationToken);
+                var reqEntity = new GuildJoinRequest
+                {
+                    GuildId = request.GuildId,
+                    RequesterId = request.AuthUserId,
+                    Message = request.Message,
+                    Status = GuildJoinRequestStatus.Pending,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(14)
+                };
+                await _joinRequestRepository.AddAsync(reqEntity, cancellationToken);
+            }
+            else
+            {
+                existingForGuild.Status = GuildJoinRequestStatus.Pending;
+                existingForGuild.Message = request.Message;
+                existingForGuild.CreatedAt = DateTimeOffset.UtcNow;
+                existingForGuild.RespondedAt = null;
+                existingForGuild.ExpiresAt = DateTimeOffset.UtcNow.AddDays(14);
+                await _joinRequestRepository.UpdateAsync(existingForGuild, cancellationToken);
+            }
         }
 
         return Unit.Value;

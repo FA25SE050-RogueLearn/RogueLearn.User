@@ -1,4 +1,5 @@
 using System.Text;
+using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -7,7 +8,7 @@ namespace RogueLearn.User.Application.Services;
 
 public interface IPromptBuilder
 {
-    Task<string> GenerateAsync(UserProfile userProfile, Class userClass, CancellationToken cancellationToken = default);
+    Task<string> GenerateAsync(UserProfile userProfile, Class userClass, AcademicContext academicContext, CancellationToken cancellationToken = default);
 }
 
 public class UserContextPromptBuilder : IPromptBuilder
@@ -23,7 +24,7 @@ public class UserContextPromptBuilder : IPromptBuilder
         _subjectRepository = subjectRepository;
     }
 
-    public async Task<string> GenerateAsync(UserProfile userProfile, Class userClass, CancellationToken cancellationToken = default)
+    public async Task<string> GenerateAsync(UserProfile userProfile, Class userClass, AcademicContext academicContext, CancellationToken cancellationToken = default)
     {
         var semesterSubjects = (await _semesterSubjectRepository.FindAsync(
             ss => ss.AuthUserId == userProfile.AuthUserId, cancellationToken)).ToList();

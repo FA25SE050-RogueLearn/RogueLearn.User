@@ -1,4 +1,4 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
+// src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
 using Microsoft.AspNetCore.Http;
@@ -82,8 +82,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IUserAchievementRepository, UserAchievementRepository>();
-        // REMOVED: The IUserQuestProgressRepository is no longer needed.
-        // services.AddScoped<IUserQuestProgressRepository, UserQuestProgressRepository>();
         services.AddScoped<IUserSkillRepository, UserSkillRepository>();
         services.AddScoped<IUserSkillRewardRepository, UserSkillRewardRepository>();
 
@@ -121,6 +119,8 @@ public static class ServiceCollectionExtensions
         // Game session repositories (Unity boss fight multiplayer)
         services.AddScoped<IGameSessionRepository, GameSessionRepository>();
         services.AddScoped<IMatchResultRepository, MatchResultRepository>();
+        // ADDED: Register the feedback repository
+        services.AddScoped<IUserQuestStepFeedbackRepository, UserQuestStepFeedbackRepository>();
 
         // Guild repositories
         services.AddScoped<IGuildRepository, GuildRepository>();

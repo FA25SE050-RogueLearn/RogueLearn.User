@@ -9,6 +9,10 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
 {
     private readonly IGuildInvitationRepository _invitationRepository;
     private readonly IUserProfileRepository _userProfileRepository;
+    private readonly IGuildRepository? _guildRepository;
+    private readonly IGuildMemberRepository? _guildMemberRepository;
+    private readonly IRoleRepository? _roleRepository;
+    private readonly IUserRoleRepository? _userRoleRepository;
 
     public InviteGuildMembersCommandHandler(
         IGuildInvitationRepository invitationRepository,
@@ -18,9 +22,49 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
         _userProfileRepository = userProfileRepository;
     }
 
+    public InviteGuildMembersCommandHandler(
+        IGuildInvitationRepository invitationRepository,
+        IUserProfileRepository userProfileRepository,
+        IGuildRepository guildRepository,
+        IGuildMemberRepository guildMemberRepository,
+        IRoleRepository roleRepository,
+        IUserRoleRepository userRoleRepository)
+    {
+        _invitationRepository = invitationRepository;
+        _userProfileRepository = userProfileRepository;
+        _guildRepository = guildRepository;
+        _guildMemberRepository = guildMemberRepository;
+        _roleRepository = roleRepository;
+        _userRoleRepository = userRoleRepository;
+    }
+
     public async Task<InviteGuildMembersResponse> Handle(InviteGuildMembersCommand request, CancellationToken cancellationToken)
     {
         var createdIds = new List<Guid>();
+        if (_guildRepository != null && _guildMemberRepository != null && _roleRepository != null && _userRoleRepository != null)
+        {
+            var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)
+                ?? throw new Application.Exceptions.NotFoundException("Guild", request.GuildId.ToString());
+
+            var master = (await _guildMemberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken))
+                .FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+            var verifiedLecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
+            var isMasterVerifiedLecturer = false;
+            if (master != null && verifiedLecturerRole != null)
+            {
+                var masterRoles = await _userRoleRepository.GetRolesForUserAsync(master.AuthUserId, cancellationToken);
+                isMasterVerifiedLecturer = masterRoles.Any(r => r.RoleId == verifiedLecturerRole.Id);
+            }
+
+            if (!isMasterVerifiedLecturer)
+            {
+                var cap = Math.Min(guild.MaxMembers, 50);
+                if (guild.CurrentMemberCount >= cap)
+                {
+                    throw new Application.Exceptions.UnprocessableEntityException("Invitations are disabled until a Verified Lecturer is GuildMaster.");
+                }
+            }
+        }
         var pending = await _invitationRepository.GetPendingInvitationsByGuildAsync(request.GuildId, cancellationToken);
 
         foreach (var target in request.Targets)

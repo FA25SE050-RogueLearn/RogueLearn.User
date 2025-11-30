@@ -85,7 +85,7 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         _mockPartyMemberRepository.Setup(x => x.UpdateAsync(It.IsAny<PartyMember>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PartyMember m, CancellationToken _) => m);
 
-        var body = new { role = "CoLeader" };
+        var body = new { role = "Member" };
         var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         var response = await _client.PostAsync($"/api/parties/{partyId}/members/{memberId}/roles/assign", content);
@@ -105,7 +105,7 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         _mockPartyMemberRepository.Setup(x => x.IsLeaderAsync(partyId, actorAuthUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        var body = new { role = "CoLeader" };
+        var body = new { role = "Member" };
         var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         var response = await _client.PostAsync($"/api/parties/{partyId}/members/{memberId}/roles/assign", content);
@@ -149,11 +149,11 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         _mockPartyMemberRepository.Setup(x => x.IsLeaderAsync(partyId, actorAuthUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.CoLeader, Status = MemberStatus.Active };
+        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.Member, Status = MemberStatus.Active };
         _mockPartyMemberRepository.Setup(x => x.GetMemberAsync(partyId, memberId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(member);
 
-        var body = new { role = "CoLeader" };
+        var body = new { role = "Member" };
         var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         var response = await _client.PostAsync($"/api/parties/{partyId}/members/{memberId}/roles/assign", content);
@@ -177,7 +177,7 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         _mockPartyMemberRepository.Setup(x => x.UpdateAsync(It.IsAny<PartyMember>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PartyMember m, CancellationToken _) => m);
 
-        var body = new { role = "CoLeader" };
+        var body = new { role = "Member" };
         var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         var response = await _client.PostAsync($"/api/admin/parties/{partyId}/members/{memberId}/roles/assign", content);
@@ -197,7 +197,7 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         _mockPartyMemberRepository.Setup(x => x.GetMemberAsync(partyId, memberId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((PartyMember?)null);
 
-        var body = new { role = "CoLeader" };
+        var body = new { role = "Member" };
         var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         var response = await _client.PostAsync($"/api/admin/parties/{partyId}/members/{memberId}/roles/assign", content);
@@ -217,17 +217,17 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         _mockPartyMemberRepository.Setup(x => x.IsLeaderAsync(partyId, actorAuthUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.CoLeader, Status = MemberStatus.Active };
+        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.Member, Status = MemberStatus.Active };
         _mockPartyMemberRepository.Setup(x => x.GetMemberAsync(partyId, memberId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(member);
         _mockPartyMemberRepository.Setup(x => x.UpdateAsync(It.IsAny<PartyMember>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((PartyMember m, CancellationToken _) => m);
 
-        var body = new { role = "CoLeader" };
+        var body = new { role = "Member" };
         var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         var response = await _client.PostAsync($"/api/parties/{partyId}/members/{memberId}/roles/revoke", content);
-        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        response.StatusCode.Should().Be((HttpStatusCode)422);
     }
 
     [Fact]
@@ -278,29 +278,6 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         response.StatusCode.Should().Be((HttpStatusCode)422);
     }
 
-    [Fact]
-    public async Task RevokePartyRole_Idempotent_ShouldReturnNoContent()
-    {
-        var actorAuthUserId = Guid.NewGuid();
-        var token = GenerateJwtToken(actorAuthUserId, roles: new[] { "User" });
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var partyId = Guid.NewGuid();
-        var memberId = Guid.NewGuid();
-
-        _mockPartyMemberRepository.Setup(x => x.IsLeaderAsync(partyId, actorAuthUserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.Member, Status = MemberStatus.Active };
-        _mockPartyMemberRepository.Setup(x => x.GetMemberAsync(partyId, memberId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(member);
-
-        var body = new { role = "CoLeader" }; // member does not have CoLeader, revoke is no-op
-        var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-
-        var response = await _client.PostAsync($"/api/parties/{partyId}/members/{memberId}/roles/revoke", content);
-        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-    }
 
     [Fact]
     public async Task GetPartyMemberRoles_ShouldReturnRolesList()
@@ -312,7 +289,7 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         var partyId = Guid.NewGuid();
         var memberId = Guid.NewGuid();
 
-        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.CoLeader, Status = MemberStatus.Active };
+        var member = new PartyMember { PartyId = partyId, AuthUserId = memberId, Role = PartyRole.Member, Status = MemberStatus.Active };
         _mockPartyMemberRepository.Setup(x => x.GetMemberAsync(partyId, memberId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(member);
 
@@ -324,7 +301,7 @@ public class PartiesControllerRoleTests : IClassFixture<WebApplicationFactory<Pr
         options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
         var roles = JsonSerializer.Deserialize<List<PartyRole>>(content, options);
         roles.Should().NotBeNull();
-        roles!.Should().ContainSingle().Which.Should().Be(PartyRole.CoLeader);
+        roles!.Should().ContainSingle().Which.Should().Be(PartyRole.Member);
     }
 
     [Fact]

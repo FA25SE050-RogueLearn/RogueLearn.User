@@ -39,6 +39,7 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
         {
             if (entry.AuthUserId == Guid.Empty)
             {
+                _logger.LogWarning("Invalid AuthUserId: {AuthUserId}", entry.AuthUserId);
                 result.Errors.Add("invalid auth_user_id");
                 continue;
             }
@@ -46,6 +47,7 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
             var user = await _userProfileRepository.GetByAuthIdAsync(entry.AuthUserId, cancellationToken);
             if (user is null)
             {
+                _logger.LogWarning("User not found: {AuthUserId}", entry.AuthUserId);
                 result.Errors.Add($"user not found: {entry.AuthUserId}");
                 continue;
             }
@@ -53,17 +55,23 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
             var achievement = await _achievementRepository.FirstOrDefaultAsync(a => a.Key == entry.AchievementKey, cancellationToken);
             if (achievement is null)
             {
+                _logger.LogWarning("Achievement not found: {AchievementKey}", entry.AchievementKey);
                 result.Errors.Add($"achievement not found: {entry.AchievementKey}");
                 continue;
             }
 
-            var alreadyEarned = await _userAchievementRepository.AnyAsync(
-                ua => ua.AuthUserId == user.AuthUserId && ua.AchievementId == achievement.Id,
-                cancellationToken);
-            if (alreadyEarned)
+            var shouldAllowDuplicate = achievement.IsMedal;
+            if (!shouldAllowDuplicate)
             {
-                result.Errors.Add($"already earned: user={user.AuthUserId}, key={entry.AchievementKey}");
-                continue;
+                var alreadyEarned = await _userAchievementRepository.AnyAsync(
+                    ua => ua.AuthUserId == user.AuthUserId && ua.AchievementId == achievement.Id,
+                    cancellationToken);
+                if (alreadyEarned)
+                {
+                    _logger.LogWarning("--------------------User already earned achievement: user={AuthUserId}, key={AchievementKey}-----------------------", user.AuthUserId, entry.AchievementKey);
+                    result.Errors.Add($"already earned: user={user.AuthUserId}, key={entry.AchievementKey}");
+                    continue;
+                }
             }
 
             var userAchievement = new UserAchievement
@@ -72,7 +80,7 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
                 AuthUserId = user.AuthUserId,
                 AchievementId = achievement.Id,
                 EarnedAt = DateTimeOffset.UtcNow,
-                Context = null
+                Context = entry.Context
             };
 
             await _userAchievementRepository.AddAsync(userAchievement, cancellationToken);
@@ -86,6 +94,7 @@ public class GrantAchievementsCommandHandler : IRequestHandler<GrantAchievements
                 var memberships = await _guildMemberRepository.GetMembershipsByUserAsync(user.AuthUserId, cancellationToken);
                 foreach (var m in memberships.Where(x => x.Status == RogueLearn.User.Domain.Enums.MemberStatus.Active))
                 {
+                    _logger.LogInformation("-------------------------Updating contribution points for guild={GuildId}, user={AuthUserId}, delta={ContributionDelta}-------------------------", m.GuildId, user.AuthUserId, contributionDelta);
                     await _mediator.Send(new UpdateMemberContributionPointsCommand(m.GuildId, user.AuthUserId, contributionDelta), cancellationToken);
                 }
             }

@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestLineFromCurriculum/GenerateQuestLineCommandHandler.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestLine/GenerateQuestLineCommandHandler.cs
 // ⭐ FIXED: Use class_specialization_subjects.semester for class subjects
 
 using MediatR;
@@ -214,14 +214,17 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             int questSequence = 1;
             foreach (var subject in subjectsInSemester.OrderBy(s => s.SubjectCode))
             {
+                // Determine recommendation status based on academic record
+                var recommendationReason = DetermineRecommendationReason(userSemesterSubjects, subject.Id);
+                // Rule: Only recommend if explicitly studying or failed. "Passed" or "Not Started" are not recommended.
+                bool isRecommended = recommendationReason == "Studying" || recommendationReason == "Failed";
+
                 if (!currentSubjectIdsWithQuests.Contains(subject.Id))
                 {
-                    // Get recommendation reason based on student's status for this subject
-                    var recommendationReason = DetermineRecommendationReason(userSemesterSubjects, subject.Id);
-
                     // This subject is in the ideal curriculum but doesn't have a quest yet. Create one.
-                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} ({SubjectName}) - Semester {Semester} - with recommendation: {Reason}",
-                        subject.SubjectCode, subject.SubjectName, semesterNumber, recommendationReason);
+                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} ({SubjectName}) - Semester {Semester} - with recommendation: {Reason} (IsRecommended: {IsRec})",
+                        subject.SubjectCode, subject.SubjectName, semesterNumber, recommendationReason, isRecommended);
+
                     var newQuest = new Quest
                     {
                         Title = subject.SubjectCode + ": " + subject.SubjectName,
@@ -232,23 +235,51 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                         SubjectId = subject.Id,
                         Sequence = questSequence++,
                         Status = QuestStatus.NotStarted,
-                        IsActive = true, // New quests are active by default
+                        IsActive = true,
                         CreatedBy = userProfile.AuthUserId,
-                        IsRecommended = true,
+                        IsRecommended = isRecommended,
                         RecommendationReason = recommendationReason
                     };
                     await _questRepository.AddAsync(newQuest, cancellationToken);
                 }
                 else
                 {
-                    // If the quest already exists, ensure its sequence is correct
+                    // Update existing quest with new sequence and recommendation status
                     var existingQuest = currentQuests.First(q => q.SubjectId == subject.Id);
-                    if (existingQuest.Sequence != questSequence || !existingQuest.IsActive)
+                    bool needsUpdate = false;
+
+                    // Update sequence if changed
+                    if (existingQuest.Sequence != questSequence)
                     {
                         existingQuest.Sequence = questSequence;
-                        existingQuest.IsActive = true; // Re-activate if it was previously archived
+                        needsUpdate = true;
+                    }
+
+                    // Reactivate if archived
+                    if (!existingQuest.IsActive)
+                    {
+                        existingQuest.IsActive = true;
+                        needsUpdate = true;
+                    }
+
+                    // Update recommendation status if changed (e.g. status changed from Studying to Passed)
+                    if (existingQuest.IsRecommended != isRecommended)
+                    {
+                        existingQuest.IsRecommended = isRecommended;
+                        needsUpdate = true;
+                    }
+
+                    if (existingQuest.RecommendationReason != recommendationReason)
+                    {
+                        existingQuest.RecommendationReason = recommendationReason;
+                        needsUpdate = true;
+                    }
+
+                    if (needsUpdate)
+                    {
                         await _questRepository.UpdateAsync(existingQuest, cancellationToken);
                     }
+
                     questSequence++;
                 }
             }
@@ -288,7 +319,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
 
         if (studentSubject == null)
         {
-            return "Recommended";
+            return "Recommended"; // Not Started / Suggested
         }
 
         return studentSubject.Status switch

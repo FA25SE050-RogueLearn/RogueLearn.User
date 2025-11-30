@@ -17,6 +17,11 @@ public class ConfigurePartySettingsCommandHandler : IRequestHandler<ConfigurePar
         var party = await _partyRepository.GetByIdAsync(request.PartyId, cancellationToken)
             ?? throw new Application.Exceptions.NotFoundException("Party", request.PartyId.ToString());
 
+        if (request.MaxMembers <= party.CurrentMemberCount)
+        {
+            throw new Application.Exceptions.BadRequestException("Max members must be greater than the current member count.");
+        }
+
         party.Name = request.Name;
         party.Description = request.Description;
         party.IsPublic = request.Privacy.Equals("public", StringComparison.OrdinalIgnoreCase);

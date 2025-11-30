@@ -34,20 +34,19 @@ public class AssignRoleToUserCommandHandlerTests
     public async Task Handle_ValidRequest_ShouldAssignRoleSuccessfully()
     {
         // Arrange
-        var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
         var authUserId = Guid.NewGuid();
 
         var command = new AssignRoleToUserCommand
         {
-            UserId = userId,
+            AuthUserId = authUserId,
             RoleId = roleId
         };
 
-        var user = new UserProfile { Id = userId, AuthUserId = authUserId };
+        var user = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authUserId };
         var role = new Role { Id = roleId, Name = "TestRole" };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(authUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _mockRoleRepository.Setup(x => x.GetByIdAsync(roleId, It.IsAny<CancellationToken>()))
@@ -74,11 +73,11 @@ public class AssignRoleToUserCommandHandlerTests
         // Arrange
         var command = new AssignRoleToUserCommand
         {
-            UserId = Guid.NewGuid(),
+            AuthUserId = Guid.NewGuid(),
             RoleId = Guid.NewGuid()
         };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(command.UserId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(command.AuthUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((UserProfile?)null);
 
         // Act & Assert
@@ -86,25 +85,25 @@ public class AssignRoleToUserCommandHandlerTests
             () => _handler.Handle(command, CancellationToken.None));
 
         exception.Message.Should().Contain("User");
-        exception.Message.Should().Contain(command.UserId.ToString());
+        exception.Message.Should().Contain(command.AuthUserId.ToString());
     }
 
     [Fact]
     public async Task Handle_RoleNotFound_ShouldThrowNotFoundException()
     {
         // Arrange
-        var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
+        var authUserId = Guid.NewGuid();
 
         var command = new AssignRoleToUserCommand
         {
-            UserId = userId,
+            AuthUserId = authUserId,
             RoleId = roleId
         };
 
-        var user = new UserProfile { Id = userId, AuthUserId = Guid.NewGuid() };
+        var user = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authUserId };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(authUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _mockRoleRepository.Setup(x => x.GetByIdAsync(roleId, It.IsAny<CancellationToken>()))
@@ -122,21 +121,20 @@ public class AssignRoleToUserCommandHandlerTests
     public async Task Handle_UserAlreadyHasRole_ShouldThrowBadRequestException()
     {
         // Arrange
-        var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
         var authUserId = Guid.NewGuid();
 
         var command = new AssignRoleToUserCommand
         {
-            UserId = userId,
+            AuthUserId = authUserId,
             RoleId = roleId
         };
 
-        var user = new UserProfile { Id = userId, AuthUserId = authUserId };
+        var user = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authUserId };
         var role = new Role { Id = roleId, Name = "TestRole" };
         var existingUserRole = new UserRole { AuthUserId = authUserId, RoleId = roleId };
 
-        _mockUserProfileRepository.Setup(x => x.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+        _mockUserProfileRepository.Setup(x => x.GetByAuthIdAsync(authUserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
         _mockRoleRepository.Setup(x => x.GetByIdAsync(roleId, It.IsAny<CancellationToken>()))

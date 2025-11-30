@@ -119,6 +119,7 @@ message Achievement {
   int32 version = 10;
   bool is_active = 11;
   string source_service = 12;
+  bool is_medal = 13;
 }
 
 message AchievementList {
@@ -185,6 +186,7 @@ message GrantAchievementsRequest {
 message UserAchievementGrant {
   string user_id = 1;
   string achievement_key = 2;
+  string context = 3;
 }
 
 message GrantAchievementsResponse {

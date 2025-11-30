@@ -25,21 +25,16 @@ public class LeavePartyCommandHandler : IRequestHandler<LeavePartyCommand, Unit>
             var activeCount = await _memberRepository.CountActiveMembersAsync(request.PartyId, cancellationToken);
             if (activeCount > 1)
             {
-                // Transfer ownership to the next highest role (CoLeader if any, otherwise Member)
+                // Transfer ownership to the next highest role (Member)
                 var members = await _memberRepository.GetMembersByPartyAsync(request.PartyId, cancellationToken);
                 var eligible = members
                     .Where(m => m.Status == MemberStatus.Active && m.AuthUserId != request.AuthUserId)
                     .ToList();
 
-                // Prefer CoLeader over Member; if multiple, choose earliest joined
                 var nextOwner = eligible
-                    .Where(m => m.Role == PartyRole.CoLeader)
+                    .Where(m => m.Role == PartyRole.Member)
                     .OrderBy(m => m.JoinedAt)
-                    .FirstOrDefault()
-                    ?? eligible
-                        .Where(m => m.Role == PartyRole.Member)
-                        .OrderBy(m => m.JoinedAt)
-                        .FirstOrDefault();
+                    .FirstOrDefault();
 
                 if (nextOwner == null)
                 {

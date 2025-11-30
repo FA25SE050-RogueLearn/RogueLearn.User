@@ -45,4 +45,7 @@ public class Achievement : BaseEntity
 
     [Column("contribution_points_reward")]
     public int? ContributionPointsReward { get; set; }
+
+    [Column("is_medal")]
+    public bool IsMedal { get; set; } = true;
 }

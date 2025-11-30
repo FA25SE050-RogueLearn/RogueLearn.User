@@ -73,11 +73,37 @@ public class ApproveGuildJoinRequestCommandHandler : IRequestHandler<ApproveGuil
             };
             await _memberRepository.AddAsync(newMember, cancellationToken);
 
-            // Update guild current member count after successful addition
             var newActiveCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
             guild.CurrentMemberCount = newActiveCount;
             guild.UpdatedAt = DateTimeOffset.UtcNow;
             await _guildRepository.UpdateAsync(guild, cancellationToken);
+
+            var members = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+            var activeOrdered = members
+                .Where(m => m.Status == MemberStatus.Active)
+                .OrderByDescending(m => m.ContributionPoints)
+                .ThenBy(m => m.JoinedAt)
+                .ToList();
+
+            for (int i = 0; i < activeOrdered.Count; i++)
+            {
+                activeOrdered[i].RankWithinGuild = i + 1;
+            }
+
+            var nonActive = members.Where(m => m.Status != MemberStatus.Active).ToList();
+            foreach (var m in nonActive)
+            {
+                m.RankWithinGuild = null;
+            }
+
+            await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
+
+            var otherRequests = await _joinRequestRepository.GetRequestsByRequesterAsync(joinReq.RequesterId, cancellationToken);
+            var toRemove = otherRequests.Where(r => r.GuildId != request.GuildId && r.Status == GuildJoinRequestStatus.Pending).Select(r => r.Id).ToList();
+            if (toRemove.Any())
+            {
+                await _joinRequestRepository.DeleteRangeAsync(toRemove, cancellationToken);
+            }
         }
 
         joinReq.Status = GuildJoinRequestStatus.Accepted;
