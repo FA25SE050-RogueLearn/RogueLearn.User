@@ -231,23 +231,22 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    app.Use(async (context, next) =>
-    {
-
-        var body = string.Empty;
-        if (context.Request.Body.CanSeek)
-        {
-            context.Request.Body.Position = 0;
-            using (var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true))
-            {
-                body = await reader.ReadToEndAsync();
-            }
-            context.Request.Body.Position = 0;
-            Console.WriteLine($"[MIDDLEWARE] Body length: {body.Length}, Preview: {(body.Length > 100 ? body.Substring(0, 100) : body)}");
-        }
-
-        await next();
-    });
+    // Debug middleware - commented out to reduce log noise
+    // app.Use(async (context, next) =>
+    // {
+    //     var body = string.Empty;
+    //     if (context.Request.Body.CanSeek)
+    //     {
+    //         context.Request.Body.Position = 0;
+    //         using (var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true))
+    //         {
+    //             body = await reader.ReadToEndAsync();
+    //         }
+    //         context.Request.Body.Position = 0;
+    //         Console.WriteLine($"[MIDDLEWARE] Body length: {body.Length}, Preview: {(body.Length > 100 ? body.Substring(0, 100) : body)}");
+    //     }
+    //     await next();
+    // });
     app.MapControllers();
 
     app.MapGrpcService<RogueLearn.User.Api.GrpcServices.UserProfilesGrpcService>();

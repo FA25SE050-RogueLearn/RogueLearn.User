@@ -8,4 +8,6 @@ public interface IGameSessionRepository : IGenericRepository<GameSession>
     Task<GameSession?> GetBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task<GameSession?> GetByJoinCodeAsync(string joinCode, CancellationToken cancellationToken = default);
     Task<List<GameSession>> GetRecentSessionsAsync(int limit = 10, CancellationToken cancellationToken = default);
+    Task<List<GameSession>> GetRecentSessionsByUserAsync(Guid userId, int limit = 10, CancellationToken cancellationToken = default);
+    Task<GameSession?> GetByMatchResultIdAsync(Guid matchResultId, CancellationToken cancellationToken = default);
 }
