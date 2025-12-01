@@ -16,7 +16,7 @@ namespace RogueLearn.User.Api.Controllers;
 [ApiController]
 [Route("api/admin/skills")]
 [AdminOnly]
-public class AdminSkillsController : ControllerBase // RENAMED for clarity
+public class AdminSkillsController : ControllerBase
 {
     private readonly IMediator _mediator;
 
@@ -24,8 +24,6 @@ public class AdminSkillsController : ControllerBase // RENAMED for clarity
     {
         _mediator = mediator;
     }
-
-    // REMOVED: GetSkillTree method has been moved to the new user-facing SkillsController.
 
     [HttpGet]
     [ProducesResponseType(typeof(GetSkillsResponse), StatusCodes.Status200OK)]

@@ -1,9 +1,8 @@
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
-using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
 
-namespace RogueLearn.User.Application.Features.GuildPosts.Commands.AdminActions;
+namespace RogueLearn.User.Application.Features.GuildPosts.Commands.GuildMasterActions;
 
 public class PinGuildPostCommandHandler : IRequestHandler<PinGuildPostCommand, Unit>
 {
@@ -55,34 +54,6 @@ public class UnlockGuildPostCommandHandler : IRequestHandler<UnlockGuildPostComm
     {
         var post = await _repo.GetByIdAsync(request.GuildId, request.PostId, cancellationToken) ?? throw new NotFoundException("GuildPost", request.PostId.ToString());
         post.IsLocked = false;
-        post.UpdatedAt = DateTimeOffset.UtcNow;
-        await _repo.UpdateAsync(post, cancellationToken);
-        return Unit.Value;
-    }
-}
-
-public class ApproveGuildPostCommandHandler : IRequestHandler<ApproveGuildPostCommand, Unit>
-{
-    private readonly IGuildPostRepository _repo;
-    public ApproveGuildPostCommandHandler(IGuildPostRepository repo) => _repo = repo;
-    public async Task<Unit> Handle(ApproveGuildPostCommand request, CancellationToken cancellationToken)
-    {
-        var post = await _repo.GetByIdAsync(request.GuildId, request.PostId, cancellationToken) ?? throw new NotFoundException("GuildPost", request.PostId.ToString());
-        post.Status = GuildPostStatus.published;
-        post.UpdatedAt = DateTimeOffset.UtcNow;
-        await _repo.UpdateAsync(post, cancellationToken);
-        return Unit.Value;
-    }
-}
-
-public class RejectGuildPostCommandHandler : IRequestHandler<RejectGuildPostCommand, Unit>
-{
-    private readonly IGuildPostRepository _repo;
-    public RejectGuildPostCommandHandler(IGuildPostRepository repo) => _repo = repo;
-    public async Task<Unit> Handle(RejectGuildPostCommand request, CancellationToken cancellationToken)
-    {
-        var post = await _repo.GetByIdAsync(request.GuildId, request.PostId, cancellationToken) ?? throw new NotFoundException("GuildPost", request.PostId.ToString());
-        post.Status = GuildPostStatus.rejected;
         post.UpdatedAt = DateTimeOffset.UtcNow;
         await _repo.UpdateAsync(post, cancellationToken);
         return Unit.Value;

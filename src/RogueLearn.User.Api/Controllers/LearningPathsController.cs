@@ -3,12 +3,8 @@ using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-// MODIFICATION: The following using statements are no longer needed and have been removed.
-// using RogueLearn.User.Application.Features.LearningPaths.Commands.AnalyzeLearningGap;
-// using RogueLearn.User.Application.Features.LearningPaths.Commands.ForgeLearningPath;
 using RogueLearn.User.Application.Features.LearningPaths.Commands.DeleteLearningPath;
 using RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
-using RogueLearn.User.Application.Models;
 using RogueLearn.User.Api.Attributes;
 
 namespace RogueLearn.User.Api.Controllers;
