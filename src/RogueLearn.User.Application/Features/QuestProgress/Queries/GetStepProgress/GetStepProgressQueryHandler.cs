@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.QuestProgress.Queries.GetStepProgress;
 
-public class GetStepProgressQueryHandler : IRequestHandler<GetStepProgressQuery, GetStepProgressResponse>
+public class GetStepProgressQueryHandler : IRequestHandler<GetStepProgressQuery, GetStepProgressResponse?>
 {
     private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
@@ -125,7 +125,7 @@ public class GetStepProgressQueryHandler : IRequestHandler<GetStepProgressQuery,
             if (content.GetType().Name == "JObject")
             {
                 var jObjectJson = content.ToString();
-                using (var doc = JsonDocument.Parse(jObjectJson))
+                using (var doc = JsonDocument.Parse(jObjectJson!))
                 {
                     var root = doc.RootElement;
                     if (root.TryGetProperty("activities", out var activitiesElement) &&

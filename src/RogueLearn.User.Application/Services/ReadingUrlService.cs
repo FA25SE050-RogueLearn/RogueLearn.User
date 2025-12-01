@@ -260,7 +260,7 @@ public class ReadingUrlService : IReadingUrlService
         {
             _logger.LogInformation("🤖 Generating queries via LLM for '{Topic}'", topic);
             var response = await _aiQueryService.GenerateQueryVariantsAsync(
-                topic, subjectContext, category, cancellationToken);
+                topic, subjectContext!, category, cancellationToken);
             return response ?? new List<string>();
         }
         catch (Exception ex)

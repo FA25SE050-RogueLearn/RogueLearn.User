@@ -22,7 +22,7 @@ public class CompletedActivitiesDto
 public class ActivityProgressDto
 {
     public Guid ActivityId { get; set; }
-    public string ActivityType { get; set; } // Reading, Quiz, KnowledgeCheck, Coding
+    public string ActivityType { get; set; } = string.Empty; // Reading, Quiz, KnowledgeCheck, Coding
     public bool IsCompleted { get; set; }
     public string? Title { get; set; }
     public int ExperiencePoints { get; set; }

@@ -14,7 +14,7 @@ public class GetStepProgressResponse
 {
     public Guid StepId { get; set; }
     public string? StepTitle { get; set; }
-    public string Status { get; set; } // InProgress, Completed
+    public string Status { get; set; } = string.Empty; // InProgress, Completed
     public int CompletedActivitiesCount { get; set; }
     public int TotalActivitiesCount { get; set; }
     public DateTime? StartedAt { get; set; }

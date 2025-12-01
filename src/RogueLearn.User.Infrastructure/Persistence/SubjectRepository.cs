@@ -2,14 +2,8 @@
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using Supabase.Postgrest;
 using Supabase.Postgrest.Interfaces;
 using Client = Supabase.Client;
-using Supabase;
-using static Supabase.Postgrest.Constants;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using static Supabase.Postgrest.Constants;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
@@ -118,7 +112,7 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var filter = $"subject_name.ilike.%{search}%,subject_code.ilike.%{search}%";
-                return table.Filter((string)null, Operator.Or, filter);
+                return table.Filter(string.Empty, Operator.Or, filter);
             }
             return table;
         }

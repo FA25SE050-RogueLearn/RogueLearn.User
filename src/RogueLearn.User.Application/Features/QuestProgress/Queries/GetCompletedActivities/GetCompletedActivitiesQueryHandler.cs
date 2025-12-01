@@ -122,7 +122,7 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
             if (content.GetType().Name == "JObject")
             {
                 var jObjectJson = content.ToString();
-                using (var doc = JsonDocument.Parse(jObjectJson))
+                using (var doc = JsonDocument.Parse(jObjectJson!))
                 {
                     var root = doc.RootElement;
                     if (root.TryGetProperty("activities", out var activitiesElement) &&
