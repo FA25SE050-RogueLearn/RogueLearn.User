@@ -206,7 +206,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
     {
         _logger.LogInformation(
             "🔍 PHASE 3: Starting URL enrichment with batch query generation for {Count} sessions",
-            syllabusData.Content.SessionSchedule.Count);
+            syllabusData.Content.SessionSchedule!.Count);
 
         // STEP 1: Classify subject category
         var subjectCategory = await _aiQueryService.ClassifySubjectAsync(
@@ -249,7 +249,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 sessionDtos,
                 subjectContext,
                 subjectCategory,
-                technologyKeywords,  // ✅ NEW: Pass technology keywords to AI service
+                technologyKeywords!,  // ✅ NEW: Pass technology keywords to AI service
                 cancellationToken);
 
             _logger.LogInformation(

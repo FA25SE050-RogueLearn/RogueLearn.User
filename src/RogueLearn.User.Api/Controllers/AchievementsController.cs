@@ -4,7 +4,6 @@ using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.Achievements.Commands.CreateAchievement;
 using RogueLearn.User.Application.Features.Achievements.Commands.UpdateAchievement;
 using RogueLearn.User.Application.Features.Achievements.Commands.DeleteAchievement;
-using RogueLearn.User.Application.Features.Achievements.Commands.GrantAchievements;
 using RogueLearn.User.Application.Features.Achievements.Queries.GetAllAchievements;
 using RogueLearn.User.Application.Interfaces;
 
@@ -120,18 +119,5 @@ public class AchievementsController : ControllerBase
     {
         await _mediator.Send(new DeleteAchievementCommand { Id = id });
         return NoContent();
-    }
-
-    /// <summary>
-    /// Grant achievements to users by achievement key (batch)
-    /// </summary>
-    [HttpPost("grant")]
-    [ProducesResponseType(typeof(GrantAchievementsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<GrantAchievementsResponse>> Grant([FromBody] GrantAchievementsCommand command)
-    {
-        var result = await _mediator.Send(command);
-        return Ok(result);
     }
 }

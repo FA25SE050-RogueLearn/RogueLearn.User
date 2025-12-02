@@ -2,15 +2,9 @@
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using Supabase.Postgrest;
 using Supabase.Postgrest.Interfaces;
 using Client = Supabase.Client;
-using Supabase;
 using static Supabase.Postgrest.Constants;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Supabase.Postgrest.Models;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 

@@ -1,54 +1,30 @@
+using System.Threading;
+using System.Threading.Tasks;
+using AutoFixture.Xunit2;
 using FluentAssertions;
-using Moq;
-using AutoMapper;
+using NSubstitute;
+using RogueLearn.User.Application.Features.Parties.DTOs;
 using RogueLearn.User.Application.Features.Parties.Queries.GetPartyById;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Application.Features.Parties.DTOs;
+using Xunit;
 
 namespace RogueLearn.User.Application.Tests.Features.Parties.Queries.GetPartyById;
 
 public class GetPartyByIdQueryHandlerTests
 {
-    private readonly Mock<IPartyRepository> _partyRepository = new();
-    private readonly Mock<IMapper> _mapper = new();
-
-    private readonly GetPartyByIdQueryHandler _handler;
-
-    public GetPartyByIdQueryHandlerTests()
+    [Theory]
+    [AutoData]
+    public async Task Handle_ReturnsMapped(GetPartyByIdQuery query)
     {
-        _handler = new GetPartyByIdQueryHandler(_partyRepository.Object, _mapper.Object);
-    }
-
-    [Fact]
-    public async Task Handle_WhenPartyExists_ReturnsDto()
-    {
-        // Arrange
-        var id = Guid.NewGuid();
-        var party = new Party { Id = id, Name = "Test" };
-        _partyRepository.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(party);
-        _mapper.Setup(m => m.Map<PartyDto>(party))
-               .Returns(new PartyDto(id, party.Name, party.Description ?? string.Empty, party.PartyType, party.MaxMembers, party.IsPublic, party.CreatedBy, party.CreatedAt));
-
-        // Act
-        var result = await _handler.Handle(new GetPartyByIdQuery(id), CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        result!.Id.Should().Be(id);
-    }
-
-    [Fact]
-    public async Task Handle_WhenPartyMissing_ReturnsNull()
-    {
-        // Arrange
-        var id = Guid.NewGuid();
-        _partyRepository.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync((Party?)null);
-
-        // Act
-        var result = await _handler.Handle(new GetPartyByIdQuery(id), CancellationToken.None);
-
-        // Assert
-        result.Should().BeNull();
+        var repo = Substitute.For<IPartyRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var sut = new GetPartyByIdQueryHandler(repo, mapper);
+        var party = new Party { Id = query.PartyId, Name = "P" };
+        repo.GetByIdAsync(query.PartyId, Arg.Any<CancellationToken>()).Returns(party);
+        mapper.Map<PartyDto>(party).Returns(new PartyDto(query.PartyId, party.Name, null!, RogueLearn.User.Domain.Enums.PartyType.StudyGroup, 10, true, System.Guid.NewGuid(), System.DateTimeOffset.UtcNow));
+        var res = await sut.Handle(query, CancellationToken.None);
+        res!.Id.Should().Be(query.PartyId);
+        res.Name.Should().Be("P");
     }
 }

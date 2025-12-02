@@ -21,28 +21,18 @@ public class DeleteGuildPostCommentCommandHandler : IRequestHandler<DeleteGuildP
         var comment = await _commentRepository.GetByIdAsync(request.CommentId, cancellationToken) ?? throw new NotFoundException("GuildPostComment", request.CommentId.ToString());
 
         var isOwner = comment.AuthorId == request.RequesterId;
-        if (!isOwner && !request.HardDelete)
+        if (!isOwner)
         {
             throw new ForbiddenException("Not allowed");
         }
 
-        if (request.HardDelete)
-        {
-            await _commentRepository.DeleteAsync(comment.Id, cancellationToken);
-        }
-        else
-        {
-            comment.DeletedAt = DateTimeOffset.UtcNow;
-            comment.UpdatedAt = DateTimeOffset.UtcNow;
-            await _commentRepository.UpdateAsync(comment, cancellationToken);
-        }
+        comment.DeletedAt = DateTimeOffset.UtcNow;
+        comment.UpdatedAt = DateTimeOffset.UtcNow;
+        await _commentRepository.UpdateAsync(comment, cancellationToken);
 
-        if (!request.HardDelete)
-        {
-            post.CommentCount = Math.Max(0, post.CommentCount - 1);
-            post.UpdatedAt = DateTimeOffset.UtcNow;
-            await _postRepository.UpdateAsync(post, cancellationToken);
-        }
+        post.CommentCount = Math.Max(0, post.CommentCount - 1);
+        post.UpdatedAt = DateTimeOffset.UtcNow;
+        await _postRepository.UpdateAsync(post, cancellationToken);
 
         return Unit.Value;
     }

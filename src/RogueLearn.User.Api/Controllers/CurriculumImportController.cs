@@ -1,11 +1,8 @@
 // RogueLearn.User/src/RogueLearn.User.Api/Controllers/CurriculumImportController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
 using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum;
-using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateCurriculum;
-using RogueLearn.User.Application.Features.CurriculumImport.Queries.ValidateSyllabus;
 using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -20,12 +17,10 @@ namespace RogueLearn.User.Api.Controllers;
 public class CurriculumImportController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly ICurriculumImportStorage _curriculumImportStorage;
 
-    public CurriculumImportController(IMediator mediator, ICurriculumImportStorage curriculumImportStorage)
+    public CurriculumImportController(IMediator mediator)
     {
         _mediator = mediator;
-        _curriculumImportStorage = curriculumImportStorage;
     }
 
     /// <summary>
@@ -57,97 +52,5 @@ public class CurriculumImportController : ControllerBase
         }
 
         return BadRequest(result);
-    }
-
-
-
-    /// <summary>
-    /// Validates curriculum data from raw text without importing it.
-    /// </summary>
-    /// <param name="rawText">The validation query containing raw curriculum text.</param>
-    /// <returns>Validation result with extracted data and any validation errors</returns>
-    /// <response code="200">Validation completed (may contain validation errors in response)</response>
-    /// <response code="400">Invalid request data</response>
-    [HttpPost("curriculum/validate")]
-    [AllowAnonymous] // TEMP: Allow local testing without auth
-    [Consumes("multipart/form-data")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ValidateCurriculum([FromForm] string rawText)
-    {
-        if (string.IsNullOrWhiteSpace(rawText))
-        {
-            return BadRequest("Raw text is required");
-        }
-
-        var query = new ValidateCurriculumQuery { RawText = rawText };
-
-        var result = await _mediator.Send(query);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Validates syllabus data from raw text without importing it.
-    /// </summary>
-    /// <param name="rawText">The validation query containing raw syllabus text.</param>
-    /// <returns>Validation result with extracted data and any validation errors</returns>
-    /// <response code="200">Validation completed (may contain validation errors in response)</response>
-    /// <response code="400">Invalid request data</response>
-    [HttpPost("syllabus/validate")]
-    [AllowAnonymous] // TEMP: Allow local testing without auth
-    [Consumes("multipart/form-data")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ValidateSyllabus([FromForm] string rawText)
-    {
-        if (string.IsNullOrWhiteSpace(rawText))
-        {
-            return BadRequest("Raw text is required");
-        }
-
-        var query = new ValidateSyllabusQuery { RawText = rawText };
-
-        var result = await _mediator.Send(query);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Clears cached curriculum data by hash to force re-processing.
-    /// </summary>
-    [HttpDelete("curriculum/cache/{rawTextHash}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ClearCurriculumCache(string rawTextHash)
-    {
-        if (string.IsNullOrWhiteSpace(rawTextHash))
-        {
-            return BadRequest("Raw text hash is required");
-        }
-
-        var success = await _curriculumImportStorage.ClearCacheByHashAsync("curriculum-imports", rawTextHash);
-
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Clears all cached curriculum data for a specific program and version.
-    /// </summary>
-    [HttpDelete("curriculum/cache/{programCode}/{versionCode}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ClearProgramVersionCache(string programCode, string versionCode)
-    {
-        if (string.IsNullOrWhiteSpace(programCode) || string.IsNullOrWhiteSpace(versionCode))
-        {
-            return BadRequest("Program code and version code are required");
-        }
-
-        var success = await _curriculumImportStorage.ClearCacheForProgramVersionAsync("curriculum-imports", programCode, versionCode);
-
-        return NoContent();
     }
 }

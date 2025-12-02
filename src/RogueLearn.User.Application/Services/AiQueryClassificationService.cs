@@ -150,7 +150,7 @@ public class AiQueryClassificationService : IAiQueryClassificationService
              combined.Contains(".net programming")) &&
             !combined.Contains("theory only"))
         {
-            _logger.LogInformation("✅ Fallback heuristic matched: {Name} → Programming");
+            _logger.LogInformation("✅ Fallback heuristic matched: {Name} → Programming", subjectName);
             await _memoryStore.SetAsync(cacheKey, "Programming", cancellationToken);
             return SubjectCategory.Programming;
         }

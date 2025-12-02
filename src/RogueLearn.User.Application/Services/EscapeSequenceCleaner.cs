@@ -183,7 +183,7 @@ public static class EscapeSequenceCleaner
             
             return (true, cleaned, null);
         }
-        catch (System.Text.Json.JsonException ex)
+        catch (System.Text.Json.JsonException)
         {
             // Strategy 2: Aggressive normalization
             try

@@ -42,23 +42,6 @@ public class ProfilesController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all user profiles.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>List of all user profiles.</returns>
-    [HttpGet("admin/profiles")]
-    [ProducesResponseType(typeof(GetAllUserProfilesResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [AdminOnly]
-    public async Task<ActionResult<GetAllUserProfilesResponse>> GetAllUserProfiles(CancellationToken cancellationToken)
-    {
-        var query = new GetAllUserProfilesQuery();
-        var result = await _mediator.Send(query, cancellationToken);
-
-        return Ok(result);
-    }
-
-    /// <summary>
     /// Gets a user profile by their authentication ID (from Supabase).
     /// </summary>
     /// <param name="authId">The user's authentication UUID.</param>

@@ -65,7 +65,7 @@ public class QuestStepGenerationService : IQuestStepGenerationService
             {
                 AuthUserId = authUserId,
                 QuestId = questId,
-                HangfireJobId = jobId  // ⭐ Pass job ID to handler
+                HangfireJobId = jobId!  // ⭐ Pass job ID to handler
             };
 
             var result = await _mediator.Send(command);

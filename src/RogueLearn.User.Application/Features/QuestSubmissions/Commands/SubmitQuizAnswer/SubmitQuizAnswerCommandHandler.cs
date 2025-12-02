@@ -83,7 +83,7 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
             _logger.LogInformation("Using attempt {AttemptId} for quiz submission", attempt.Id);
 
             // Extract activity type from step content
-            var activityType = ExtractActivityType(step.Content, request.ActivityId);
+            var activityType = ExtractActivityType(step.Content!, request.ActivityId);
             _logger.LogInformation("Extracted activity type: {Type} for activity {ActivityId}", activityType, request.ActivityId);
 
             if (activityType == "Unknown")
@@ -167,7 +167,7 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
                 return "Unknown";
             }
 
-            string jsonString = null;
+            string jsonString = string.Empty;
 
             // Handle different content types
             if (stepContent is string strContent)
@@ -185,7 +185,7 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
             }
             else if (stepContent.GetType().Name == "JObject")
             {
-                jsonString = stepContent.ToString();
+                jsonString = stepContent.ToString()!;
             }
             else
             {

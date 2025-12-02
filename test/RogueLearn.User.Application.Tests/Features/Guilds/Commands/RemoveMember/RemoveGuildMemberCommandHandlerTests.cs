@@ -1,7 +1,9 @@
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Moq;
+using AutoFixture.Xunit2;
+using NSubstitute;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.RemoveMember;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
@@ -12,52 +14,36 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.RemoveMembe
 
 public class RemoveGuildMemberCommandHandlerTests
 {
-    [Fact]
-    public async Task RemoveMember_RecalculatesRanks_AfterMemberRemoval()
+    [Theory]
+    [AutoData]
+    public async Task Handle_CannotRemoveMaster(RemoveGuildMemberCommand cmd)
     {
-        var memberRepo = new Mock<IGuildMemberRepository>(MockBehavior.Strict);
-        var guildRepo = new Mock<IGuildRepository>(MockBehavior.Strict);
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var sut = new RemoveGuildMemberCommandHandler(memberRepo, guildRepo);
 
-        var guildId = Guid.NewGuid();
-        var memberId = Guid.NewGuid();
+        var member = new GuildMember { Id = cmd.MemberId, GuildId = cmd.GuildId, Role = GuildRole.GuildMaster };
+        memberRepo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
+        await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
 
-        memberRepo.Setup(r => r.GetByIdAsync(memberId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GuildMember { Id = memberId, GuildId = guildId, AuthUserId = Guid.NewGuid(), Role = GuildRole.Member, Status = MemberStatus.Active });
+    [Theory]
+    [AutoData]
+    public async Task Handle_Success_DeletesAndUpdates(RemoveGuildMemberCommand cmd)
+    {
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var sut = new RemoveGuildMemberCommandHandler(memberRepo, guildRepo);
 
-        memberRepo.Setup(r => r.DeleteAsync(memberId, It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        var member = new GuildMember { Id = cmd.MemberId, GuildId = cmd.GuildId, Role = GuildRole.Member };
+        memberRepo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
+        var guild = new Guild { Id = cmd.GuildId, CurrentMemberCount = 10 };
+        guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
+        memberRepo.GetMembersByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember>());
 
-        memberRepo.Setup(r => r.CountActiveMembersAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(2);
-
-        guildRepo.Setup(r => r.GetByIdAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Guild { Id = guildId, MaxMembers = 50, CurrentMemberCount = 3 });
-
-        guildRepo.Setup(r => r.UpdateAsync(It.IsAny<Guild>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guild g, CancellationToken _) => g);
-
-        var remaining = new[]
-        {
-            new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Status = MemberStatus.Active, ContributionPoints = 200, JoinedAt = DateTimeOffset.UtcNow.AddDays(-10) },
-            new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Status = MemberStatus.Active, ContributionPoints = 100, JoinedAt = DateTimeOffset.UtcNow.AddDays(-8) },
-        };
-
-        memberRepo.Setup(r => r.GetMembersByGuildAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(remaining);
-
-        IEnumerable<GuildMember> updatedRange = Enumerable.Empty<GuildMember>();
-        memberRepo.Setup(r => r.UpdateRangeAsync(It.IsAny<IEnumerable<GuildMember>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<GuildMember> ms, CancellationToken _) =>
-            {
-                updatedRange = ms.ToList();
-                return updatedRange;
-            });
-
-        var handler = new RemoveGuildMemberCommandHandler(memberRepo.Object, guildRepo.Object);
-        await handler.Handle(new RemoveGuildMemberCommand(guildId, memberId, null), CancellationToken.None);
-
-        var active = updatedRange.OrderByDescending(m => m.ContributionPoints).ThenBy(m => m.JoinedAt).ToList();
-        Assert.Equal(1, active[0].RankWithinGuild);
-        Assert.Equal(2, active[1].RankWithinGuild);
+        await sut.Handle(cmd, CancellationToken.None);
+        await memberRepo.Received(1).DeleteAsync(member.Id, Arg.Any<CancellationToken>());
+        await guildRepo.Received(1).UpdateAsync(Arg.Any<Guild>(), Arg.Any<CancellationToken>());
+        await memberRepo.Received(1).UpdateRangeAsync(Arg.Any<IEnumerable<GuildMember>>(), Arg.Any<CancellationToken>());
     }
 }

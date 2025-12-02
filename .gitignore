@@ -18,6 +18,9 @@ appsettings.*.json
 *.userosscache
 *.sln.docstates
 
+# Unit Test Code Coverage
+/coverage
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
