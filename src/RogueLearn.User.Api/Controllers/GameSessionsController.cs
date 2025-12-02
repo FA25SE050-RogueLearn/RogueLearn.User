@@ -1075,7 +1075,7 @@ namespace RogueLearn.User.Api.Controllers
                 runArgs.Add("--add-host=host.docker.internal:host-gateway");
             }
 
-            runArgs.Add(image);
+            runArgs.Add(image!);
 
             try
             {

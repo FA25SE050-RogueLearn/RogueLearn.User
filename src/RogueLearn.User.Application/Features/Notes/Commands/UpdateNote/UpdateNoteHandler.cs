@@ -17,23 +17,17 @@ public class UpdateNoteHandler : IRequestHandler<UpdateNoteCommand, UpdateNoteRe
 {
   private readonly INoteRepository _noteRepository;
   private readonly INoteTagRepository _noteTagRepository;
-  private readonly INoteSkillRepository _noteSkillRepository;
-  private readonly INoteQuestRepository _noteQuestRepository;
   private readonly IMapper _mapper;
   private readonly ILogger<UpdateNoteHandler> _logger;
 
   public UpdateNoteHandler(
     INoteRepository noteRepository,
     INoteTagRepository noteTagRepository,
-    INoteSkillRepository noteSkillRepository,
-    INoteQuestRepository noteQuestRepository,
     IMapper mapper,
     ILogger<UpdateNoteHandler> logger)
   {
     _noteRepository = noteRepository;
     _noteTagRepository = noteTagRepository;
-    _noteSkillRepository = noteSkillRepository;
-    _noteQuestRepository = noteQuestRepository;
     _mapper = mapper;
     _logger = logger;
   }
@@ -85,35 +79,7 @@ public class UpdateNoteHandler : IRequestHandler<UpdateNoteCommand, UpdateNoteRe
         await _noteTagRepository.RemoveAsync(note.Id, tagId, cancellationToken);
     }
 
-    if (request.SkillIds is not null)
-    {
-      var existing = (await _noteSkillRepository.GetSkillIdsForNoteAsync(note.Id, cancellationToken)).ToHashSet();
-      var desired = request.SkillIds.Distinct().ToHashSet();
-
-      var toAdd = desired.Except(existing);
-      var toRemove = existing.Except(desired);
-
-      foreach (var skillId in toAdd)
-        await _noteSkillRepository.AddAsync(note.Id, skillId, cancellationToken);
-
-      foreach (var skillId in toRemove)
-        await _noteSkillRepository.RemoveAsync(note.Id, skillId, cancellationToken);
-    }
-
-    if (request.QuestIds is not null)
-    {
-      var existing = (await _noteQuestRepository.GetQuestIdsForNoteAsync(note.Id, cancellationToken)).ToHashSet();
-      var desired = request.QuestIds.Distinct().ToHashSet();
-
-      var toAdd = desired.Except(existing);
-      var toRemove = existing.Except(desired);
-
-      foreach (var questId in toAdd)
-        await _noteQuestRepository.AddAsync(note.Id, questId, cancellationToken);
-
-      foreach (var questId in toRemove)
-        await _noteQuestRepository.RemoveAsync(note.Id, questId, cancellationToken);
-    }
+    
 
     _logger.LogInformation("Completed note update. NoteId={NoteId}", updated.Id);
 

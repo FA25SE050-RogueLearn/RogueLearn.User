@@ -32,8 +32,6 @@ public class GetFullUserInfoQueryHandlerTests
         IMeetingParticipantRepository? meetingRepo = null,
         INoteRepository? noteRepo = null,
         INoteTagRepository? noteTagRepo = null,
-        INoteSkillRepository? noteSkillRepo = null,
-        INoteQuestRepository? noteQuestRepo = null,
         INotificationRepository? notiRepo = null,
         ILecturerVerificationRequestRepository? verifRepo = null,
         IQuestRepository? questRepo = null,
@@ -61,8 +59,6 @@ public class GetFullUserInfoQueryHandlerTests
         meetingRepo ??= Substitute.For<IMeetingParticipantRepository>();
         noteRepo ??= Substitute.For<INoteRepository>();
         noteTagRepo ??= Substitute.For<INoteTagRepository>();
-        noteSkillRepo ??= Substitute.For<INoteSkillRepository>();
-        noteQuestRepo ??= Substitute.For<INoteQuestRepository>();
         notiRepo ??= Substitute.For<INotificationRepository>();
         verifRepo ??= Substitute.For<ILecturerVerificationRequestRepository>();
         questRepo ??= Substitute.For<IQuestRepository>();
@@ -91,8 +87,6 @@ public class GetFullUserInfoQueryHandlerTests
             meetingRepo,
             noteRepo,
             noteTagRepo,
-            noteSkillRepo,
-            noteQuestRepo,
             notiRepo,
             verifRepo,
             questRepo,
@@ -247,8 +241,6 @@ public class GetFullUserInfoQueryHandlerTests
             meetingRepo: meetingRepo,
             noteRepo: noteRepo,
             noteTagRepo: Substitute.For<INoteTagRepository>(),
-            noteSkillRepo: Substitute.For<INoteSkillRepository>(),
-            noteQuestRepo: Substitute.For<INoteQuestRepository>(),
             notiRepo: notiRepo,
             verifRepo: verifRepo,
             questRepo: questRepo,

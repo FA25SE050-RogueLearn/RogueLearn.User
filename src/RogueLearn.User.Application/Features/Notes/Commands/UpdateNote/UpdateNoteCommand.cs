@@ -12,6 +12,4 @@ public class UpdateNoteCommand : IRequest<UpdateNoteResponse>
 
   // Optional full relationship set to apply on update
   public List<Guid>? TagIds { get; set; }
-  public List<Guid>? SkillIds { get; set; }
-  public List<Guid>? QuestIds { get; set; }
 }

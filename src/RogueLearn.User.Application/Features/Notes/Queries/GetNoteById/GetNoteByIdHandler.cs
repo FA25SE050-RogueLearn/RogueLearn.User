@@ -10,23 +10,17 @@ public class GetNoteByIdHandler : IRequestHandler<GetNoteByIdQuery, NoteDto?>
 {
   private readonly INoteRepository _noteRepository;
   private readonly INoteTagRepository _noteTagRepository;
-  private readonly INoteSkillRepository _noteSkillRepository;
-  private readonly INoteQuestRepository _noteQuestRepository;
   private readonly IMapper _mapper;
   private readonly ILogger<GetNoteByIdHandler> _logger;
 
   public GetNoteByIdHandler(
     INoteRepository noteRepository,
     INoteTagRepository noteTagRepository,
-    INoteSkillRepository noteSkillRepository,
-    INoteQuestRepository noteQuestRepository,
     IMapper mapper,
     ILogger<GetNoteByIdHandler> logger)
   {
     _noteRepository = noteRepository;
     _noteTagRepository = noteTagRepository;
-    _noteSkillRepository = noteSkillRepository;
-    _noteQuestRepository = noteQuestRepository;
     _mapper = mapper;
     _logger = logger;
   }
@@ -49,10 +43,7 @@ public class GetNoteByIdHandler : IRequestHandler<GetNoteByIdQuery, NoteDto?>
 
     var dto = _mapper.Map<NoteDto>(note);
     dto.TagIds = (await _noteTagRepository.GetTagIdsForNoteAsync(dto.Id, cancellationToken)).ToList();
-    dto.SkillIds = (await _noteSkillRepository.GetSkillIdsForNoteAsync(dto.Id, cancellationToken)).ToList();
-    dto.QuestIds = (await _noteQuestRepository.GetQuestIdsForNoteAsync(dto.Id, cancellationToken)).ToList();
-
-    _logger.LogInformation("Returning note {NoteId} with {TagCount} tags, {SkillCount} skills, {QuestCount} quests", dto.Id, dto.TagIds.Count, dto.SkillIds.Count, dto.QuestIds.Count);
+    _logger.LogInformation("Returning note {NoteId} with {TagCount} tags", dto.Id, dto.TagIds.Count);
     return dto;
   }
 }

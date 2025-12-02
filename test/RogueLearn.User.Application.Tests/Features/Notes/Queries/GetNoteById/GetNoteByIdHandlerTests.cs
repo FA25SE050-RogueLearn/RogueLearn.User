@@ -21,11 +21,9 @@ public class GetNoteByIdHandlerTests
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
-        var skillRepo = Substitute.For<INoteSkillRepository>();
-        var questRepo = Substitute.For<INoteQuestRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetNoteByIdHandler>>();
-        var sut = new GetNoteByIdHandler(noteRepo, tagRepo, skillRepo, questRepo, mapper, logger);
+        var sut = new GetNoteByIdHandler(noteRepo, tagRepo, mapper, logger);
 
         noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns((Note?)null);
         var result = await sut.Handle(new GetNoteByIdQuery { Id = noteId }, CancellationToken.None);
@@ -38,24 +36,18 @@ public class GetNoteByIdHandlerTests
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
-        var skillRepo = Substitute.For<INoteSkillRepository>();
-        var questRepo = Substitute.For<INoteQuestRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetNoteByIdHandler>>();
-        var sut = new GetNoteByIdHandler(noteRepo, tagRepo, skillRepo, questRepo, mapper, logger);
+        var sut = new GetNoteByIdHandler(noteRepo, tagRepo, mapper, logger);
 
         var note = new Note { Id = noteId, AuthUserId = Guid.NewGuid(), Title = "T" };
         noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(note);
         mapper.Map<NoteDto>(note).Returns(new NoteDto { Id = noteId });
 
         tagRepo.GetTagIdsForNoteAsync(noteId, Arg.Any<CancellationToken>()).Returns(new[] { Guid.NewGuid() });
-        skillRepo.GetSkillIdsForNoteAsync(noteId, Arg.Any<CancellationToken>()).Returns(new[] { Guid.NewGuid() });
-        questRepo.GetQuestIdsForNoteAsync(noteId, Arg.Any<CancellationToken>()).Returns(new[] { Guid.NewGuid() });
 
         var result = await sut.Handle(new GetNoteByIdQuery { Id = noteId }, CancellationToken.None);
         result!.Id.Should().Be(noteId);
         result.TagIds.Should().HaveCount(1);
-        result.SkillIds.Should().HaveCount(1);
-        result.QuestIds.Should().HaveCount(1);
     }
 }

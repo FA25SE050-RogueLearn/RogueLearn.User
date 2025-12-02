@@ -15,8 +15,6 @@ public class CreateNoteHandlerTests
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
-        var skillRepo = Substitute.For<INoteSkillRepository>();
-        var questRepo = Substitute.For<INoteQuestRepository>();
         var mapper = Substitute.For<IMapper>();
         var logger = Substitute.For<ILogger<CreateNoteHandler>>();
 
@@ -31,7 +29,7 @@ public class CreateNoteHandlerTests
                 return new CreateNoteResponse { Id = n.Id, AuthUserId = n.AuthUserId, Title = n.Title, Content = n.Content, IsPublic = n.IsPublic, CreatedAt = n.CreatedAt, UpdatedAt = n.UpdatedAt };
             });
 
-        var sut = new CreateNoteHandler(noteRepo, tagRepo, skillRepo, questRepo, mapper, logger);
+        var sut = new CreateNoteHandler(noteRepo, tagRepo, mapper, logger);
         var cmd = new CreateNoteCommand { AuthUserId = Guid.NewGuid(), Title = "Title", Content = "hello", IsPublic = true, TagIds = new List<Guid> { Guid.NewGuid() } };
         var res = await sut.Handle(cmd, CancellationToken.None);
 
