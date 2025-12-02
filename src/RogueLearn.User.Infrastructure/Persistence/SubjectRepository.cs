@@ -5,6 +5,7 @@ using RogueLearn.User.Domain.Interfaces;
 using Supabase.Postgrest.Interfaces;
 using Client = Supabase.Client;
 using static Supabase.Postgrest.Constants;
+using Supabase.Postgrest;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
