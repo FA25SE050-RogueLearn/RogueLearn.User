@@ -106,32 +106,41 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
 
     public async Task<(IEnumerable<Subject> Items, int TotalCount)> GetPagedSubjectsAsync(string? search, int page, int pageSize, CancellationToken cancellationToken = default)
     {
-        // Helper to apply filters consistently
-        IPostgrestTable<Subject> ApplyFilters(IPostgrestTable<Subject> table)
-        {
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var filter = $"subject_name.ilike.%{search}%,subject_code.ilike.%{search}%";
-                return table.Filter(string.Empty, Operator.Or, filter);
-            }
-            return table;
-        }
-
-        // 1. Get Count (Explicitly typed to match return of ApplyFilters)
-        IPostgrestTable<Subject> countQuery = _supabaseClient.From<Subject>();
-        countQuery = ApplyFilters(countQuery);
-        var count = await countQuery.Count(CountType.Exact, cancellationToken);
-
-        // 2. Get Data (Explicitly typed)
-        IPostgrestTable<Subject> dataQuery = _supabaseClient.From<Subject>();
-        dataQuery = ApplyFilters(dataQuery);
-
+        var searchPattern = !string.IsNullOrWhiteSpace(search) ? $"%{search}%" : null;
         var offset = (page - 1) * pageSize;
-        var response = await dataQuery
-            .Order("created_at", Ordering.Descending)
-            .Range(offset, offset + pageSize - 1)
-            .Get(cancellationToken);
 
-        return (response.Models, count);
+        if (searchPattern != null)
+        {
+            // Create OR filter with ILike for subject_name and subject_code
+            var orFilters = new List<IPostgrestQueryFilter>
+            {
+                new QueryFilter("subject_name", Operator.ILike, searchPattern),
+                new QueryFilter("subject_code", Operator.ILike, searchPattern)
+            };
+
+            var count = await _supabaseClient.From<Subject>()
+                .Or(orFilters)
+                .Count(CountType.Exact, cancellationToken);
+
+            var response = await _supabaseClient.From<Subject>()
+                .Or(orFilters)
+                .Order("created_at", Ordering.Descending)
+                .Range(offset, offset + pageSize - 1)
+                .Get(cancellationToken);
+
+            return (response.Models, count);
+        }
+        else
+        {
+            var count = await _supabaseClient.From<Subject>()
+                .Count(CountType.Exact, cancellationToken);
+
+            var response = await _supabaseClient.From<Subject>()
+                .Order("created_at", Ordering.Descending)
+                .Range(offset, offset + pageSize - 1)
+                .Get(cancellationToken);
+
+            return (response.Models, count);
+        }
     }
 }
