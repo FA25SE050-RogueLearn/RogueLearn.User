@@ -4,11 +4,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 using Newtonsoft.Json;
+using System.Diagnostics;
 using System.Text;
 using System.Collections.Concurrent;
 using System.IO;
 using Microsoft.SemanticKernel;
 using Microsoft.AspNetCore.Http;
+using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Api.Controllers
 {
@@ -24,6 +26,7 @@ namespace RogueLearn.User.Api.Controllers
         private readonly RogueLearn.User.Domain.Interfaces.IGameSessionRepository _gameSessionRepository;
 
         // MVP: All session data now stored in database for production scalability
+        private static readonly Regex JoinCodeRegex = new Regex(@"Relay\s+Join\s+Code\s*:\s*([A-Z0-9]{6,12})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public GameSessionsController(
             Microsoft.SemanticKernel.Kernel kernel,
@@ -565,6 +568,8 @@ namespace RogueLearn.User.Api.Controllers
             }
         }
 
+        // MVP: Get player summaries from database
+        // GET /api/quests/game/sessions/{sessionId}/players
         [HttpGet("{sessionId:guid}/players")]
         public IActionResult GetPlayers(Guid sessionId)
         {
@@ -630,15 +635,8 @@ namespace RogueLearn.User.Api.Controllers
             }
         }
 
-        // Simple demo pack generator. Uses optional payload.pack_spec to shape the pack.
-        // Structure:
-        // {
-        //   packId: string,
-        //   subject: string,
-        //   topic: string,
-        //   difficulty: string,
-        //   questions: [{ id, prompt, options: [..], answerIndex }]
-        // }
+        // MVP: Generate pack for session (using optional PackSpec)
+        // POST /api/quests/game/sessions/{sessionId}/pack
         private async Task<JsonElement> GeneratePackAsync(Guid sessionId, CreateSessionRequest? request)
         {
             string subject = "demo";
@@ -759,6 +757,7 @@ namespace RogueLearn.User.Api.Controllers
             return fallbackDoc.RootElement.Clone();
         }
 
+        // Prompt template for question pack generation
         private static string BuildQuestionPackPrompt(string syllabusJson, string subject, string topic, string difficulty, int count)
         {
             var sb = new System.Text.StringBuilder();
@@ -1000,6 +999,265 @@ namespace RogueLearn.User.Api.Controllers
             {
                 Console.Error.WriteLine($"[DEMO] Failed to read Unity match {matchId}: {ex.Message}");
                 return StatusCode(500, new { error = "Failed to read match" });
+            }
+        }
+
+        // Host: start Unity headless via Docker and return join code
+        // POST /api/quests/game/sessions/host
+        [HttpPost("host")]
+        [Consumes("application/json")]
+        [AllowAnonymous] // tighten with auth when ready
+        public async Task<IActionResult> StartHost([FromBody] HostRequest? request, CancellationToken cancellationToken)
+        {
+            var image = Env("RL_DOCKER_IMAGE", "roguelearn-server:latest");
+            var baseName = Env("RL_DOCKER_CONTAINER", string.Empty);
+            var name = string.IsNullOrWhiteSpace(baseName)
+                ? $"roguelearn-server-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}"
+                : $"{baseName}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
+            var envs = new List<string>
+            {
+                $"UNITY_SERVER_SCENE={Env("UNITY_SERVER_SCENE", "HostUI")}",
+                $"RELAY_REGION={Env("RELAY_REGION", "us-central")}",
+                $"RL_MAX_CONNECTIONS={Env("RL_MAX_CONNECTIONS", "20")}"
+            };
+
+            var userApiBase = Env("USER_API_BASE", Env("RL_DOCKER_USER_API_BASE", string.Empty));
+            if (!string.IsNullOrWhiteSpace(userApiBase))
+            {
+                envs.Add($"USER_API_BASE={userApiBase.TrimEnd('/')}");
+            }
+            envs.Add($"INSECURE_TLS={Env("INSECURE_TLS", "0")}");
+
+            if (!string.IsNullOrWhiteSpace(request?.UserId))
+            {
+                envs.Add($"USER_ID={request.UserId}");
+            }
+
+            var runArgs = new List<string> { "run", "--rm", "--name", name, "-d" };
+            var portHost = Env("RL_DOCKER_PORT_HOST", string.Empty);
+            var portContainer = Env("RL_DOCKER_PORT_CONTAINER", "8080");
+            if (!string.IsNullOrWhiteSpace(portHost))
+            {
+                runArgs.AddRange(new[] { "-p", $"{portHost}:{portContainer}" });
+            }
+
+            AddIfSet(runArgs, "--cpus", Env("RL_DOCKER_CPUS", string.Empty));
+            AddIfSet(runArgs, "--cpuset-cpus", Env("RL_DOCKER_CPUSET", string.Empty));
+            AddIfSet(runArgs, "-m", Env("RL_DOCKER_MEMORY", string.Empty));
+            AddIfSet(runArgs, "--cpu-shares", Env("RL_DOCKER_CPU_SHARES", string.Empty));
+
+            var extraArgs = Env("RL_DOCKER_EXTRA_ARGS", string.Empty);
+            if (!string.IsNullOrWhiteSpace(extraArgs))
+            {
+                runArgs.AddRange(extraArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+
+            var envPort = Env("RL_DOCKER_ENV_PORT", portContainer);
+            if (!string.IsNullOrWhiteSpace(envPort))
+            {
+                envs.Add($"PORT={envPort}");
+            }
+
+            var extraEnvs = Env("RL_DOCKER_EXTRA_ENVS", string.Empty);
+            if (!string.IsNullOrWhiteSpace(extraEnvs))
+            {
+                envs.AddRange(extraEnvs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+
+            foreach (var e in envs)
+            {
+                runArgs.AddRange(new[] { "-e", e });
+            }
+
+            if (OperatingSystem.IsLinux())
+            {
+                runArgs.Add("--add-host=host.docker.internal:host-gateway");
+            }
+
+            runArgs.Add(image);
+
+            try
+            {
+                var runResult = await RunProcessAsync("docker", runArgs, TimeSpan.FromSeconds(30), cancellationToken);
+                if (runResult.exitCode != 0)
+                {
+                    Console.Error.WriteLine($"[Host] docker run failed: {runResult.stderr}");
+                    return StatusCode(500, new { ok = false, error = $"docker run failed: {runResult.stderr}" });
+                }
+
+                var timeoutMs = int.TryParse(Env("RL_LOG_TIMEOUT_MS", "20000"), out var ms) ? ms : 20000;
+                var joinData = await ReadJoinCodeFromLogs(name, TimeSpan.FromMilliseconds(timeoutMs), cancellationToken);
+
+                if (string.IsNullOrWhiteSpace(joinData.joinCode))
+                {
+                    await ForceRemoveContainer(name);
+                    return StatusCode(500, new { ok = false, error = "Failed to obtain join code from container logs" });
+                }
+
+                return Ok(new
+                {
+                    ok = true,
+                    joinCode = joinData.joinCode,
+                    hostId = name,
+                    message = $"Unity headless server started in Docker ({image}).",
+                    raw = joinData.rawLine,
+                    wsUrl = Env("NEXT_PUBLIC_GAME_WS_URL", null)
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                await ForceRemoveContainer(name);
+                return StatusCode(504, new { ok = false, error = "Timed out starting host" });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Host] Failed to start Unity host container: {ex}");
+                await ForceRemoveContainer(name);
+                return StatusCode(500, new { ok = false, error = ex.Message });
+            }
+        }
+
+        public class HostRequest
+        {
+            [JsonPropertyName("userId"), JsonProperty("userId")] public string? UserId { get; set; }
+        }
+
+        private static string? Env(string key, string? defaultValue) =>
+            Environment.GetEnvironmentVariable(key) ?? defaultValue;
+
+        private static void AddIfSet(List<string> args, string flag, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                args.AddRange(new[] { flag, value });
+            }
+        }
+
+        private static async Task<(string? joinCode, string? rawLine)> ReadJoinCodeFromLogs(
+            string containerName,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(timeout);
+
+            var tcs = new TaskCompletionSource<(string?, string?)>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "docker",
+                Arguments = $"logs -f {containerName}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            proc.OutputDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+                TryParseLine(e.Data);
+            };
+            proc.ErrorDataReceived += (_, _) => { };
+            proc.Exited += (_, __) =>
+            {
+                if (!tcs.Task.IsCompleted)
+                {
+                    tcs.TrySetException(new InvalidOperationException("docker logs exited before join code was found"));
+                }
+            };
+
+            void TryParseLine(string line)
+            {
+                try
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.StartsWith("{"))
+                    {
+                        using var doc = JsonDocument.Parse(trimmed);
+                        if (doc.RootElement.TryGetProperty("event", out var ev) &&
+                            ev.GetString()?.Equals("relay_join_code", StringComparison.OrdinalIgnoreCase) == true &&
+                            doc.RootElement.TryGetProperty("joinCode", out var jc))
+                        {
+                            tcs.TrySetResult((jc.GetString(), line));
+                            return;
+                        }
+                    }
+
+                    var m = JoinCodeRegex.Match(line);
+                    if (m.Success)
+                    {
+                        tcs.TrySetResult((m.Groups[1].Value, line));
+                    }
+                }
+                catch
+                {
+                    // ignore parse errors
+                }
+            }
+
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
+            try
+            {
+                var result = await tcs.Task.WaitAsync(timeout, cts.Token);
+                return result;
+            }
+            finally
+            {
+                try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                proc.Dispose();
+            }
+        }
+
+        private static async Task<(int exitCode, string stdout, string stderr)> RunProcessAsync(
+            string fileName,
+            IEnumerable<string> args,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = string.Join(" ", args),
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = new Process { StartInfo = psi };
+            var stdout = new List<string>();
+            var stderr = new List<string>();
+
+            proc.OutputDataReceived += (_, e) => { if (e.Data != null) stdout.Add(e.Data); };
+            proc.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.Add(e.Data); };
+
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(timeout);
+
+            await proc.WaitForExitAsync(cts.Token);
+
+            return (proc.ExitCode, string.Join("\n", stdout), string.Join("\n", stderr));
+        }
+
+        private static async Task ForceRemoveContainer(string name)
+        {
+            try
+            {
+                await RunProcessAsync("docker", new[] { "rm", "-f", name }, TimeSpan.FromSeconds(10), CancellationToken.None);
+            }
+            catch
+            {
+                // best effort
             }
         }
     }
