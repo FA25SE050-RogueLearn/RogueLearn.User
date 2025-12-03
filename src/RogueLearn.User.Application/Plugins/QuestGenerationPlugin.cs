@@ -37,7 +37,8 @@ public async Task<string?> GenerateQuestStepsJsonAsync(
     string subjectName,
     string courseDescription,
     AcademicContext academicContext,
-    CancellationToken cancellationToken)
+    Class? userClass = null,
+    CancellationToken cancellationToken = default)
 {
     const int maxAttempts = 3;
     string? lastError = null;
@@ -50,6 +51,17 @@ public async Task<string?> GenerateQuestStepsJsonAsync(
                 "Generating quest steps for Subject '{Subject}', Week {Week}/{Total} (Attempt {Attempt}/{Max})",
                 subjectName, weekContext.WeekNumber, weekContext.TotalWeeks, attempt, maxAttempts
             );
+
+            // Log roadmap context if available
+            if (userClass != null)
+            {
+                _logger.LogInformation(
+                    "Roadmap Context: Track={TrackName}, RoadmapUrl={Url}, SkillFocus=[{Skills}], Difficulty={Difficulty}",
+                    userClass.Name,
+                    userClass.RoadmapUrl ?? "N/A",
+                    userClass.SkillFocusAreas != null ? string.Join(", ", userClass.SkillFocusAreas) : "N/A",
+                    userClass.DifficultyLevel);
+            }
 
             // Build prompt with error feedback on retries
             var errorHint = attempt > 1 ? BuildRetryErrorHint(lastError) : null;
@@ -74,6 +86,7 @@ public async Task<string?> GenerateQuestStepsJsonAsync(
                 subjectName,
                 courseDescription,
                 academicContext,
+                userClass: userClass,
                 errorHint: errorHint
             );
 

@@ -9,6 +9,7 @@ namespace RogueLearn.User.Application.Services;
 /// <summary>
 /// Builds LLM-friendly prompts for generating quest steps using a resource-pooling strategy.
 /// Aggregates topics and resources for a week to create cohesive activities.
+/// Now includes roadmap.sh context for industry-aligned content generation.
 /// </summary>
 public class QuestStepsPromptBuilder
 {
@@ -19,6 +20,7 @@ public class QuestStepsPromptBuilder
         string subjectName,
         string courseDescription,
         AcademicContext academicContext,
+        Class? userClass = null,
         string? errorHint = null)
     {
         var prompt = new StringBuilder();
@@ -32,7 +34,42 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("## 1. Learning Context");
         prompt.AppendLine($"**Subject:** {subjectName}");
         prompt.AppendLine($"**Course Description:** {courseDescription}");
-        prompt.AppendLine("**Student Profile:");
+        prompt.AppendLine();
+
+        // 1.1 Career Roadmap Context (NEW)
+        if (userClass != null)
+        {
+            prompt.AppendLine("### Career Roadmap Alignment");
+            prompt.AppendLine($"**Learning Track:** {userClass.Name}");
+            if (!string.IsNullOrEmpty(userClass.Description))
+            {
+                prompt.AppendLine($"**Track Goal:** {userClass.Description}");
+            }
+            if (!string.IsNullOrEmpty(userClass.RoadmapUrl))
+            {
+                prompt.AppendLine($"**Industry Roadmap:** {userClass.RoadmapUrl}");
+                prompt.AppendLine("**IMPORTANT:** This roadmap from roadmap.sh defines the industry-standard learning path.");
+                prompt.AppendLine("Your generated content should align with the skills and progression defined in this roadmap.");
+            }
+            prompt.AppendLine($"**Track Difficulty Level:** {userClass.DifficultyLevel}");
+            if (userClass.EstimatedDurationMonths.HasValue)
+            {
+                prompt.AppendLine($"**Expected Completion Time:** {userClass.EstimatedDurationMonths} months");
+            }
+            if (userClass.SkillFocusAreas != null && userClass.SkillFocusAreas.Any())
+            {
+                prompt.AppendLine($"**Core Skill Focus Areas:** {string.Join(", ", userClass.SkillFocusAreas)}");
+                prompt.AppendLine();
+                prompt.AppendLine("**Roadmap Alignment Instructions:**");
+                prompt.AppendLine("- Prioritize examples and scenarios relevant to: " + string.Join(", ", userClass.SkillFocusAreas));
+                prompt.AppendLine("- Frame questions in the context of real-world applications for this career path");
+                prompt.AppendLine("- Include industry best practices mentioned in the roadmap where applicable");
+                prompt.AppendLine("- Connect theoretical concepts to practical skills needed in this field");
+            }
+            prompt.AppendLine();
+        }
+
+        prompt.AppendLine("**Student Profile:**");
         prompt.AppendLine(userContext);
         prompt.AppendLine();
 

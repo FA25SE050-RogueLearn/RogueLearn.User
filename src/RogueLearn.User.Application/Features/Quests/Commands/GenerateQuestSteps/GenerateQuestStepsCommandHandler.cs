@@ -1,4 +1,4 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommandHandler.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -284,15 +284,15 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 if (weekContext.AvailableResources.Any())
                 {
-                    _logger.LogInformation("Week {Week}: Rules → Reading 0-3, KC 2-4, Quiz 1", weekNumber);
+                    _logger.LogInformation("Week {Week}: Rules â†’ Reading 0-3, KC 2-4, Quiz 1", weekNumber);
                 }
                 else
                 {
-                    _logger.LogInformation("Week {Week}: Rules → Reading 0, KC 3-5, Quiz 1-2", weekNumber);
+                    _logger.LogInformation("Week {Week}: Rules â†’ Reading 0, KC 3-5, Quiz 1-2", weekNumber);
                 }
 
                 _logger.LogInformation(
-                    "Week {Week}: Personalization applied → Reason={Reason}, GPA={Gpa:F2}, WeakPrereqs={WeakCount}, Strengths=[{Strengths}], Improvements=[{Improvements}]",
+                    "Week {Week}: Personalization applied â†’ Reason={Reason}, GPA={Gpa:F2}, WeakPrereqs={WeakCount}, Strengths=[{Strengths}], Improvements=[{Improvements}]",
                     weekNumber,
                     academicContext.AttemptReason,
                     academicContext.CurrentGpa,
@@ -308,6 +308,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     subject.SubjectName,
                     subject.Description ?? "",
                     academicContext,
+                    userClass,  // Pass class with roadmap.sh URL and skill focus areas
                     cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(generatedJson))
@@ -387,11 +388,11 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 createdSteps.Add(questStep);
                 createdCount++;
 
-                _logger.LogInformation("✅ Created step {Step} (from target week {Week}) with {Count} activities.", effectiveStepNumber, weekNumber, validatedActivities.Count);
+                _logger.LogInformation("âœ… Created step {Step} (from target week {Week}) with {Count} activities.", effectiveStepNumber, weekNumber, validatedActivities.Count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error generating Week {Week}", weekNumber);
+                _logger.LogError(ex, "âŒ Error generating Week {Week}", weekNumber);
                 skippedWeeks++;
             }
         }
@@ -794,9 +795,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private void ValidateWeekRequirements(int weekNumber, ActivityStats stats, string subjectName)
     {
         if (stats.TotalActivities < MinActivitiesPerStep)
-            _logger.LogWarning("⚠️ Week {Week}: Low activity count ({Count})", weekNumber, stats.TotalActivities);
-        if (stats.ReadingCount < 1) _logger.LogWarning("⚠️ Week {Week}: NO Readings!", weekNumber);
-        if (stats.QuizCount < 1) _logger.LogWarning("⚠️ Week {Week}: NO Quiz!", weekNumber);
+            _logger.LogWarning("âš ï¸ Week {Week}: Low activity count ({Count})", weekNumber, stats.TotalActivities);
+        if (stats.ReadingCount < 1) _logger.LogWarning("âš ï¸ Week {Week}: NO Readings!", weekNumber);
+        if (stats.QuizCount < 1) _logger.LogWarning("âš ï¸ Week {Week}: NO Quiz!", weekNumber);
     }
 
     private bool HasEnrichedUrls(Dictionary<string, object> content)
@@ -834,3 +835,5 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         public int TotalQuizQuestions { get; set; }
     }
 }
+
+

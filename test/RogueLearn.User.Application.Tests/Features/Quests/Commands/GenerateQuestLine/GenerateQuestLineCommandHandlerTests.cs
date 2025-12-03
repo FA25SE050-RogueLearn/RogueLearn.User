@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
+using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 
@@ -18,9 +19,10 @@ public class GenerateQuestLineCommandHandlerTests
         var learningPathRepo = Substitute.For<ILearningPathRepository>();
         var questChapterRepo = Substitute.For<IQuestChapterRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
+        var difficultyResolver = Substitute.For<IQuestDifficultyResolver>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GenerateQuestLineCommandHandler>>();
 
-        var sut = new GenerateQuestLineCommandHandler(userRepo, subjectRepo, classSpecRepo, studentSemRepo, learningPathRepo, questChapterRepo, questRepo, logger);
+        var sut = new GenerateQuestLineCommandHandler(userRepo, subjectRepo, classSpecRepo, studentSemRepo, learningPathRepo, questChapterRepo, questRepo, difficultyResolver, logger);
         var act = () => sut.Handle(new RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum.GenerateQuestLine { AuthUserId = Guid.NewGuid() }, CancellationToken.None);
         await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.BadRequestException>();
     }
@@ -35,6 +37,7 @@ public class GenerateQuestLineCommandHandlerTests
         var learningPathRepo = Substitute.For<ILearningPathRepository>();
         var questChapterRepo = Substitute.For<IQuestChapterRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
+        var difficultyResolver = Substitute.For<IQuestDifficultyResolver>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GenerateQuestLineCommandHandler>>();
 
         var authId = Guid.NewGuid();
@@ -48,7 +51,7 @@ public class GenerateQuestLineCommandHandlerTests
         learningPathRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<LearningPath, bool>>>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<LearningPath>());
         learningPathRepo.AddAsync(Arg.Any<LearningPath>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<LearningPath>());
 
-        var sut = new GenerateQuestLineCommandHandler(userRepo, subjectRepo, classSpecRepo, studentSemRepo, learningPathRepo, questChapterRepo, questRepo, logger);
+        var sut = new GenerateQuestLineCommandHandler(userRepo, subjectRepo, classSpecRepo, studentSemRepo, learningPathRepo, questChapterRepo, questRepo, difficultyResolver, logger);
         var res = await sut.Handle(new RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum.GenerateQuestLine { AuthUserId = authId }, CancellationToken.None);
         res.LearningPathId.Should().NotBeEmpty();
     }

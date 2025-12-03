@@ -8,6 +8,7 @@ namespace RogueLearn.User.Application.Plugins;
 /// Interface for quest step generation plugin using AI.
 /// Generates activities for a SINGLE week per call.
 /// This plugin is called multiple times (once per week) to generate all quest steps.
+/// Now includes roadmap.sh context for industry-aligned content generation.
 /// </summary>
 public interface IQuestGenerationPlugin
 {
@@ -20,6 +21,8 @@ public interface IQuestGenerationPlugin
     /// <param name="relevantSkills">List of skills linked to the subject</param>
     /// <param name="subjectName">Name of the subject</param>
     /// <param name="courseDescription">Course description for context</param>
+    /// <param name="academicContext">User's academic performance context</param>
+    /// <param name="userClass">User's class containing roadmap.sh URL and skill focus areas</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>JSON response with activities array: { "activities": [...] }</returns>
     Task<string?> GenerateQuestStepsJsonAsync(
@@ -29,5 +32,6 @@ public interface IQuestGenerationPlugin
         string subjectName,
         string courseDescription,
         AcademicContext academicContext,
+        Class? userClass = null,
         CancellationToken cancellationToken = default);
 }

@@ -1,5 +1,6 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommandHandler.cs
 // KEY CHANGE: Remove background job scheduling loop
+// ADDED: HTML validation and AI extraction result validation
 
 using Hangfire;
 using MediatR;
@@ -15,6 +16,7 @@ using RogueLearn.User.Domain.Interfaces;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 public class FapRecordData
@@ -98,6 +100,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     {
         _logger.LogInformation("[START] Processing academic record for user {AuthUserId}", request.AuthUserId);
 
+        // ========== STEP 1: VALIDATE HTML INPUT ==========
+        ValidateHtmlInput(request.FapHtmlContent);
+
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
             ?? throw new NotFoundException(nameof(UserProfile), request.AuthUserId);
 
@@ -124,30 +129,41 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         {
             _logger.LogInformation("Cache MISS: No cached record found for hash {Hash}. Proceeding with AI extraction.", rawTextHash);
             var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
+            
+            // ========== STEP 2: VALIDATE CLEANED TEXT ==========
+            ValidateCleanedText(cleanText);
+            
             extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanText, cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(extractedJson))
-            {
-                await _storage.SaveLatestAsync(
-                    bucketName: "academic-records",
-                    programCode: request.CurriculumProgramId.ToString(),
-                    versionCode: "fap-sync",
-                    jsonContent: extractedJson,
-                    rawTextContent: request.FapHtmlContent,
-                    rawTextHash: rawTextHash,
-                    cancellationToken: cancellationToken);
-                _logger.LogInformation("Cache WRITE: Saved new academic record to cache for hash {Hash}.", rawTextHash);
-            }
+            // ========== STEP 3: VALIDATE AI EXTRACTION RESULT ==========
+            ValidateAiExtractionResult(extractedJson);
+
+            await _storage.SaveLatestAsync(
+                bucketName: "academic-records",
+                programCode: request.CurriculumProgramId.ToString(),
+                versionCode: "fap-sync",
+                jsonContent: extractedJson,
+                rawTextContent: request.FapHtmlContent,
+                rawTextHash: rawTextHash,
+                cancellationToken: cancellationToken);
+            _logger.LogInformation("Cache WRITE: Saved new academic record to cache for hash {Hash}.", rawTextHash);
         }
 
-        var fapData = JsonSerializer.Deserialize<FapRecordData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-        if (fapData == null)
+        FapRecordData? fapData;
+        try
         {
-            _logger.LogError("Failed to deserialize the extracted academic JSON from FAP content.");
-            throw new BadRequestException("Failed to deserialize the extracted academic data.");
+            fapData = JsonSerializer.Deserialize<FapRecordData>(extractedJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
-        _logger.LogInformation("Successfully deserialized {SubjectCount} subjects from transcript.", fapData.Subjects.Count);
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse AI extraction result as JSON. Raw response: {Json}", extractedJson?.Substring(0, Math.Min(500, extractedJson?.Length ?? 0)));
+            throw new BadRequestException("The AI failed to extract valid data from the provided content. The HTML may be corrupted or in an unexpected format. Please ensure you're uploading the correct FAP transcript page.");
+        }
+
+        // ========== STEP 4: VALIDATE EXTRACTED DATA ==========
+        ValidateExtractedData(fapData);
+        
+        _logger.LogInformation("Successfully deserialized {SubjectCount} subjects from transcript.", fapData!.Subjects.Count);
 
         var enrollment = await _enrollmentRepository.FirstOrDefaultAsync(e => e.AuthUserId == request.AuthUserId, cancellationToken);
         if (enrollment == null)
@@ -306,5 +322,179 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var bytes = Encoding.UTF8.GetBytes(input);
         var hash = sha256.ComputeHash(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    // ========== VALIDATION METHODS ==========
+
+    /// <summary>
+    /// Validates the raw HTML input to ensure it contains expected FAP transcript structure.
+    /// </summary>
+    private void ValidateHtmlInput(string htmlContent)
+    {
+        if (string.IsNullOrWhiteSpace(htmlContent))
+        {
+            _logger.LogWarning("Empty HTML content provided for academic record processing.");
+            throw new BadRequestException("The provided HTML content is empty. Please upload your FAP transcript page.");
+        }
+
+        // Check minimum length - a valid transcript should have substantial content
+        if (htmlContent.Length < 500)
+        {
+            _logger.LogWarning("HTML content too short ({Length} chars). Likely not a valid transcript.", htmlContent.Length);
+            throw new BadRequestException("The provided content is too short to be a valid academic transcript. Please ensure you're uploading the complete FAP grade report page.");
+        }
+
+        // Check for basic HTML structure
+        var hasHtmlStructure = htmlContent.Contains("<table", StringComparison.OrdinalIgnoreCase) ||
+                               htmlContent.Contains("<tr", StringComparison.OrdinalIgnoreCase) ||
+                               htmlContent.Contains("<td", StringComparison.OrdinalIgnoreCase);
+
+        if (!hasHtmlStructure)
+        {
+            _logger.LogWarning("HTML content does not contain table structure. Content preview: {Preview}", 
+                htmlContent.Substring(0, Math.Min(200, htmlContent.Length)));
+            throw new BadRequestException("The provided content does not appear to be a valid HTML table. Please upload the FAP transcript page that contains your grade table.");
+        }
+
+        // Check for FAP-specific indicators (subject codes, grade patterns)
+        var hasFapIndicators = ContainsFapIndicators(htmlContent);
+        if (!hasFapIndicators)
+        {
+            _logger.LogWarning("HTML content does not contain FAP-specific indicators (subject codes, grades).");
+            throw new BadRequestException("The provided HTML does not appear to be from the FAP academic portal. Please ensure you're uploading the correct transcript page from FAP (fap.fpt.edu.vn).");
+        }
+    }
+
+    /// <summary>
+    /// Validates the cleaned text extracted from HTML before sending to AI.
+    /// </summary>
+    private void ValidateCleanedText(string cleanText)
+    {
+        if (string.IsNullOrWhiteSpace(cleanText))
+        {
+            _logger.LogWarning("HTML cleaning resulted in empty text.");
+            throw new BadRequestException("Failed to extract readable content from the HTML. The file may be corrupted or in an unsupported format.");
+        }
+
+        // Check if cleaned text has minimum expected content
+        if (cleanText.Length < 100)
+        {
+            _logger.LogWarning("Cleaned text too short ({Length} chars). HTML may be malformed.", cleanText.Length);
+            throw new BadRequestException("The extracted content is too short. The HTML may be corrupted or not contain the expected transcript data.");
+        }
+
+        // Check for presence of subject code patterns (e.g., PRO192, CSI104, MAE101)
+        var subjectCodePattern = new Regex(@"\b[A-Z]{2,4}\d{3}\b", RegexOptions.IgnoreCase);
+        if (!subjectCodePattern.IsMatch(cleanText))
+        {
+            _logger.LogWarning("No subject codes found in cleaned text. Content may not be a transcript.");
+            throw new BadRequestException("No subject codes were found in the content. Please ensure you're uploading your FAP academic transcript that contains subject grades.");
+        }
+    }
+
+    /// <summary>
+    /// Validates the AI extraction result before processing.
+    /// </summary>
+    private void ValidateAiExtractionResult(string? extractedJson)
+    {
+        if (string.IsNullOrWhiteSpace(extractedJson))
+        {
+            _logger.LogError("AI extraction returned empty result.");
+            throw new BadRequestException("The AI could not extract any data from the provided content. The transcript format may be corrupted or unrecognizable. Please try uploading the page again or contact support.");
+        }
+
+        // Check if it looks like valid JSON
+        var trimmed = extractedJson.Trim();
+        if (!trimmed.StartsWith("{") || !trimmed.EndsWith("}"))
+        {
+            _logger.LogError("AI extraction result is not valid JSON. Result: {Result}", 
+                extractedJson.Substring(0, Math.Min(200, extractedJson.Length)));
+            throw new BadRequestException("The AI returned an invalid response. This may be due to an unusual transcript format. Please ensure you're uploading the standard FAP grade report page.");
+        }
+    }
+
+    /// <summary>
+    /// Validates the deserialized FAP data to ensure it contains required information.
+    /// </summary>
+    private void ValidateExtractedData(FapRecordData? fapData)
+    {
+        if (fapData == null)
+        {
+            _logger.LogError("Deserialized FAP data is null.");
+            throw new BadRequestException("Failed to parse the extracted academic data. The transcript format may be incompatible.");
+        }
+
+        // Check if subjects list exists and has entries
+        if (fapData.Subjects == null || fapData.Subjects.Count == 0)
+        {
+            _logger.LogWarning("No subjects found in extracted FAP data. GPA: {Gpa}", fapData.Gpa);
+            throw new BadRequestException("No subjects were found in the transcript. Please ensure the FAP page contains your grade table with at least one subject entry.");
+        }
+
+        // Validate that subjects have required fields
+        var invalidSubjects = fapData.Subjects.Where(s => string.IsNullOrWhiteSpace(s.SubjectCode)).ToList();
+        if (invalidSubjects.Count == fapData.Subjects.Count)
+        {
+            _logger.LogWarning("All {Count} subjects have missing subject codes.", invalidSubjects.Count);
+            throw new BadRequestException("The extracted subjects are missing subject codes. The transcript format may be corrupted or in an unexpected layout.");
+        }
+
+        // Log warning for partial invalid data but continue processing
+        if (invalidSubjects.Any())
+        {
+            _logger.LogWarning("{Count} out of {Total} subjects have missing subject codes and will be skipped.", 
+                invalidSubjects.Count, fapData.Subjects.Count);
+        }
+
+        // Validate subjects have valid status
+        var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+        { 
+            "passed", "failed", "studying", "not passed", "not started" 
+        };
+        var subjectsWithInvalidStatus = fapData.Subjects
+            .Where(s => !string.IsNullOrWhiteSpace(s.SubjectCode) && 
+                       !validStatuses.Contains(s.Status?.Trim() ?? ""))
+            .ToList();
+
+        if (subjectsWithInvalidStatus.Count > fapData.Subjects.Count / 2)
+        {
+            _logger.LogWarning("More than half of subjects ({Count}/{Total}) have invalid status values.", 
+                subjectsWithInvalidStatus.Count, fapData.Subjects.Count);
+            throw new BadRequestException("The extracted data contains too many invalid status values. The transcript format may not be compatible. Please ensure you're uploading the correct FAP grade report.");
+        }
+
+        _logger.LogInformation("FAP data validation passed. Subjects: {Count}, GPA: {Gpa}", 
+            fapData.Subjects.Count, fapData.Gpa?.ToString("F2") ?? "N/A");
+    }
+
+    /// <summary>
+    /// Checks if the HTML content contains FAP-specific indicators.
+    /// </summary>
+    private static bool ContainsFapIndicators(string htmlContent)
+    {
+        var lowerContent = htmlContent.ToLowerInvariant();
+
+        // Check for FAP-specific keywords
+        var hasFapKeywords = lowerContent.Contains("fap") ||
+                             lowerContent.Contains("fpt") ||
+                             lowerContent.Contains("academic") ||
+                             lowerContent.Contains("transcript") ||
+                             lowerContent.Contains("grade") ||
+                             lowerContent.Contains("semester") ||
+                             lowerContent.Contains("subject") ||
+                             lowerContent.Contains("mark") ||
+                             lowerContent.Contains("passed") ||
+                             lowerContent.Contains("studying");
+
+        // Check for subject code patterns (e.g., PRO192, CSI104, MAE101)
+        var subjectCodePattern = new Regex(@"\b[A-Z]{2,4}\d{3}\b", RegexOptions.IgnoreCase);
+        var hasSubjectCodes = subjectCodePattern.IsMatch(htmlContent);
+
+        // Check for grade patterns (numbers like 7.5, 8.0, etc.)
+        var gradePattern = new Regex(@"\b\d{1,2}\.\d\b");
+        var hasGradePatterns = gradePattern.IsMatch(htmlContent);
+
+        // Return true if we have subject codes AND (FAP keywords OR grade patterns)
+        return hasSubjectCodes && (hasFapKeywords || hasGradePatterns);
     }
 }

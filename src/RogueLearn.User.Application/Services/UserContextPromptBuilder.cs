@@ -49,21 +49,27 @@ public class UserContextPromptBuilder : IPromptBuilder
         prompt.AppendLine($"**Experience Points:** {userProfile.ExperiencePoints}");
         prompt.AppendLine();
 
-        // Add class information
-        prompt.AppendLine("### Class Information");
-        prompt.AppendLine($"**Class:** {userClass.Name}");
+        // Add class/roadmap information
+        prompt.AppendLine("### Learning Track & Career Roadmap");
+        prompt.AppendLine($"**Learning Track:** {userClass.Name}");
         if (!string.IsNullOrEmpty(userClass.Description))
         {
-            prompt.AppendLine($"**Description:** {userClass.Description}");
+            prompt.AppendLine($"**Track Description:** {userClass.Description}");
         }
-        prompt.AppendLine($"**Difficulty Level:** {userClass.DifficultyLevel}");
+        if (!string.IsNullOrEmpty(userClass.RoadmapUrl))
+        {
+            prompt.AppendLine($"**Industry Roadmap Reference:** {userClass.RoadmapUrl}");
+            prompt.AppendLine("_(This roadmap from roadmap.sh defines industry-standard skills and learning progression for this career path)_");
+        }
+        prompt.AppendLine($"**Track Difficulty:** {userClass.DifficultyLevel}");
         if (userClass.EstimatedDurationMonths.HasValue)
         {
-            prompt.AppendLine($"**Estimated Duration:** {userClass.EstimatedDurationMonths} months");
+            prompt.AppendLine($"**Estimated Completion:** {userClass.EstimatedDurationMonths} months");
         }
         if (userClass.SkillFocusAreas != null && userClass.SkillFocusAreas.Any())
         {
-            prompt.AppendLine($"**Skill Focus Areas:** {string.Join(", ", userClass.SkillFocusAreas)}");
+            prompt.AppendLine($"**Core Skill Focus Areas:** {string.Join(", ", userClass.SkillFocusAreas)}");
+            prompt.AppendLine("_(Activities should prioritize and reinforce these skill areas)_");
         }
         prompt.AppendLine();
 
