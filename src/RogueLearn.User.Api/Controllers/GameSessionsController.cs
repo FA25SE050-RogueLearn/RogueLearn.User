@@ -1220,6 +1220,23 @@ namespace RogueLearn.User.Api.Controllers
             TimeSpan timeout,
             CancellationToken cancellationToken)
         {
+            // Resolve a working directory that actually exists to avoid Process.Start failures.
+            var cwd = AppContext.BaseDirectory;
+            if (string.IsNullOrWhiteSpace(cwd) || !Directory.Exists(cwd))
+            {
+                cwd = "/home/ubuntu/roguelearn";
+                if (!Directory.Exists(cwd))
+                {
+                    cwd = "/";
+                }
+            }
+
+            // If docker isn't on PATH for the service user, fall back to the usual Linux location.
+            if (fileName.Equals("docker", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists("/usr/bin/docker"))
+            {
+                fileName = "/usr/bin/docker";
+            }
+
             var psi = new ProcessStartInfo
             {
                 FileName = fileName,
@@ -1227,15 +1244,9 @@ namespace RogueLearn.User.Api.Controllers
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                WorkingDirectory = cwd
             };
-            // Ensure we use an existing working directory; some hosts do not have /app.
-            var cwd = "/home/ubuntu/roguelearn";
-            if (string.IsNullOrWhiteSpace(cwd) || !Directory.Exists(cwd))
-            {
-                cwd = "/";
-            }
-            psi.WorkingDirectory = cwd;
 
             using var proc = new Process { StartInfo = psi };
             var stdout = new List<string>();
