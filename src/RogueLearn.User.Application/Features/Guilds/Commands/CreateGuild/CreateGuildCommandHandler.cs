@@ -31,13 +31,6 @@ public class CreateGuildCommandHandler : IRequestHandler<CreateGuildCommand, Cre
             throw new Exceptions.BadRequestException("User already belongs to a guild and cannot create another guild.");
         }
 
-        // 2) If the user has already created a guild, they cannot create another guild
-        var createdGuilds = await _guildRepository.GetGuildsByCreatorAsync(request.CreatorAuthUserId, cancellationToken);
-        if (createdGuilds.Any())
-        {
-            throw new Exceptions.BadRequestException("User has already created a guild and cannot create another.");
-        }
-
         // Role-based max members constraints
         var verifiedLecturerRole = await _roleRepository.GetByNameAsync("Verified Lecturer", cancellationToken);
         var userRoles = await _userRoleRepository.GetRolesForUserAsync(request.CreatorAuthUserId, cancellationToken);

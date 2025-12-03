@@ -53,13 +53,6 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
             throw new Exceptions.BadRequestException("You already belong to a different guild.");
         }
 
-        // Prevent guild creators from joining other guilds
-        var createdGuilds = await _guildRepository.GetGuildsByCreatorAsync(request.AuthUserId, cancellationToken);
-        if (createdGuilds.Any(g => g.Id != request.GuildId))
-        {
-            throw new Exceptions.BadRequestException("Guild creators cannot join other guilds.");
-        }
-
         var activeCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
         var cap = guild.MaxMembers;
         if (_roleRepository != null && _userRoleRepository != null)
