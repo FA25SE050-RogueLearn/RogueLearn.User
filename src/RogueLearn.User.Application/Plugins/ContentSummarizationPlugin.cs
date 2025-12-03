@@ -3,6 +3,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using RogueLearn.User.Application.Models;
 using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Drawing = DocumentFormat.OpenXml.Drawing;
 using System.Text;
 using System.Text.Json;
@@ -88,16 +89,17 @@ Follow these rules strictly:
         {
             var chatService = _kernel.GetRequiredService<IChatCompletionService>();
 
-            // Decide parser based on MIME or file extension
             var contentType = (attachment.ContentType ?? string.Empty).ToLowerInvariant();
             var fileName = attachment.FileName ?? string.Empty;
             var isPdf = contentType.Contains("application/pdf") || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
             var isPptx = contentType.Contains("application/vnd.openxmlformats-officedocument.presentationml.presentation") || fileName.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase);
+            var isDocx = contentType.Contains("application/vnd.openxmlformats-officedocument.wordprocessingml.document") || fileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase);
 
             ChatMessageContentItemCollection contentItems;
+            string? localTextFallback = null;
+
             if (isPdf)
             {
-                // Fallback: without a PDF parser library available, send the raw bytes/content to the model
                 contentItems = new ChatMessageContentItemCollection();
                 if (attachment.Bytes is { Length: > 0 })
                 {
@@ -116,24 +118,31 @@ Follow these rules strictly:
             }
             else if (isPptx)
             {
-                Stream pptxStream = attachment.Stream ?? (attachment.Bytes != null ? new MemoryStream(attachment.Bytes) : Stream.Null);
-                if (pptxStream == Stream.Null) return null;
-                if (pptxStream.CanSeek) pptxStream.Position = 0;
-                contentItems = ProcessPowerPoint(pptxStream);
+                var s = attachment.Stream ?? (attachment.Bytes != null ? new MemoryStream(attachment.Bytes) : Stream.Null);
+                if (s == Stream.Null) return null;
+                if (s.CanSeek) s.Position = 0;
+                contentItems = ProcessPowerPoint(s);
+                if (s.CanSeek) s.Position = 0;
+                localTextFallback = ExtractTextFromPowerPoint(s);
+            }
+            else if (isDocx)
+            {
+                var s = attachment.Stream ?? (attachment.Bytes != null ? new MemoryStream(attachment.Bytes) : Stream.Null);
+                if (s == Stream.Null) return null;
+                if (s.CanSeek) s.Position = 0;
+                contentItems = ProcessWordDocument(s);
             }
             else
             {
-                // Fallback: for other types, if bytes are present send as attachment content
-                // Or if it's a text content type, attempt a simple text read
                 contentItems = new ChatMessageContentItemCollection();
                 if (!string.IsNullOrWhiteSpace(contentType) && contentType.StartsWith("text/"))
                 {
-                    // Read text from stream/bytes
                     using var reader = new StreamReader(attachment.Stream ?? new MemoryStream(attachment.Bytes ?? Array.Empty<byte>()));
                     var text = reader.ReadToEnd();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
                         contentItems.Add(new TextContent(text));
+                        localTextFallback = text;
                     }
                 }
                 else if (attachment.Bytes != null && attachment.Bytes.Length > 0)
@@ -158,14 +167,12 @@ Follow these rules strictly:
             }
 
             var chatHistory = new ChatHistory();
-            // System instruction to force JSON BlockNote output
             chatHistory.AddSystemMessage(BlockNoteJsonInstruction);
 
-            // Final instruction + content payload for the AI summarization
             var finalPrompt = new ChatMessageContentItemCollection
-      {
-        new TextContent("Based on the following content from a document (which may include text and images), produce a structured summary as BlockNote JSON blocks. Use a heading for the title and bullets for key points. If the content is minimal or noisy, STILL return a non-empty array with at least one paragraph block containing a concise text summary.")
-      };
+            {
+                new TextContent("Based on the following content from a document, produce a structured summary as BlockNote JSON blocks. Use a heading and bullets. Return a non-empty array even for minimal content.")
+            };
             foreach (var item in contentItems)
             {
                 finalPrompt.Add(item);
@@ -178,8 +185,7 @@ Follow these rules strictly:
             var parsed = TryParseBlockNoteJsonToObject(sanitized);
             if (parsed is { } obj && obj is List<object> list && list.Count == 0)
             {
-                // Avoid empty array; try a minimal text fallback if we had a text payload
-                var textFallback = ExtractPlainTextFromAttachment(attachment);
+                var textFallback = localTextFallback ?? ExtractPlainTextFromAttachment(attachment);
                 if (!string.IsNullOrWhiteSpace(textFallback))
                 {
                     parsed = BlockNoteDocumentFactory.FromPlainText(textFallback);
@@ -187,16 +193,37 @@ Follow these rules strictly:
             }
             if (parsed is null)
             {
-                var textFallback = ExtractPlainTextFromAttachment(attachment);
+                var textFallback = localTextFallback ?? ExtractPlainTextFromAttachment(attachment);
                 parsed = !string.IsNullOrWhiteSpace(textFallback)
-                  ? BlockNoteDocumentFactory.FromPlainText(textFallback)
-                  : BlockNoteDocumentFactory.FromPlainText($"Summary unavailable for '{attachment.FileName}'.");
+                    ? BlockNoteDocumentFactory.FromPlainText(textFallback)
+                    : BlockNoteDocumentFactory.FromPlainText($"Summary unavailable for '{attachment.FileName}'.");
             }
             return parsed;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to summarize file via server-side parsing + Gemini. FileName={FileName}, ContentType={ContentType}", attachment.FileName, attachment.ContentType);
+            try
+            {
+                var contentType = (attachment.ContentType ?? string.Empty).ToLowerInvariant();
+                var fileName = attachment.FileName ?? string.Empty;
+                var isPptx = contentType.Contains("application/vnd.openxmlformats-officedocument.presentationml.presentation") || fileName.EndsWith(".pptx", StringComparison.OrdinalIgnoreCase);
+                if (isPptx)
+                {
+                    var s = attachment.Stream ?? (attachment.Bytes != null ? new MemoryStream(attachment.Bytes) : Stream.Null);
+                    if (s != Stream.Null)
+                    {
+                        if (s.CanSeek) s.Position = 0;
+                        var text = ExtractTextFromPowerPoint(s);
+                        if (!string.IsNullOrWhiteSpace(text))
+                            return BlockNoteDocumentFactory.FromPlainText(text);
+                    }
+                }
+                var plain = ExtractPlainTextFromAttachment(attachment);
+                if (!string.IsNullOrWhiteSpace(plain))
+                    return BlockNoteDocumentFactory.FromPlainText(plain);
+            }
+            catch { }
             return null;
         }
     }
@@ -226,25 +253,89 @@ Follow these rules strictly:
                 {
                     contentItems.Add(new TextContent(slideText.ToString()));
                 }
-
-                foreach (var imagePart in slidePart.ImageParts)
-                {
-                    using var imageStream = imagePart.GetStream();
-                    using var ms = new MemoryStream();
-                    imageStream.CopyTo(ms);
-                    var imageBytes = ms.ToArray();
-                    if (imageBytes.Length > 0)
-                    {
-                        contentItems.Add(new ImageContent(imageBytes, imagePart.ContentType));
-                    }
-                }
                 slideIndex++;
-                if (slideIndex > 50) break; // cap to avoid huge prompts
+                if (slideIndex > 20) break;
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "PPTX parsing failed; returning available content items only.");
+        }
+        return contentItems;
+    }
+
+    private static string ExtractTextFromPowerPoint(Stream pptxStream)
+    {
+        try
+        {
+            using var presentationDocument = PresentationDocument.Open(pptxStream, false);
+            var presentationPart = presentationDocument.PresentationPart;
+            if (presentationPart == null) return string.Empty;
+            var sb = new StringBuilder();
+            int slideIndex = 1;
+            foreach (var slidePart in presentationPart.SlideParts)
+            {
+                sb.AppendLine($"Slide {slideIndex}:");
+                var textNodes = slidePart.Slide.Descendants<Drawing.Text>();
+                foreach (var t in textNodes)
+                {
+                    sb.Append(t.Text).Append(' ');
+                }
+                sb.AppendLine();
+                slideIndex++;
+                if (slideIndex > 20) break;
+            }
+            return sb.ToString().Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private ChatMessageContentItemCollection ProcessWordDocument(Stream docxStream)
+    {
+        var contentItems = new ChatMessageContentItemCollection();
+        try
+        {
+            using var wordDoc = WordprocessingDocument.Open(docxStream, false);
+            var main = wordDoc.MainDocumentPart;
+            var body = main?.Document?.Body;
+            if (body != null)
+            {
+                var sb = new StringBuilder();
+                foreach (var paragraph in body.Descendants<Paragraph>())
+                {
+                    foreach (var t in paragraph.Descendants<Text>())
+                    {
+                        sb.Append(t.Text).Append(' ');
+                    }
+                    sb.AppendLine();
+                }
+                var text = sb.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    contentItems.Add(new TextContent(text));
+                }
+            }
+            if (main != null)
+            {
+                foreach (var imagePart in main.ImageParts)
+                {
+                    using var imageStream = imagePart.GetStream();
+                    using var ms = new MemoryStream();
+                    imageStream.CopyTo(ms);
+                    var bytes = ms.ToArray();
+                    if (bytes.Length > 0)
+                    {
+                        contentItems.Add(new ImageContent(bytes, imagePart.ContentType));
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DOCX parsing failed; returning available content items only.");
         }
         return contentItems;
     }

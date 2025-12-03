@@ -26,7 +26,7 @@ public sealed class UpdateTagCommandHandler : IRequestHandler<UpdateTagCommand, 
     if (tag.AuthUserId != request.AuthUserId)
       throw new ForbiddenException("Access denied to tag.");
 
-    var name = (request.Name ?? string.Empty).Trim();
+    var name = (request.Name ?? string.Empty).Trim().ToPascalCase();
     if (string.IsNullOrWhiteSpace(name))
       throw new FluentValidation.ValidationException("Tag name is required.");
 

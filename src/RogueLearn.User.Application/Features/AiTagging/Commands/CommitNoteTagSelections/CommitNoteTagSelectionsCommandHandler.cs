@@ -45,7 +45,7 @@ public class CommitNoteTagSelectionsCommandHandler : IRequestHandler<CommitNoteT
         var createdTags = new List<CreatedTagDto>();
         foreach (var raw in request.NewTagNames.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var name = raw.Trim();
+            var name = raw.Trim().ToPascalCase();
             if (string.IsNullOrWhiteSpace(name)) continue;
             var slug = name.ToSlug();
             // Attempt slug match in memory from user's tags

@@ -38,8 +38,10 @@ public class TaggingSuggestionService : ITaggingSuggestionService
         if (attachment == null || ((attachment.Bytes == null || attachment.Bytes.Length == 0) && attachment.Stream is null))
             return Array.Empty<TagSuggestionDto>();
 
-        // Send the file directly to AI to generate tag suggestions in JSON.
-        var json = await _filePlugin.GenerateTagSuggestionsJsonAsync(attachment, maxTags, cancellationToken);
+        var userTags = await _tagRepository.FindAsync(t => t.AuthUserId == authUserId, cancellationToken);
+        var knownNames = userTags.Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        var json = await _filePlugin.GenerateTagSuggestionsJsonAsync(attachment, knownNames, maxTags, cancellationToken);
         if (string.IsNullOrWhiteSpace(json))
         {
             _logger.LogWarning("File-based tag suggestion returned empty JSON. FileName={FileName}, ContentType={ContentType}", attachment.FileName, attachment.ContentType);
@@ -58,25 +60,26 @@ public class TaggingSuggestionService : ITaggingSuggestionService
         var payload = SafeDeserialize(json, options);
         var items = payload?.Tags ?? new List<TagItem>();
 
-        // Normalize labels and dedupe by slug
+        // Normalize labels (singularize, trim) and dedupe by normalized slug
         var normalized = items
             .Where(x => !string.IsNullOrWhiteSpace(x.Label))
-            .Select(x => new { Item = x, Slug = x.Label.Trim().ToSlug() })
+            .Select(x => new { Item = x, Slug = NormalizeLabel(x.Label).ToSlug() })
             .GroupBy(x => x.Slug)
             .Select(g => g.OrderByDescending(x => x.Item.Confidence).First().Item)
             .OrderByDescending(x => x.Confidence)
             .Take(Math.Max(1, Math.Min(10, maxTags)))
             .ToList();
 
-        // Fetch user's tags and map by slug
+        // Fetch user's tags and map by normalized slug
         var userTags = await _tagRepository.FindAsync(t => t.AuthUserId == authUserId, cancellationToken);
-        var tagMap = userTags.ToDictionary(t => t.Name.ToSlug(), t => t);
+        var tagMap = userTags.ToDictionary(t => NormalizeLabel(t.Name).ToSlug(), t => t);
 
         var results = new List<TagSuggestionDto>(normalized.Count);
+        const double matchThreshold = 0.8;
         foreach (var s in normalized)
         {
-            var slug = s.Label.Trim().ToSlug();
-            if (tagMap.TryGetValue(slug, out var existing))
+            var slug = NormalizeLabel(s.Label).ToSlug();
+            if (tagMap.TryGetValue(slug, out var existing) && s.Confidence >= matchThreshold)
             {
                 results.Add(new TagSuggestionDto
                 {
@@ -91,7 +94,7 @@ public class TaggingSuggestionService : ITaggingSuggestionService
             {
                 results.Add(new TagSuggestionDto
                 {
-                    Label = s.Label.Trim(),
+                    Label = NormalizeLabel(s.Label).Trim().ToPascalCase(),
                     Confidence = s.Confidence,
                     Reason = s.Reason ?? string.Empty
                 });
@@ -132,5 +135,25 @@ public class TaggingSuggestionService : ITaggingSuggestionService
         [JsonPropertyName("label")] public string Label { get; set; } = string.Empty;
         [JsonPropertyName("confidence")] public double Confidence { get; set; } = 0.0;
         [JsonPropertyName("reason")] public string? Reason { get; set; }
+    }
+
+    private static string NormalizeLabel(string label)
+    {
+        var s = (label ?? string.Empty).Trim();
+        if (s.Length == 0) return s;
+        var lower = s.ToLowerInvariant();
+        // Basic plural normalization
+        if (lower.EndsWith("ies") && lower.Length > 3)
+            lower = lower[..^3] + "y"; // studies -> study
+        else if (lower.EndsWith("es") && lower.Length > 4)
+            lower = lower[..^2]; // classes -> class, boxes -> box
+        else if (lower.EndsWith("s") && lower.Length > 3)
+            lower = lower[..^1]; // challenges -> challenge
+
+        // Common synonyms normalization
+        lower = lower.Replace(".net", "dotnet");
+        lower = lower.Replace("c#", "csharp");
+
+        return lower;
     }
 }
