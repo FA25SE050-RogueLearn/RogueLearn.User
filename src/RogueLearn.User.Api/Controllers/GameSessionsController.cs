@@ -1229,6 +1229,13 @@ namespace RogueLearn.User.Api.Controllers
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            // Ensure we use an existing working directory; some hosts do not have /app.
+            var cwd = AppContext.BaseDirectory;
+            if (string.IsNullOrWhiteSpace(cwd) || !Directory.Exists(cwd))
+            {
+                cwd = "/";
+            }
+            psi.WorkingDirectory = cwd;
 
             using var proc = new Process { StartInfo = psi };
             var stdout = new List<string>();
