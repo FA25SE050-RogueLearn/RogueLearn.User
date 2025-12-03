@@ -1230,7 +1230,7 @@ namespace RogueLearn.User.Api.Controllers
                 CreateNoWindow = true
             };
             // Ensure we use an existing working directory; some hosts do not have /app.
-            var cwd = AppContext.BaseDirectory;
+            var cwd = "/home/ubuntu/roguelearn";
             if (string.IsNullOrWhiteSpace(cwd) || !Directory.Exists(cwd))
             {
                 cwd = "/";
