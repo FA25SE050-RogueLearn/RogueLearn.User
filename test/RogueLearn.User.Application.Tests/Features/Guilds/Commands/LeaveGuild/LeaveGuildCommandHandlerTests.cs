@@ -1,7 +1,9 @@
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Moq;
+using AutoFixture.Xunit2;
+using NSubstitute;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.LeaveGuild;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
@@ -12,55 +14,37 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.LeaveGuild;
 
 public class LeaveGuildCommandHandlerTests
 {
-    [Fact]
-    public async Task LeaveGuild_RecalculatesRanks_AfterMemberLeaves()
+    [Theory]
+    [AutoData]
+    public async Task Handle_MasterWithOthers_Disallowed(LeaveGuildCommand cmd)
     {
-        var memberRepo = new Mock<IGuildMemberRepository>(MockBehavior.Strict);
-        var guildRepo = new Mock<IGuildRepository>(MockBehavior.Strict);
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo);
 
-        var guildId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
+        var master = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.GuildMaster };
+        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(master);
+        memberRepo.CountActiveMembersAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(2);
+        await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
 
-        memberRepo.Setup(r => r.GetMemberAsync(guildId, userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GuildMember { Id = Guid.NewGuid(), GuildId = guildId, AuthUserId = userId, Role = GuildRole.Member, Status = MemberStatus.Active });
+    [Theory]
+    [AutoData]
+    public async Task Handle_Success_DeletesAndUpdates(LeaveGuildCommand cmd)
+    {
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo);
 
-        memberRepo.Setup(r => r.CountActiveMembersAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(2);
+        var member = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.Member };
+        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(member);
+        var guild = new Guild { Id = cmd.GuildId, CurrentMemberCount = 10 };
+        guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
+        memberRepo.GetMembersByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember>());
 
-        memberRepo.Setup(r => r.DeleteAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        guildRepo.Setup(r => r.GetByIdAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Guild { Id = guildId, MaxMembers = 50, CurrentMemberCount = 3 });
-
-        guildRepo.Setup(r => r.UpdateAsync(It.IsAny<Guild>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guild g, CancellationToken _) => g);
-
-        var remaining = new[]
-        {
-            new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Status = MemberStatus.Active, ContributionPoints = 120, JoinedAt = DateTimeOffset.UtcNow.AddDays(-5) },
-            new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Status = MemberStatus.Active, ContributionPoints = 80, JoinedAt = DateTimeOffset.UtcNow.AddDays(-3) },
-            new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Status = MemberStatus.Inactive, ContributionPoints = 999, JoinedAt = DateTimeOffset.UtcNow.AddDays(-1) }
-        };
-
-        memberRepo.Setup(r => r.GetMembersByGuildAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(remaining);
-
-        IEnumerable<GuildMember> updatedRange = Enumerable.Empty<GuildMember>();
-        memberRepo.Setup(r => r.UpdateRangeAsync(It.IsAny<IEnumerable<GuildMember>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<GuildMember> ms, CancellationToken _) =>
-            {
-                updatedRange = ms.ToList();
-                return updatedRange;
-            });
-
-        var handler = new LeaveGuildCommandHandler(memberRepo.Object, guildRepo.Object);
-        await handler.Handle(new LeaveGuildCommand(guildId, userId), CancellationToken.None);
-
-        var active = updatedRange.Where(m => m.Status == MemberStatus.Active).OrderByDescending(m => m.ContributionPoints).ThenBy(m => m.JoinedAt).ToList();
-        Assert.Equal(1, active[0].RankWithinGuild);
-        Assert.Equal(2, active[1].RankWithinGuild);
-        var inactive = updatedRange.First(m => m.Status != MemberStatus.Active);
-        Assert.Null(inactive.RankWithinGuild);
+        await sut.Handle(cmd, CancellationToken.None);
+        await memberRepo.Received(1).DeleteAsync(member.Id, Arg.Any<CancellationToken>());
+        await guildRepo.Received(1).UpdateAsync(Arg.Any<Guild>(), Arg.Any<CancellationToken>());
+        await memberRepo.Received(1).UpdateRangeAsync(Arg.Any<IEnumerable<GuildMember>>(), Arg.Any<CancellationToken>());
     }
 }

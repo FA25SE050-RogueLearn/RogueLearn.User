@@ -100,7 +100,7 @@ using System.Text.Json.Serialization;
 
             // ⭐ UPDATED: Pass null for PerformContext - Hangfire will inject it automatically
             var jobId = _backgroundJobClient.Schedule<IQuestStepGenerationService>(
-                service => service.GenerateQuestStepsAsync(authUserId, questId, null),  // ⭐ Pass null here
+                service => service.GenerateQuestStepsAsync(authUserId, questId, null!),  // ⭐ Pass null here
                 TimeSpan.Zero); // Immediate scheduling
 
             _logger.LogInformation(
@@ -192,7 +192,7 @@ using System.Text.Json.Serialization;
                     _logger.LogInformation("Job {JobId} is processing", jobId);
                 }
 
-                return Ok(response);
+                return await Task.FromResult(Ok(response));
             }
         }
         catch (Exception ex)
@@ -425,7 +425,7 @@ public class QuestGenerationProgressDto
     /// <summary>
     /// Human-readable progress message.
     /// </summary>
-    public string Message { get; set; }
+    public string Message { get; set; } = string.Empty;
 
     /// <summary>
     /// Progress percentage (0-100).

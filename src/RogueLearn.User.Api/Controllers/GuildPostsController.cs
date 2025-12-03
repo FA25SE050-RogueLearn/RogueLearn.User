@@ -3,13 +3,12 @@ using System.Net.Mime;
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.CreateGuildPost;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.DeleteGuildPost;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.EditGuildPost;
-using RogueLearn.User.Application.Features.GuildPosts.Commands.AdminActions;
+using RogueLearn.User.Application.Features.GuildPosts.Commands.GuildMasterActions;
 using RogueLearn.User.Application.Features.GuildPosts.DTOs;
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPosts;
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPostById;
@@ -183,7 +182,7 @@ public class GuildPostsController : ControllerBase
     public async Task<IActionResult> DeleteGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-        await _mediator.Send(new DeleteGuildPostCommand(guildId, postId, authUserId, false), cancellationToken);
+        await _mediator.Send(new DeleteGuildPostCommand(guildId, postId, authUserId), cancellationToken);
         return NoContent();
     }
 
@@ -219,7 +218,7 @@ public class GuildPostsController : ControllerBase
     public async Task<IActionResult> DeleteGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromRoute] Guid commentId, CancellationToken cancellationToken)
     {
         var requesterId = User.GetAuthUserId();
-        await _mediator.Send(new DeleteGuildPostCommentCommand(guildId, postId, commentId, requesterId, false), cancellationToken);
+        await _mediator.Send(new DeleteGuildPostCommentCommand(guildId, postId, commentId, requesterId), cancellationToken);
         return NoContent();
     }
 
@@ -312,62 +311,6 @@ public class GuildPostsController : ControllerBase
     public async Task<IActionResult> UnlockGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
     {
         await _mediator.Send(new UnlockGuildPostCommand(guildId, postId), cancellationToken);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Approve a guild post.
-    /// </summary>
-    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/approve")]
-    [GuildMasterOrOfficerOnly("guildId")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ApproveGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromBody] string? note, CancellationToken cancellationToken)
-    {
-        await _mediator.Send(new ApproveGuildPostCommand(guildId, postId, note), cancellationToken);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Reject a guild post.
-    /// </summary>
-    [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/reject")]
-    [GuildMasterOrOfficerOnly("guildId")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> RejectGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromBody] string? reason, CancellationToken cancellationToken)
-    {
-        await _mediator.Send(new RejectGuildPostCommand(guildId, postId, reason), cancellationToken);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Admin-only: Force delete a guild post.
-    /// </summary>
-    [HttpDelete("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}")]
-    [AdminOnly]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ForceDeleteGuildPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
-    {
-        var requesterId = User.GetAuthUserId();
-        await _mediator.Send(new DeleteGuildPostCommand(guildId, postId, requesterId, true), cancellationToken);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Admin-only: Hard delete a guild post comment.
-    /// </summary>
-    [HttpDelete("~/api/admin/guilds/{guildId:guid}/posts/{postId:guid}/comments/{commentId:guid}")]
-    [AdminOnly]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> ForceDeleteGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromRoute] Guid commentId, CancellationToken cancellationToken)
-    {
-        var requesterId = User.GetAuthUserId();
-        await _mediator.Send(new DeleteGuildPostCommentCommand(guildId, postId, commentId, requesterId, true), cancellationToken);
         return NoContent();
     }
 }

@@ -7,7 +7,6 @@ using RogueLearn.User.Application.Features.Notes.Commands.CreateNote;
 using RogueLearn.User.Application.Features.Notes.Commands.DeleteNote;
 using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
-using RogueLearn.User.Application.Features.Notes.Queries.GetPublicNotes;
 using RogueLearn.User.Application.Features.Notes.Queries.GetNoteById;
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNoteFromUpload;
 using RogueLearn.User.Application.Features.AiTagging.Queries.SuggestNoteTags;
@@ -73,22 +72,6 @@ public class NotesController : ControllerBase
         var authUserId = User.GetAuthUserId();
 
         var query = new GetMyNotesQuery(authUserId, search);
-
-        var result = await _mediator.Send(query, cancellationToken);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Get public notes available to all users.
-    /// </summary>
-    /// <param name="search">Optional search term for filtering by title.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    [HttpGet("public")]
-    [AllowAnonymous]
-    [ProducesResponseType(typeof(List<NoteDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NoteDto>>> GetPublicNotes([FromQuery] string? search, CancellationToken cancellationToken)
-    {
-        var query = new GetPublicNotesQuery(search);
 
         var result = await _mediator.Send(query, cancellationToken);
         return Ok(result);

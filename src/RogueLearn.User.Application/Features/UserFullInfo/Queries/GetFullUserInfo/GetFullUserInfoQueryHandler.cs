@@ -24,8 +24,6 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
     private readonly IMeetingParticipantRepository _meetingParticipantRepository;
     private readonly INoteRepository _noteRepository;
     private readonly INoteTagRepository _noteTagRepository;
-    private readonly INoteSkillRepository _noteSkillRepository;
-    private readonly INoteQuestRepository _noteQuestRepository;
     private readonly INotificationRepository _notificationRepository;
     private readonly ILecturerVerificationRequestRepository _lecturerVerificationRequestRepository;
     private readonly IQuestRepository _questRepository;
@@ -54,8 +52,6 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
         IMeetingParticipantRepository meetingParticipantRepository,
         INoteRepository noteRepository,
         INoteTagRepository noteTagRepository,
-        INoteSkillRepository noteSkillRepository,
-        INoteQuestRepository noteQuestRepository,
         INotificationRepository notificationRepository,
         ILecturerVerificationRequestRepository lecturerVerificationRequestRepository,
         IQuestRepository questRepository,
@@ -83,8 +79,6 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
         _meetingParticipantRepository = meetingParticipantRepository;
         _noteRepository = noteRepository;
         _noteTagRepository = noteTagRepository;
-        _noteSkillRepository = noteSkillRepository;
-        _noteQuestRepository = noteQuestRepository;
         _notificationRepository = notificationRepository;
         _lecturerVerificationRequestRepository = lecturerVerificationRequestRepository;
         _questRepository = questRepository;

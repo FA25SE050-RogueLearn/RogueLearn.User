@@ -88,7 +88,6 @@ public static class ServiceCollectionExtensions
         // Academic repositories
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
-        services.AddScoped<IClassNodeRepository, ClassNodeRepository>();
 
         // instance of `ClassSpecializationSubjectRepository` when `IClassSpecializationSubjectRepository` is requested.
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
@@ -137,9 +136,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<INoteTagRepository, NoteTagRepository>();
-        services.AddScoped<INoteSkillRepository, NoteSkillRepository>();
-        services.AddScoped<INoteQuestRepository, NoteQuestRepository>();
-
+        
         // Social/Party repositories
         services.AddScoped<IPartyRepository, PartyRepository>();
         services.AddScoped<IPartyMemberRepository, PartyMemberRepository>();

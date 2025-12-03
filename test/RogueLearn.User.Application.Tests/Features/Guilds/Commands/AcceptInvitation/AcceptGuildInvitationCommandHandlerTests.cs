@@ -1,7 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Moq;
-using RogueLearn.User.Application.Exceptions;
+using AutoFixture.Xunit2;
+using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Commands.AcceptInvitation;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
@@ -12,68 +14,28 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.AcceptInvit
 
 public class AcceptGuildInvitationCommandHandlerTests
 {
-    [Fact]
-    public async Task AcceptInvitation_Throws_WhenUserAlreadyMemberOfDifferentGuild()
+    [Theory]
+    [AutoData]
+    public async Task Handle_Success_AddsMemberAndUpdatesInvitation(AcceptGuildInvitationCommand cmd)
     {
-        var invitationRepo = new Mock<IGuildInvitationRepository>(MockBehavior.Strict);
-        var memberRepo = new Mock<IGuildMemberRepository>(MockBehavior.Strict);
-        var guildRepo = new Mock<IGuildRepository>(MockBehavior.Strict);
+        var invRepo = Substitute.For<IGuildInvitationRepository>();
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var sut = new AcceptGuildInvitationCommandHandler(invRepo, memberRepo, guildRepo);
 
-        var guildId = Guid.NewGuid();
-        var otherGuildId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
-        var inviteId = Guid.NewGuid();
+        var guild = new Guild { Id = cmd.GuildId, MaxMembers = 50, CurrentMemberCount = 0 };
+        guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
 
-        guildRepo.Setup(r => r.GetByIdAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Guild { Id = guildId, MaxMembers = 50 });
-        invitationRepo.Setup(r => r.GetByIdAsync(inviteId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GuildInvitation
-            {
-                Id = inviteId,
-                GuildId = guildId,
-                InviteeId = userId,
-                Status = InvitationStatus.Pending,
-                ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
-            });
-        memberRepo.Setup(r => r.GetMembershipsByUserAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new GuildMember { GuildId = otherGuildId, AuthUserId = userId, Status = MemberStatus.Active }
-            });
+        var inv = new GuildInvitation { Id = cmd.InvitationId, GuildId = cmd.GuildId, InviteeId = cmd.AuthUserId, Status = InvitationStatus.Pending, ExpiresAt = DateTimeOffset.UtcNow.AddDays(1) };
+        invRepo.GetByIdAsync(cmd.InvitationId, Arg.Any<CancellationToken>()).Returns(inv);
 
-        var handler = new AcceptGuildInvitationCommandHandler(invitationRepo.Object, memberRepo.Object, guildRepo.Object);
-        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new AcceptGuildInvitationCommand(guildId, inviteId, userId), CancellationToken.None));
-    }
+        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns((GuildMember?)null);
+        memberRepo.CountActiveMembersAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(1);
+        memberRepo.GetMembersByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember> { new() { AuthUserId = cmd.AuthUserId, Status = MemberStatus.Active } });
 
-    [Fact]
-    public async Task AcceptInvitation_Throws_WhenUserIsCreatorOfAnotherGuild()
-    {
-        var invitationRepo = new Mock<IGuildInvitationRepository>(MockBehavior.Strict);
-        var memberRepo = new Mock<IGuildMemberRepository>(MockBehavior.Strict);
-        var guildRepo = new Mock<IGuildRepository>(MockBehavior.Strict);
+        await sut.Handle(cmd, CancellationToken.None);
 
-        var guildId = Guid.NewGuid();
-        var otherGuildId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
-        var inviteId = Guid.NewGuid();
-
-        guildRepo.Setup(r => r.GetByIdAsync(guildId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Guild { Id = guildId, MaxMembers = 50 });
-        invitationRepo.Setup(r => r.GetByIdAsync(inviteId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GuildInvitation
-            {
-                Id = inviteId,
-                GuildId = guildId,
-                InviteeId = userId,
-                Status = InvitationStatus.Pending,
-                ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
-            });
-        memberRepo.Setup(r => r.GetMembershipsByUserAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<GuildMember>());
-        guildRepo.Setup(r => r.GetGuildsByCreatorAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { new Guild { Id = otherGuildId, CreatedBy = userId } });
-
-        var handler = new AcceptGuildInvitationCommandHandler(invitationRepo.Object, memberRepo.Object, guildRepo.Object);
-        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new AcceptGuildInvitationCommand(guildId, inviteId, userId), CancellationToken.None));
+        await memberRepo.Received(1).AddAsync(Arg.Any<GuildMember>(), Arg.Any<CancellationToken>());
+        await invRepo.Received(1).UpdateAsync(Arg.Is<GuildInvitation>(i => i.Status == InvitationStatus.Accepted), Arg.Any<CancellationToken>());
     }
 }

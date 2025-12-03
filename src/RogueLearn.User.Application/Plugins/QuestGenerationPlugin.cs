@@ -30,7 +30,7 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
     /// Generates quest steps for a SINGLE week using AI.
     /// This method is called multiple times (once per week) to generate all quest steps.
     /// </summary>
-public async Task<string> GenerateQuestStepsJsonAsync(
+public async Task<string?> GenerateQuestStepsJsonAsync(
     WeekContext weekContext,
     string userContext,
     List<Skill> relevantSkills,

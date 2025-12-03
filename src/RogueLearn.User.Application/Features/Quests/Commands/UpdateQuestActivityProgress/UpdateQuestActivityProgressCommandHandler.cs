@@ -75,7 +75,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         if (request.Status == StepCompletionStatus.Completed)
         {
             // ⭐ VALIDATION: Check if activity type requires submission validation (Quiz/KnowledgeCheck)
-            var activityType = ExtractActivityType(questStep.Content, request.ActivityId);
+            var activityType = ExtractActivityType(questStep.Content!, request.ActivityId);
 
             var (canComplete, validationMessage) = await _activityValidationService.ValidateActivityCompletion(
                 request.ActivityId,
@@ -221,7 +221,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         CancellationToken cancellationToken)
     {
         // 1. Parse the content - it might be a JSON string or Dictionary
-        List<object> activities = null;
+        List<object> activities = new();
 
         _logger.LogInformation("🔍 Content type: {ContentType}", questStep.Content?.GetType().Name ?? "null");
         _logger.LogInformation("🔍 Content value: {Content}", questStep.Content?.ToString() ?? "null");
@@ -309,7 +309,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                     _logger.LogInformation("✅ Converted JObject to string");
 
                     // Parse as JSON
-                    using (JsonDocument doc = JsonDocument.Parse(jObjectJson))
+                    using (JsonDocument doc = JsonDocument.Parse(jObjectJson!))
                     {
                         var root = doc.RootElement;
 
@@ -365,7 +365,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         }
 
         // 2. Find the specific activity being completed
-        Dictionary<string, object> activityToComplete = null;
+        Dictionary<string, object> activityToComplete = new();
 
         foreach (var activityObj in activities)
         {
@@ -393,7 +393,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                         id == activityIdToComplete)
                     {
                         // Convert to Dictionary for further processing
-                        activityToComplete = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonStr);
+                        activityToComplete = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonStr)!;
                         break;
                     }
                 }
@@ -411,7 +411,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         {
             _logger.LogInformation("📦 Payload type: {Type}", payloadObj?.GetType().Name ?? "null");
 
-            Dictionary<string, object> payload = null;
+            Dictionary<string, object> payload = new();
 
             // Handle different payload types
             if (payloadObj is Dictionary<string, object> dictPayload)
@@ -423,13 +423,13 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             {
                 // Convert JsonElement to Dictionary
                 var payloadJson = jsonElement.GetRawText();
-                payload = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadJson);
+                payload = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadJson)!;
                 _logger.LogInformation("✅ Converted JsonElement payload to Dictionary");
             }
             else if (payloadObj is string payloadStr)
             {
                 // Parse string as JSON
-                payload = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadStr);
+                payload = JsonSerializer.Deserialize<Dictionary<string, object>>(payloadStr)!;
                 _logger.LogInformation("✅ Parsed string payload as Dictionary");
             }
 
@@ -652,7 +652,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
             _logger.LogInformation("🔍 Extracting activity type - Content type: {ContentType}", stepContent.GetType().Name);
 
-            string jsonString = null;
+            string jsonString = string.Empty;
 
             // ⭐ Handle different content types
             if (stepContent is string strContent)
@@ -683,7 +683,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
                 try
                 {
-                    jsonString = stepContent.ToString();
+                    jsonString = stepContent.ToString()!;
                     _logger.LogInformation("✅ Converted JObject to string, length: {Length}", jsonString?.Length ?? 0);
                 }
                 catch (Exception jEx)
@@ -699,7 +699,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 // Try to convert to string as fallback
                 try
                 {
-                    jsonString = stepContent.ToString();
+                    jsonString = stepContent.ToString()!;
                     _logger.LogInformation("🔄 Converted unsupported type to string via ToString()");
                 }
                 catch (Exception ex)

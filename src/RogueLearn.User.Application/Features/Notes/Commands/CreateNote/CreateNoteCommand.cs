@@ -11,6 +11,4 @@ public class CreateNoteCommand : IRequest<CreateNoteResponse>
 
   // Optional relationship assignments on create
   public List<Guid>? TagIds { get; set; }
-  public List<Guid>? SkillIds { get; set; }
-  public List<Guid>? QuestIds { get; set; }
 }

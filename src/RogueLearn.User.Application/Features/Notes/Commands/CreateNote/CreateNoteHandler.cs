@@ -18,23 +18,17 @@ public class CreateNoteHandler : IRequestHandler<CreateNoteCommand, CreateNoteRe
 {
   private readonly INoteRepository _noteRepository;
   private readonly INoteTagRepository _noteTagRepository;
-  private readonly INoteSkillRepository _noteSkillRepository;
-  private readonly INoteQuestRepository _noteQuestRepository;
   private readonly IMapper _mapper;
   private readonly ILogger<CreateNoteHandler> _logger;
 
   public CreateNoteHandler(
     INoteRepository noteRepository,
     INoteTagRepository noteTagRepository,
-    INoteSkillRepository noteSkillRepository,
-    INoteQuestRepository noteQuestRepository,
     IMapper mapper,
     ILogger<CreateNoteHandler> logger)
   {
     _noteRepository = noteRepository;
     _noteTagRepository = noteTagRepository;
-    _noteSkillRepository = noteSkillRepository;
-    _noteQuestRepository = noteQuestRepository;
     _mapper = mapper;
     _logger = logger;
   }
@@ -85,21 +79,7 @@ public class CreateNoteHandler : IRequestHandler<CreateNoteCommand, CreateNoteRe
       }
     }
 
-    if (request.SkillIds is { Count: > 0 })
-    {
-      foreach (var skillId in request.SkillIds.Distinct())
-      {
-        await _noteSkillRepository.AddAsync(created.Id, skillId, cancellationToken);
-      }
-    }
-
-    if (request.QuestIds is { Count: > 0 })
-    {
-      foreach (var questId in request.QuestIds.Distinct())
-      {
-        await _noteQuestRepository.AddAsync(created.Id, questId, cancellationToken);
-      }
-    }
+    
 
     _logger.LogInformation("Completed note creation. NoteId={NoteId}", created.Id);
 

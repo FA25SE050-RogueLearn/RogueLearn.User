@@ -11,6 +11,4 @@ public class NoteDto
   public DateTimeOffset UpdatedAt { get; set; }
 
   public List<Guid> TagIds { get; set; } = new();
-  public List<Guid> SkillIds { get; set; } = new();
-  public List<Guid> QuestIds { get; set; } = new();
 }

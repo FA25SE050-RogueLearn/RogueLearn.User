@@ -19,5 +19,5 @@ public class GenerateQuestStepsCommand : IRequest<List<GeneratedQuestStepDto>>
     /// Allows the handler to update real-time progress in the job parameters.
     /// </summary>
     [JsonIgnore]
-    public string HangfireJobId { get; set; }
+    public string HangfireJobId { get; set; } = string.Empty;
 }
