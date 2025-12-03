@@ -127,7 +127,7 @@ public class UsersController : ControllerBase
     /// Update the authenticated user's profile (multipart/form-data). Allows uploading a profile image file.
     /// The handler will process and upload the image to Supabase 'user-avatars' storage and update the profile's image URL.
     /// </summary>
-    [HttpPatch("me")]
+    [HttpPut("me")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
