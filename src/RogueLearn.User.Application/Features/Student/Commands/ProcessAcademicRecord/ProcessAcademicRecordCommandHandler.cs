@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
+using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Application.Services;
@@ -19,6 +20,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
+
 public class FapRecordData
 {
     public double? Gpa { get; set; }
@@ -60,6 +62,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly IBackgroundJobClient _backgroundJobClient;
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepGenerationService _questStepGenerationService;
+    private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
+    private readonly IGradeExperienceCalculator _gradeExperienceCalculator;
 
 
     public ProcessAcademicRecordCommandHandler(
@@ -77,7 +81,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         ICurriculumImportStorage storage,
         IBackgroundJobClient backgroundJobClient,
         IQuestRepository questRepository,
-        IQuestStepGenerationService questStepGenerationService)
+        IQuestStepGenerationService questStepGenerationService,
+        ISubjectSkillMappingRepository subjectSkillMappingRepository,
+        IGradeExperienceCalculator gradeExperienceCalculator)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -94,6 +100,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _backgroundJobClient = backgroundJobClient;
         _questRepository = questRepository;
         _questStepGenerationService = questStepGenerationService;
+        _subjectSkillMappingRepository = subjectSkillMappingRepository;
+        _gradeExperienceCalculator = gradeExperienceCalculator;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
@@ -129,10 +137,10 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         {
             _logger.LogInformation("Cache MISS: No cached record found for hash {Hash}. Proceeding with AI extraction.", rawTextHash);
             var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
-            
+
             // ========== STEP 2: VALIDATE CLEANED TEXT ==========
             ValidateCleanedText(cleanText);
-            
+
             extractedJson = await _fapPlugin.ExtractFapRecordJsonAsync(cleanText, cancellationToken);
 
             // ========== STEP 3: VALIDATE AI EXTRACTION RESULT ==========
@@ -162,7 +170,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         // ========== STEP 4: VALIDATE EXTRACTED DATA ==========
         ValidateExtractedData(fapData);
-        
+
         _logger.LogInformation("Successfully deserialized {SubjectCount} subjects from transcript.", fapData!.Subjects.Count);
 
         var enrollment = await _enrollmentRepository.FirstOrDefaultAsync(e => e.AuthUserId == request.AuthUserId, cancellationToken);
@@ -218,6 +226,12 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 ss.SubjectId == subject.Id &&
                 ss.AcademicYear == subjectRecord.AcademicYear);
 
+            // Fallback if status is empty but grade is present
+            if (string.IsNullOrWhiteSpace(subjectRecord.Status) && subjectRecord.Mark.HasValue)
+            {
+                subjectRecord.Status = subjectRecord.Mark >= 5.0 ? "Passed" : "Failed";
+            }
+
             var parsedStatus = MapFapStatusToEnum(subjectRecord.Status);
 
             if (existingRecord == null)
@@ -248,12 +262,20 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             "Academic record sync complete. Records Added: {Added}, Records Updated: {Updated}, Records Ignored: {Ignored}",
             recordsAdded, recordsUpdated, recordsIgnored);
 
+        // ========== AWARD XP FOR PASSED SUBJECTS ==========
+        var xpAwarded = await AwardXpForPassedSubjectsAsync(
+            request.AuthUserId,
+            fapData.Subjects,
+            subjectCatalog,
+            cancellationToken);
+
+        _logger.LogInformation(
+            "XP Award Summary: {TotalXp} XP awarded across {SkillCount} skills for user {AuthUserId}",
+            xpAwarded.TotalXp, xpAwarded.SkillsAffected, request.AuthUserId);
+
         _logger.LogInformation("Dispatching GenerateQuestLine command for user {AuthUserId} to create learning path structure.", request.AuthUserId);
         var questLineResponse = await _mediator.Send(new GenerateQuestLine { AuthUserId = request.AuthUserId }, cancellationToken);
 
-        // ⭐ REMOVED: Background job scheduling loop
-        // Previously, we would schedule background jobs to generate quest steps immediately.
-        // Now, quest steps are generated on-demand when users click "Start Quest".
         _logger.LogInformation("✅ Academic records processed successfully. Quests marked as recommended. " +
             "Users can now manually trigger step generation via the generateQuestSteps endpoint. " +
             "No background jobs scheduled.");
@@ -265,7 +287,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                       "Recommended quests are ready to explore!",
             LearningPathId = questLineResponse.LearningPathId,
             SubjectsProcessed = fapData.Subjects.Count,
-            CalculatedGpa = fapData.Gpa ?? 0.0
+            CalculatedGpa = fapData.Gpa ?? 0.0,
+            XpAwarded = xpAwarded.SkillAwards.Any() ? xpAwarded : null
         };
     }
     private static bool IsExcludedSubject(FapSubjectData subject)
@@ -305,12 +328,16 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
     private SubjectEnrollmentStatus MapFapStatusToEnum(string status)
     {
+        // Ensure we catch more variants from AI extraction
         return status.Trim().ToLowerInvariant() switch
         {
             "passed" => SubjectEnrollmentStatus.Passed,
+            "pass" => SubjectEnrollmentStatus.Passed,
             "studying" => SubjectEnrollmentStatus.Studying,
+            "in progress" => SubjectEnrollmentStatus.Studying,
             "not started" => SubjectEnrollmentStatus.NotStarted,
             "failed" => SubjectEnrollmentStatus.NotPassed,
+            "fail" => SubjectEnrollmentStatus.NotPassed,
             "not passed" => SubjectEnrollmentStatus.NotPassed,
             _ => SubjectEnrollmentStatus.NotStarted
         };
@@ -322,6 +349,123 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var bytes = Encoding.UTF8.GetBytes(input);
         var hash = sha256.ComputeHash(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    // ========== XP AWARD METHODS ==========
+
+    /// <summary>
+    /// Awards XP to skills based on passed subjects using the tiered cap system.
+    /// Uses IngestXpEventCommand for idempotency - if XP was already awarded for a subject,
+    /// it won't be duplicated.
+    /// </summary>
+    private async Task<XpAwardSummary> AwardXpForPassedSubjectsAsync(
+        Guid authUserId,
+        List<FapSubjectData> subjects,
+        Dictionary<string, Subject> subjectCatalog,
+        CancellationToken cancellationToken)
+    {
+        var summary = new XpAwardSummary();
+        var skillsAffected = new HashSet<Guid>();
+
+        // Get all subject IDs that were passed
+        var passedSubjectIds = subjects
+            .Where(s => MapFapStatusToEnum(s.Status) == SubjectEnrollmentStatus.Passed && s.Mark.HasValue)
+            .Where(s => subjectCatalog.ContainsKey(s.SubjectCode))
+            .Select(s => subjectCatalog[s.SubjectCode].Id)
+            .ToList();
+
+        if (!passedSubjectIds.Any())
+        {
+            _logger.LogInformation("No passed subjects found for XP award calculation.");
+            return summary;
+        }
+
+        // Fetch all skill mappings for passed subjects in one query
+        var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(
+            passedSubjectIds, cancellationToken);
+
+        var mappingsBySubject = skillMappings.GroupBy(m => m.SubjectId).ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var subjectRecord in subjects)
+        {
+            // Skip non-passed or subjects without grades
+            if (MapFapStatusToEnum(subjectRecord.Status) != SubjectEnrollmentStatus.Passed)
+                continue;
+
+            if (!subjectRecord.Mark.HasValue)
+                continue;
+
+            if (!subjectCatalog.TryGetValue(subjectRecord.SubjectCode, out var subject))
+                continue;
+
+            // Get skill mappings for this subject
+            if (!mappingsBySubject.TryGetValue(subject.Id, out var subjectMappings) || !subjectMappings.Any())
+            {
+                _logger.LogDebug("Subject {SubjectCode} has no skill mappings, skipping XP award.", subject.SubjectCode);
+                continue;
+            }
+
+            var grade = subjectRecord.Mark.Value;
+            var semester = subject.Semester ?? 1;
+            var tierInfo = _gradeExperienceCalculator.GetTierInfo(semester);
+
+            _logger.LogInformation(
+                "Calculating XP for {SubjectCode} (Sem {Semester}, Tier {Tier}): Grade={Grade}, Skills={SkillCount}",
+                subject.SubjectCode, semester, tierInfo.Tier, grade, subjectMappings.Count);
+
+            foreach (var mapping in subjectMappings)
+            {
+                var xpAmount = _gradeExperienceCalculator.CalculateXpAward(
+                    grade,
+                    semester,
+                    mapping.RelevanceWeight);
+
+                // Use IngestXpEventCommand for idempotency
+                // SourceId = SubjectId ensures we don't award XP twice for the same subject
+                var response = await _mediator.Send(new IngestXpEventCommand
+                {
+                    AuthUserId = authUserId,
+                    SkillId = mapping.SkillId,
+                    Points = xpAmount,
+                    SourceService = "AcademicRecord",
+                    SourceType = "GradeImport",
+                    SourceId = subject.Id,  // Idempotency key
+                    Reason = $"Academic grade: {subject.SubjectCode} ({grade:F1}/10.0) - {tierInfo.Description}"
+                }, cancellationToken);
+
+                if (response.Processed)
+                {
+                    summary.TotalXp += xpAmount;
+                    skillsAffected.Add(mapping.SkillId);
+
+                    // Add detailed award info for response
+                    summary.SkillAwards.Add(new SkillXpAward
+                    {
+                        SkillId = mapping.SkillId,
+                        SkillName = response.SkillName,
+                        XpAwarded = xpAmount,
+                        NewTotalXp = response.NewExperiencePoints,
+                        NewLevel = response.NewLevel,
+                        SourceSubjectCode = subject.SubjectCode,
+                        Grade = grade.ToString("F1"),
+                        TierDescription = tierInfo.Description
+                    });
+
+                    _logger.LogInformation(
+                        "Awarded {Xp} XP to skill {SkillName} (Level {Level}) from {SubjectCode}",
+                        xpAmount, response.SkillName, response.NewLevel, subject.SubjectCode);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "XP already awarded for {SubjectCode} -> skill {SkillId}. Skipping.",
+                        subject.SubjectCode, mapping.SkillId);
+                }
+            }
+        }
+
+        summary.SkillsAffected = skillsAffected.Count;
+        return summary;
     }
 
     // ========== VALIDATION METHODS ==========
@@ -351,7 +495,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         if (!hasHtmlStructure)
         {
-            _logger.LogWarning("HTML content does not contain table structure. Content preview: {Preview}", 
+            _logger.LogWarning("HTML content does not contain table structure. Content preview: {Preview}",
                 htmlContent.Substring(0, Math.Min(200, htmlContent.Length)));
             throw new BadRequestException("The provided content does not appear to be a valid HTML table. Please upload the FAP transcript page that contains your grade table.");
         }
@@ -407,7 +551,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var trimmed = extractedJson.Trim();
         if (!trimmed.StartsWith("{") || !trimmed.EndsWith("}"))
         {
-            _logger.LogError("AI extraction result is not valid JSON. Result: {Result}", 
+            _logger.LogError("AI extraction result is not valid JSON. Result: {Result}",
                 extractedJson.Substring(0, Math.Min(200, extractedJson.Length)));
             throw new BadRequestException("The AI returned an invalid response. This may be due to an unusual transcript format. Please ensure you're uploading the standard FAP grade report page.");
         }
@@ -442,28 +586,28 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         // Log warning for partial invalid data but continue processing
         if (invalidSubjects.Any())
         {
-            _logger.LogWarning("{Count} out of {Total} subjects have missing subject codes and will be skipped.", 
+            _logger.LogWarning("{Count} out of {Total} subjects have missing subject codes and will be skipped.",
                 invalidSubjects.Count, fapData.Subjects.Count);
         }
 
         // Validate subjects have valid status
-        var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
-        { 
-            "passed", "failed", "studying", "not passed", "not started" 
+        var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "passed", "pass", "failed", "fail", "studying", "in progress", "not passed", "not started"
         };
         var subjectsWithInvalidStatus = fapData.Subjects
-            .Where(s => !string.IsNullOrWhiteSpace(s.SubjectCode) && 
+            .Where(s => !string.IsNullOrWhiteSpace(s.SubjectCode) &&
                        !validStatuses.Contains(s.Status?.Trim() ?? ""))
             .ToList();
 
         if (subjectsWithInvalidStatus.Count > fapData.Subjects.Count / 2)
         {
-            _logger.LogWarning("More than half of subjects ({Count}/{Total}) have invalid status values.", 
+            _logger.LogWarning("More than half of subjects ({Count}/{Total}) have invalid status values.",
                 subjectsWithInvalidStatus.Count, fapData.Subjects.Count);
             throw new BadRequestException("The extracted data contains too many invalid status values. The transcript format may not be compatible. Please ensure you're uploading the correct FAP grade report.");
         }
 
-        _logger.LogInformation("FAP data validation passed. Subjects: {Count}, GPA: {Gpa}", 
+        _logger.LogInformation("FAP data validation passed. Subjects: {Count}, GPA: {Gpa}",
             fapData.Subjects.Count, fapData.Gpa?.ToString("F2") ?? "N/A");
     }
 

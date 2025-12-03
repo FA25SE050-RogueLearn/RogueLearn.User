@@ -34,12 +34,14 @@ public class ProcessAcademicRecordCommandHandlerTests
         var bg = Substitute.For<Hangfire.IBackgroundJobClient>();
         var questRepo = Substitute.For<IQuestRepository>();
         var stepGenSvc = Substitute.For<IQuestStepGenerationService>();
+        var skillMappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var gradeXpCalc = Substitute.For<IGradeExperienceCalculator>();
 
         userProfileRepo.GetByAuthIdAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns((RogueLearn.User.Domain.Entities.UserProfile?)null);
 
         var sut = new ProcessAcademicRecordCommandHandler(
             fap, enrollRepo, semSubjRepo, subjRepo, programRepo, programSubjRepo, classSpecSubjRepo, userProfileRepo,
-            htmlSvc, logger, mediator, storage, bg, questRepo, stepGenSvc);
+            htmlSvc, logger, mediator, storage, bg, questRepo, stepGenSvc, skillMappingRepo, gradeXpCalc);
 
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }

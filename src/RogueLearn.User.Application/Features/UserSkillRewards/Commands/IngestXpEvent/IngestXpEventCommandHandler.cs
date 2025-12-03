@@ -24,12 +24,15 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
 
     public async Task<IngestXpEventResponse> Handle(IngestXpEventCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.SourceService) && request.SourceId.HasValue)
+        // Idempotency check: ensure we haven't already awarded XP for this source + skill combination
+        // Using SkillId in the check allows multiple skills from the same subject to be awarded separately
+        if (!string.IsNullOrWhiteSpace(request.SourceService) && request.SourceId.HasValue && request.SkillId.HasValue)
         {
-            var existingReward = await _userSkillRewardRepository.GetBySourceAsync(
+            var existingReward = await _userSkillRewardRepository.GetBySourceAndSkillAsync(
                 request.AuthUserId,
                 request.SourceService,
                 request.SourceId.Value,
+                request.SkillId.Value,
                 cancellationToken);
 
             if (existingReward is not null)
@@ -38,7 +41,7 @@ public class IngestXpEventCommandHandler : IRequestHandler<IngestXpEventCommand,
                 {
                     Processed = false,
                     RewardId = existingReward.Id,
-                    Message = "XP event already processed",
+                    Message = "XP event already processed for this skill",
                     SkillName = existingReward.SkillName,
                     NewExperiencePoints = 0,
                     NewLevel = 0

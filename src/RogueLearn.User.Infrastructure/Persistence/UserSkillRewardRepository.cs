@@ -29,4 +29,22 @@ public class UserSkillRewardRepository : GenericRepository<UserSkillReward>, IUs
 
         return response;
     }
+
+    /// <summary>
+    /// Finds a UserSkillReward by source AND skill ID.
+    /// This ensures proper idempotency when a single subject maps to multiple skills.
+    /// Example: PRF192 → C Programming, PRF192 → Problem Solving are tracked separately.
+    /// </summary>
+    public async Task<UserSkillReward?> GetBySourceAndSkillAsync(Guid authUserId, string sourceService, Guid sourceId, Guid skillId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<UserSkillReward>()
+            .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
+            .Filter("source_service", Operator.Equals, sourceService)
+            .Filter("source_id", Operator.Equals, sourceId.ToString())
+            .Filter("skill_id", Operator.Equals, skillId.ToString())
+            .Single(cancellationToken);
+
+        return response;
+    }
 }
