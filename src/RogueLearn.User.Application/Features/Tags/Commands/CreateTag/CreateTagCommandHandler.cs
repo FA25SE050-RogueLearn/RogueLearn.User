@@ -23,7 +23,7 @@ public sealed class CreateTagCommandHandler : IRequestHandler<CreateTagCommand, 
 
   public async Task<CreateTagResponse> Handle(CreateTagCommand request, CancellationToken cancellationToken)
   {
-    var name = (request.Name ?? string.Empty).Trim();
+    var name = (request.Name ?? string.Empty).Trim().ToPascalCase();
     if (string.IsNullOrWhiteSpace(name))
     {
       throw new ArgumentException("Tag name is required.");

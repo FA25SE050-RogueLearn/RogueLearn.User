@@ -38,7 +38,7 @@ public sealed class CreateTagAndAttachToNoteCommandHandler : IRequestHandler<Cre
       throw new InvalidOperationException("Note not found or access denied.");
     }
 
-    var name = (request.Name ?? string.Empty).Trim();
+    var name = (request.Name ?? string.Empty).Trim().ToPascalCase();
     if (string.IsNullOrWhiteSpace(name))
     {
       throw new ArgumentException("Tag name is required.");
