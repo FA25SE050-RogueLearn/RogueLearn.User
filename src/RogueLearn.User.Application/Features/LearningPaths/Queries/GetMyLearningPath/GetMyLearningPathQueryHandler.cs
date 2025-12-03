@@ -96,6 +96,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     SequenceOrder = quest.Sequence ?? 0,
                     LearningPathId = learningPath.Id,
                     ChapterId = chapter.Id,
+                    SubjectId = quest.SubjectId,
                     IsRecommended = quest.IsRecommended,
                     RecommendationReason = quest.RecommendationReason,
                     // Difficulty fields based on user's academic performance
