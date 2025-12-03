@@ -41,9 +41,6 @@ public class AddPartyResourceCommandHandler : IRequestHandler<AddPartyResourceCo
 
         await _stashItemRepository.AddAsync(stashItem, cancellationToken);
 
-        // Send notification
-        await _notificationService.SendMaterialUploadNotificationAsync(stashItem, cancellationToken);
-
         return _mapper.Map<PartyStashItemDto>(stashItem);
     }
 }
