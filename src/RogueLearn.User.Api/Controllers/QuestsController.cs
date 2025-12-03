@@ -18,6 +18,7 @@ using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Features.Quests.Queries.GetMyQuestsWithSubjects;
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestSkills;
 using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
@@ -331,6 +332,19 @@ using System.Text.Json.Serialization;
         var authUserId = User.GetAuthUserId();
         var result = await _mediator.Send(new GetMyQuestsWithSubjectsQuery { AuthUserId = authUserId });
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets the skills associated with a quest through its subject mapping.
+    /// Returns the skills that will be developed by completing this quest.
+    /// </summary>
+    [HttpGet("{questId:guid}/skills")]
+    [ProducesResponseType(typeof(GetQuestSkillsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetQuestSkills(Guid questId, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetQuestSkillsQuery { QuestId = questId }, cancellationToken);
+        return result is not null ? Ok(result) : NotFound();
     }
 
     // Add DTO classes at bottom of controller file:
