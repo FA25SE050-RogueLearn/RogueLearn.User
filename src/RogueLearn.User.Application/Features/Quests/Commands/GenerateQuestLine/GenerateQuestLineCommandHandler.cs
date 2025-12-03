@@ -4,6 +4,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Domain.Enums;
@@ -30,6 +31,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
     private readonly ILearningPathRepository _learningPathRepository;
     private readonly IQuestChapterRepository _questChapterRepository;
     private readonly IQuestRepository _questRepository;
+    private readonly IQuestDifficultyResolver _difficultyResolver;
     private readonly ILogger<GenerateQuestLineCommandHandler> _logger;
 
     public GenerateQuestLineCommandHandler(
@@ -40,6 +42,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         ILearningPathRepository learningPathRepository,
         IQuestChapterRepository questChapterRepository,
         IQuestRepository questRepository,
+        IQuestDifficultyResolver difficultyResolver,
         ILogger<GenerateQuestLineCommandHandler> logger)
     {
         _userProfileRepository = userProfileRepository;
@@ -49,6 +52,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         _learningPathRepository = learningPathRepository;
         _questChapterRepository = questChapterRepository;
         _questRepository = questRepository;
+        _difficultyResolver = difficultyResolver;
         _logger = logger;
     }
 
@@ -219,11 +223,15 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 // Rule: Only recommend if explicitly studying or failed. "Passed" or "Not Started" are not recommended.
                 bool isRecommended = recommendationReason == "Studying" || recommendationReason == "Failed";
 
+                // Calculate expected difficulty based on user's academic performance for this subject
+                var studentSubjectRecord = userSemesterSubjects.FirstOrDefault(ss => ss.SubjectId == subject.Id);
+                var difficultyInfo = _difficultyResolver.ResolveDifficulty(studentSubjectRecord);
+
                 if (!currentSubjectIdsWithQuests.Contains(subject.Id))
                 {
                     // This subject is in the ideal curriculum but doesn't have a quest yet. Create one.
-                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} ({SubjectName}) - Semester {Semester} - with recommendation: {Reason} (IsRecommended: {IsRec})",
-                        subject.SubjectCode, subject.SubjectName, semesterNumber, recommendationReason, isRecommended);
+                    _logger.LogInformation("Creating new shell quest for Subject {SubjectCode} ({SubjectName}) - Semester {Semester} - with recommendation: {Reason} (IsRecommended: {IsRec}) - Difficulty: {Difficulty}",
+                        subject.SubjectCode, subject.SubjectName, semesterNumber, recommendationReason, isRecommended, difficultyInfo.ExpectedDifficulty);
 
                     var newQuest = new Quest
                     {
@@ -238,7 +246,12 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                         IsActive = true,
                         CreatedBy = userProfile.AuthUserId,
                         IsRecommended = isRecommended,
-                        RecommendationReason = recommendationReason
+                        RecommendationReason = recommendationReason,
+                        // New difficulty fields
+                        ExpectedDifficulty = difficultyInfo.ExpectedDifficulty,
+                        DifficultyReason = difficultyInfo.DifficultyReason,
+                        SubjectGrade = difficultyInfo.SubjectGrade,
+                        SubjectStatus = difficultyInfo.SubjectStatus
                     };
                     await _questRepository.AddAsync(newQuest, cancellationToken);
                 }
@@ -272,6 +285,31 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                     if (existingQuest.RecommendationReason != recommendationReason)
                     {
                         existingQuest.RecommendationReason = recommendationReason;
+                        needsUpdate = true;
+                    }
+
+                    // Update difficulty fields if changed (user's grades may have changed)
+                    if (existingQuest.ExpectedDifficulty != difficultyInfo.ExpectedDifficulty)
+                    {
+                        existingQuest.ExpectedDifficulty = difficultyInfo.ExpectedDifficulty;
+                        needsUpdate = true;
+                    }
+
+                    if (existingQuest.DifficultyReason != difficultyInfo.DifficultyReason)
+                    {
+                        existingQuest.DifficultyReason = difficultyInfo.DifficultyReason;
+                        needsUpdate = true;
+                    }
+
+                    if (existingQuest.SubjectGrade != difficultyInfo.SubjectGrade)
+                    {
+                        existingQuest.SubjectGrade = difficultyInfo.SubjectGrade;
+                        needsUpdate = true;
+                    }
+
+                    if (existingQuest.SubjectStatus != difficultyInfo.SubjectStatus)
+                    {
+                        existingQuest.SubjectStatus = difficultyInfo.SubjectStatus;
                         needsUpdate = true;
                     }
 

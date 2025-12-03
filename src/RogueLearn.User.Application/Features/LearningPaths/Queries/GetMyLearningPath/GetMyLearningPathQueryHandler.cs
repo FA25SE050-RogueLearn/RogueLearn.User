@@ -97,7 +97,12 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     LearningPathId = learningPath.Id,
                     ChapterId = chapter.Id,
                     IsRecommended = quest.IsRecommended,
-                    RecommendationReason = quest.RecommendationReason
+                    RecommendationReason = quest.RecommendationReason,
+                    // Difficulty fields based on user's academic performance
+                    ExpectedDifficulty = quest.ExpectedDifficulty,
+                    DifficultyReason = quest.DifficultyReason,
+                    SubjectGrade = quest.SubjectGrade,
+                    SubjectStatus = quest.SubjectStatus
                 }).ToList();
 
                 // Optimized: Use enum comparison instead of string comparison

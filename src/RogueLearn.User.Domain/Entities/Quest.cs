@@ -58,6 +58,32 @@ public class Quest : BaseEntity
     public bool IsRecommended { get; set; } = false;  
 
     [Column("recommendation_reason")]
-    public string? RecommendationReason { get; set; }  
+    public string? RecommendationReason { get; set; }
+
+    /// <summary>
+    /// Personalized difficulty based on user's academic performance for this subject.
+    /// Values: Challenging (>=8.5), Standard (7.0-8.5), Supportive (&lt;7.0/failed), Adaptive (studying)
+    /// </summary>
+    [Column("expected_difficulty")]
+    public string ExpectedDifficulty { get; set; } = "Standard";
+
+    /// <summary>
+    /// Human-readable explanation of why this difficulty was assigned.
+    /// Example: "High score (8.7) - advanced content with minimal scaffolding"
+    /// </summary>
+    [Column("difficulty_reason")]
+    public string? DifficultyReason { get; set; }
+
+    /// <summary>
+    /// Cached grade from student_semester_subjects at time of quest creation/sync.
+    /// </summary>
+    [Column("subject_grade")]
+    public string? SubjectGrade { get; set; }
+
+    /// <summary>
+    /// Cached enrollment status: Passed, NotPassed, Studying, NotStarted
+    /// </summary>
+    [Column("subject_status")]
+    public string? SubjectStatus { get; set; }
 
 }

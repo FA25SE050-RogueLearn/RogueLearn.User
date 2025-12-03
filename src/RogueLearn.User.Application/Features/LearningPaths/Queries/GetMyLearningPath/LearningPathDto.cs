@@ -32,4 +32,23 @@ public class QuestSummaryDto
     public bool IsRecommended { get; set; }
     public string? RecommendationReason { get; set; }
 
+    /// <summary>
+    /// Expected difficulty based on user's academic performance: Challenging, Standard, Supportive, Adaptive
+    /// </summary>
+    public string ExpectedDifficulty { get; set; } = "Standard";
+
+    /// <summary>
+    /// Human-readable explanation of why this difficulty was assigned.
+    /// </summary>
+    public string? DifficultyReason { get; set; }
+
+    /// <summary>
+    /// User's grade for this subject (if available).
+    /// </summary>
+    public string? SubjectGrade { get; set; }
+
+    /// <summary>
+    /// User's enrollment status for this subject: Passed, NotPassed, Studying, NotStarted
+    /// </summary>
+    public string? SubjectStatus { get; set; }
 }
