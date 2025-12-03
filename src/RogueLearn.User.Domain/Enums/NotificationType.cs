@@ -4,8 +4,8 @@ public enum NotificationType
 {
     Achievement,
     QuestComplete,
-    PartyInvite,
-    GuildInvite,
+    Party,
+    Guild,
     FriendRequest,
     System,
     Reminder

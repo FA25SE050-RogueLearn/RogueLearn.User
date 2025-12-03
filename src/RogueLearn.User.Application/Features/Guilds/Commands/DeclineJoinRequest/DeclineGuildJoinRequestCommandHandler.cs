@@ -1,6 +1,7 @@
 using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.DeclineJoinRequest;
 
@@ -8,11 +9,13 @@ public class DeclineGuildJoinRequestCommandHandler : IRequestHandler<DeclineGuil
 {
     private readonly IGuildRepository _guildRepository;
     private readonly IGuildJoinRequestRepository _joinRequestRepository;
+    private readonly IGuildNotificationService? _notificationService;
 
-    public DeclineGuildJoinRequestCommandHandler(IGuildRepository guildRepository, IGuildJoinRequestRepository joinRequestRepository)
+    public DeclineGuildJoinRequestCommandHandler(IGuildRepository guildRepository, IGuildJoinRequestRepository joinRequestRepository, IGuildNotificationService notificationService)
     {
         _guildRepository = guildRepository;
         _joinRequestRepository = joinRequestRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<Unit> Handle(DeclineGuildJoinRequestCommand request, CancellationToken cancellationToken)
@@ -36,6 +39,10 @@ public class DeclineGuildJoinRequestCommandHandler : IRequestHandler<DeclineGuil
         joinReq.Status = GuildJoinRequestStatus.Declined;
         joinReq.RespondedAt = DateTimeOffset.UtcNow;
         await _joinRequestRepository.UpdateAsync(joinReq, cancellationToken);
+        if (_notificationService != null)
+        {
+            await _notificationService.NotifyJoinRequestDeclinedAsync(joinReq, cancellationToken);
+        }
 
         return Unit.Value;
     }

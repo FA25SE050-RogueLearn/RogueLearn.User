@@ -1,16 +1,21 @@
 using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.DeclineInvitation;
 
 public class DeclineGuildInvitationCommandHandler : IRequestHandler<DeclineGuildInvitationCommand, Unit>
 {
     private readonly IGuildInvitationRepository _invitationRepository;
+    private readonly IGuildMemberRepository? _memberRepository;
+    private readonly IGuildNotificationService? _notificationService;
 
-    public DeclineGuildInvitationCommandHandler(IGuildInvitationRepository invitationRepository)
+    public DeclineGuildInvitationCommandHandler(IGuildInvitationRepository invitationRepository, IGuildMemberRepository memberRepository, IGuildNotificationService notificationService)
     {
         _invitationRepository = invitationRepository;
+        _memberRepository = memberRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<Unit> Handle(DeclineGuildInvitationCommand request, CancellationToken cancellationToken)
@@ -36,6 +41,16 @@ public class DeclineGuildInvitationCommandHandler : IRequestHandler<DeclineGuild
         invitation.Status = InvitationStatus.Declined;
         invitation.RespondedAt = DateTimeOffset.UtcNow;
         await _invitationRepository.UpdateAsync(invitation, cancellationToken);
+
+        if (_notificationService != null && _memberRepository != null)
+        {
+            var members = await _memberRepository.GetMembersByGuildAsync(invitation.GuildId, cancellationToken);
+            var master = members.FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+            if (master != null)
+            {
+                await _notificationService.NotifyInvitationDeclinedAsync(invitation, master.AuthUserId, cancellationToken);
+            }
+        }
 
         return Unit.Value;
     }

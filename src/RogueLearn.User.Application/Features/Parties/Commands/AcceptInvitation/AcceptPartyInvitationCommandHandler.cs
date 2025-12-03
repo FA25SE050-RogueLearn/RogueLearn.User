@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.AcceptInvitation;
 
@@ -9,13 +10,20 @@ public class AcceptPartyInvitationCommandHandler : IRequestHandler<AcceptPartyIn
 {
     private readonly IPartyInvitationRepository _invitationRepository;
     private readonly IPartyMemberRepository _memberRepository;
-    private readonly IPartyRepository _partyRepository;
+    private readonly IPartyNotificationService? _notificationService;
 
-    public AcceptPartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository, IPartyMemberRepository memberRepository, IPartyRepository partyRepository)
+    public AcceptPartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository, IPartyMemberRepository memberRepository, IPartyNotificationService notificationService)
     {
         _invitationRepository = invitationRepository;
         _memberRepository = memberRepository;
-        _partyRepository = partyRepository;
+        _notificationService = notificationService;
+    }
+
+    public AcceptPartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository, IPartyMemberRepository memberRepository)
+    {
+        _invitationRepository = invitationRepository;
+        _memberRepository = memberRepository;
+        _notificationService = null;
     }
 
     public async Task<Unit> Handle(AcceptPartyInvitationCommand request, CancellationToken cancellationToken)
@@ -66,6 +74,10 @@ public class AcceptPartyInvitationCommandHandler : IRequestHandler<AcceptPartyIn
 
         invitation.Status = InvitationStatus.Accepted;
         await _invitationRepository.UpdateAsync(invitation, cancellationToken);
+        if (_notificationService != null)
+        {
+            await _notificationService.SendInvitationAcceptedNotificationAsync(invitation, cancellationToken);
+        }
 
         return Unit.Value;
     }

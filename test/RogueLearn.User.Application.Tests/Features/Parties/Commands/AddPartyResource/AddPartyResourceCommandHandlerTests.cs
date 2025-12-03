@@ -27,6 +27,5 @@ public class AddPartyResourceCommandHandlerTests
 
         var resp = await sut.Handle(cmd, CancellationToken.None);
         Assert.Equal(cmd.PartyId, resp.PartyId);
-        await notif.Received(1).SendMaterialUploadNotificationAsync(Arg.Any<PartyStashItem>(), Arg.Any<CancellationToken>());
     }
 }

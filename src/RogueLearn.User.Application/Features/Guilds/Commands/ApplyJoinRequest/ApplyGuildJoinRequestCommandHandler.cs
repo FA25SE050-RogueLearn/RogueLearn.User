@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.ApplyJoinRequest;
 
@@ -10,29 +11,25 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
     private readonly IGuildRepository _guildRepository;
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildJoinRequestRepository _joinRequestRepository;
+    private readonly IGuildNotificationService? _notificationService;
+    private readonly IGuildInvitationRepository? _invitationRepository;
     private readonly IRoleRepository? _roleRepository;
     private readonly IUserRoleRepository? _userRoleRepository;
 
     public ApplyGuildJoinRequestCommandHandler(
         IGuildRepository guildRepository,
         IGuildMemberRepository memberRepository,
-        IGuildJoinRequestRepository joinRequestRepository)
-    {
-        _guildRepository = guildRepository;
-        _memberRepository = memberRepository;
-        _joinRequestRepository = joinRequestRepository;
-    }
-
-    public ApplyGuildJoinRequestCommandHandler(
-        IGuildRepository guildRepository,
-        IGuildMemberRepository memberRepository,
         IGuildJoinRequestRepository joinRequestRepository,
+        IGuildNotificationService notificationService,
+        IGuildInvitationRepository invitationRepository,
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository)
     {
         _guildRepository = guildRepository;
         _memberRepository = memberRepository;
         _joinRequestRepository = joinRequestRepository;
+        _notificationService = notificationService;
+        _invitationRepository = invitationRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
     }
@@ -146,6 +143,24 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
                     RespondedAt = DateTimeOffset.UtcNow
                 };
                 await _joinRequestRepository.AddAsync(acceptedRecord, cancellationToken);
+                if (_notificationService != null)
+                {
+                    await _notificationService.NotifyJoinRequestApprovedAsync(acceptedRecord, cancellationToken);
+                }
+                if (_invitationRepository != null)
+                {
+                    var otherInvites = await _invitationRepository.FindAsync(i => i.InviteeId == request.AuthUserId, cancellationToken);
+                    var toDecline = otherInvites.Where(i => i.Status == InvitationStatus.Pending).ToList();
+                    if (toDecline.Any())
+                    {
+                        foreach (var inv in toDecline)
+                        {
+                            inv.Status = InvitationStatus.Declined;
+                            inv.RespondedAt = DateTimeOffset.UtcNow;
+                        }
+                        await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
+                    }
+                }
             }
             else
             {
@@ -153,6 +168,24 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
                 existingForGuild.Message = request.Message;
                 existingForGuild.RespondedAt = DateTimeOffset.UtcNow;
                 await _joinRequestRepository.UpdateAsync(existingForGuild, cancellationToken);
+                if (_notificationService != null)
+                {
+                    await _notificationService.NotifyJoinRequestApprovedAsync(existingForGuild, cancellationToken);
+                }
+                if (_invitationRepository != null)
+                {
+                    var otherInvites = await _invitationRepository.FindAsync(i => i.InviteeId == request.AuthUserId, cancellationToken);
+                    var toDecline = otherInvites.Where(i => i.Status == InvitationStatus.Pending).ToList();
+                    if (toDecline.Any())
+                    {
+                        foreach (var inv in toDecline)
+                        {
+                            inv.Status = InvitationStatus.Declined;
+                            inv.RespondedAt = DateTimeOffset.UtcNow;
+                        }
+                        await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
+                    }
+                }
             }
 
             var otherRequests = await _joinRequestRepository.GetRequestsByRequesterAsync(request.AuthUserId, cancellationToken);
@@ -176,6 +209,15 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
                     ExpiresAt = DateTimeOffset.UtcNow.AddDays(14)
                 };
                 await _joinRequestRepository.AddAsync(reqEntity, cancellationToken);
+                if (_notificationService != null)
+                {
+                    var membersForNotify = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+                    var masterForNotify = membersForNotify.FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+                    if (masterForNotify != null)
+                    {
+                        await _notificationService.NotifyJoinRequestSubmittedAsync(masterForNotify.AuthUserId, reqEntity, cancellationToken);
+                    }
+                }
             }
             else
             {
@@ -185,6 +227,15 @@ public class ApplyGuildJoinRequestCommandHandler : IRequestHandler<ApplyGuildJoi
                 existingForGuild.RespondedAt = null;
                 existingForGuild.ExpiresAt = DateTimeOffset.UtcNow.AddDays(14);
                 await _joinRequestRepository.UpdateAsync(existingForGuild, cancellationToken);
+                if (_notificationService != null)
+                {
+                    var membersForNotify = await _memberRepository.GetMembersByGuildAsync(request.GuildId, cancellationToken);
+                    var masterForNotify = membersForNotify.FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+                    if (masterForNotify != null)
+                    {
+                        await _notificationService.NotifyJoinRequestSubmittedAsync(masterForNotify.AuthUserId, existingForGuild, cancellationToken);
+                    }
+                }
             }
         }
 

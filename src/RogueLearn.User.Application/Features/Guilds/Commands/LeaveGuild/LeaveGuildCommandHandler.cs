@@ -1,6 +1,7 @@
 using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.LeaveGuild;
 
@@ -8,11 +9,13 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
 {
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildRepository _guildRepository;
+    private readonly IGuildNotificationService? _notificationService;
 
-    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
+    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IGuildNotificationService notificationService)
     {
         _memberRepository = memberRepository;
         _guildRepository = guildRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<Unit> Handle(LeaveGuildCommand request, CancellationToken cancellationToken)
@@ -59,6 +62,15 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
         }
 
         await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
+
+        if (_notificationService != null)
+        {
+            var master = members.FirstOrDefault(m => m.Status == MemberStatus.Active && m.Role == GuildRole.GuildMaster);
+            if (master != null)
+            {
+                await _notificationService.NotifyMemberLeftAsync(request.GuildId, request.AuthUserId, master.AuthUserId, cancellationToken);
+            }
+        }
         return Unit.Value;
     }
 }

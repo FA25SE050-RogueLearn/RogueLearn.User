@@ -1,6 +1,7 @@
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.Security.Cryptography;
@@ -12,11 +13,13 @@ public class UpsertMeetingCommandHandler : IRequestHandler<UpsertMeetingCommand,
 {
     private readonly IMeetingRepository _meetingRepo;
     private readonly IMapper _mapper;
+    private readonly IMeetingNotificationService? _meetingNotificationService;
 
-    public UpsertMeetingCommandHandler(IMeetingRepository meetingRepo, IMapper mapper)
+    public UpsertMeetingCommandHandler(IMeetingRepository meetingRepo, IMapper mapper, IMeetingNotificationService meetingNotificationService)
     {
         _meetingRepo = meetingRepo;
         _mapper = mapper;
+        _meetingNotificationService = meetingNotificationService;
     }
 
     public async Task<MeetingDto> Handle(UpsertMeetingCommand request, CancellationToken cancellationToken)
@@ -38,6 +41,10 @@ public class UpsertMeetingCommandHandler : IRequestHandler<UpsertMeetingCommand,
         {
             entity.CreatedAt = DateTimeOffset.UtcNow;
             entity = await _meetingRepo.AddAsync(entity, cancellationToken);
+            if (_meetingNotificationService != null)
+            {
+                await _meetingNotificationService.NotifyMeetingScheduledAsync(entity, cancellationToken);
+            }
         }
 
         return _mapper.Map<MeetingDto>(entity);

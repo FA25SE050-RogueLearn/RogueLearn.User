@@ -19,5 +19,10 @@ public interface IPartyNotificationService
     /// </summary>
     /// <param name="stashItem">The uploaded stash item details.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task SendMaterialUploadNotificationAsync(PartyStashItem stashItem, CancellationToken cancellationToken = default);
+    Task SendInvitationAcceptedNotificationAsync(PartyInvitation invitation, CancellationToken cancellationToken = default);
+    Task SendInvitationDeclinedNotificationAsync(PartyInvitation invitation, CancellationToken cancellationToken = default);
+    Task SendMemberJoinedNotificationAsync(Guid partyId, Guid userId, IEnumerable<Guid> leaderAuthUserIds, CancellationToken cancellationToken = default);
+    Task SendMemberLeftNotificationAsync(Guid partyId, Guid userId, IEnumerable<Guid> leaderAuthUserIds, CancellationToken cancellationToken = default);
+    Task SendMemberRemovedNotificationAsync(Guid partyId, Guid memberAuthUserId, CancellationToken cancellationToken = default);
+    Task SendLeadershipTransferredNotificationAsync(Guid partyId, Guid newLeaderAuthUserId, CancellationToken cancellationToken = default);
 }
