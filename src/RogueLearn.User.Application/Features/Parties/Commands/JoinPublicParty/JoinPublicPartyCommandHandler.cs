@@ -10,11 +10,20 @@ public class JoinPublicPartyCommandHandler : IRequestHandler<JoinPublicPartyComm
 {
     private readonly IPartyRepository _partyRepository;
     private readonly IPartyMemberRepository _memberRepository;
+    private readonly IPartyInvitationRepository? _invitationRepository;
 
     public JoinPublicPartyCommandHandler(IPartyRepository partyRepository, IPartyMemberRepository memberRepository)
     {
         _partyRepository = partyRepository;
         _memberRepository = memberRepository;
+        _invitationRepository = null;
+    }
+
+    public JoinPublicPartyCommandHandler(IPartyRepository partyRepository, IPartyMemberRepository memberRepository, IPartyInvitationRepository invitationRepository)
+    {
+        _partyRepository = partyRepository;
+        _memberRepository = memberRepository;
+        _invitationRepository = invitationRepository;
     }
 
     public async Task<Unit> Handle(JoinPublicPartyCommand request, CancellationToken cancellationToken)
@@ -47,6 +56,20 @@ public class JoinPublicPartyCommandHandler : IRequestHandler<JoinPublicPartyComm
             existing.Status = MemberStatus.Active;
             existing.JoinedAt = DateTimeOffset.UtcNow;
             await _memberRepository.UpdateAsync(existing, cancellationToken);
+            if (_invitationRepository != null)
+            {
+                var pendingInvites = await _invitationRepository.GetPendingInvitationsByInviteeAsync(request.AuthUserId, cancellationToken);
+                var toDecline = pendingInvites.Where(i => i.PartyId == request.PartyId && i.Status == InvitationStatus.Pending).ToList();
+                if (toDecline.Any())
+                {
+                    foreach (var inv in toDecline)
+                    {
+                        inv.Status = InvitationStatus.Declined;
+                        inv.RespondedAt = DateTimeOffset.UtcNow;
+                    }
+                    await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
+                }
+            }
             return Unit.Value;
         }
 
@@ -60,6 +83,20 @@ public class JoinPublicPartyCommandHandler : IRequestHandler<JoinPublicPartyComm
         };
 
         await _memberRepository.AddAsync(member, cancellationToken);
+        if (_invitationRepository != null)
+        {
+            var pendingInvites = await _invitationRepository.GetPendingInvitationsByInviteeAsync(request.AuthUserId, cancellationToken);
+            var toDecline = pendingInvites.Where(i => i.PartyId == request.PartyId && i.Status == InvitationStatus.Pending).ToList();
+            if (toDecline.Any())
+            {
+                foreach (var inv in toDecline)
+                {
+                    inv.Status = InvitationStatus.Declined;
+                    inv.RespondedAt = DateTimeOffset.UtcNow;
+                }
+                await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
+            }
+        }
         return Unit.Value;
     }
 }

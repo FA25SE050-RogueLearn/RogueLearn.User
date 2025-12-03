@@ -168,8 +168,11 @@ public static class ServiceCollectionExtensions
         // Avatar URL validator
         services.AddScoped<IAvatarUrlValidator, AvatarUrlValidator>();
 
-        // Party notification service
+        // Notification services
         services.AddScoped<IPartyNotificationService, PartyNotificationService>();
+        services.AddScoped<IGuildNotificationService, GuildNotificationService>();
+        services.AddScoped<ILecturerNotificationService, LecturerNotificationService>();
+        services.AddScoped<IMeetingNotificationService, MeetingNotificationService>();
 
         // Add the new ReadingUrlService for sourcing article URLs
         services.AddScoped<IReadingUrlService, ReadingUrlService>();

@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.InviteMember;
 
@@ -13,14 +14,7 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
     private readonly IGuildMemberRepository? _guildMemberRepository;
     private readonly IRoleRepository? _roleRepository;
     private readonly IUserRoleRepository? _userRoleRepository;
-
-    public InviteGuildMembersCommandHandler(
-        IGuildInvitationRepository invitationRepository,
-        IUserProfileRepository userProfileRepository)
-    {
-        _invitationRepository = invitationRepository;
-        _userProfileRepository = userProfileRepository;
-    }
+    private readonly IGuildNotificationService? _notificationService;
 
     public InviteGuildMembersCommandHandler(
         IGuildInvitationRepository invitationRepository,
@@ -28,7 +22,8 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
         IGuildRepository guildRepository,
         IGuildMemberRepository guildMemberRepository,
         IRoleRepository roleRepository,
-        IUserRoleRepository userRoleRepository)
+        IUserRoleRepository userRoleRepository,
+        IGuildNotificationService notificationService)
     {
         _invitationRepository = invitationRepository;
         _userProfileRepository = userProfileRepository;
@@ -36,6 +31,7 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
         _guildMemberRepository = guildMemberRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<InviteGuildMembersResponse> Handle(InviteGuildMembersCommand request, CancellationToken cancellationToken)
@@ -103,6 +99,17 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
                 throw new Exceptions.BadRequestException("An invitation is already pending for this user.");
             }
 
+            if (_guildMemberRepository != null)
+            {
+                var memberships = await _guildMemberRepository.GetMembershipsByUserAsync(inviteeId.Value, cancellationToken);
+                var belongsOtherGuild = memberships.Any(m => m.Status == MemberStatus.Active && m.GuildId != request.GuildId);
+                var alreadyMemberHere = memberships.Any(m => m.Status == MemberStatus.Active && m.GuildId == request.GuildId);
+                if (belongsOtherGuild || alreadyMemberHere)
+                {
+                    throw new Exceptions.BadRequestException($"User {inviteeId.Value} is already a member of another guild.");
+                }
+            }
+
             var existing = await _invitationRepository.GetByGuildAndInviteeAsync(request.GuildId, inviteeId.Value, cancellationToken);
             if (existing is not null)
             {
@@ -121,6 +128,10 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
 
                 var updated = await _invitationRepository.UpdateAsync(existing, cancellationToken);
                 createdIds.Add(updated.Id);
+                if (_notificationService != null)
+                {
+                    await _notificationService.NotifyInvitationCreatedAsync(updated, cancellationToken);
+                }
             }
             else
             {
@@ -138,6 +149,10 @@ public class InviteGuildMembersCommandHandler : IRequestHandler<InviteGuildMembe
 
                 invitation = await _invitationRepository.AddAsync(invitation, cancellationToken);
                 createdIds.Add(invitation.Id);
+                if (_notificationService != null)
+                {
+                    await _notificationService.NotifyInvitationCreatedAsync(invitation, cancellationToken);
+                }
             }
         }
         if (createdIds.Count == 0)

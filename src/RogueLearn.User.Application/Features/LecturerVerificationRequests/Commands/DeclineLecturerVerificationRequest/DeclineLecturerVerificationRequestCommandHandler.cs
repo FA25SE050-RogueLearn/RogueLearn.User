@@ -13,15 +13,18 @@ public class DeclineLecturerVerificationRequestCommandHandler : IRequestHandler<
     private readonly ILecturerVerificationRequestRepository _requestRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly ILogger<DeclineLecturerVerificationRequestCommandHandler> _logger;
+    private readonly ILecturerNotificationService? _notificationService;
 
     public DeclineLecturerVerificationRequestCommandHandler(
         ILecturerVerificationRequestRepository requestRepository,
         IUserProfileRepository userProfileRepository,
-        ILogger<DeclineLecturerVerificationRequestCommandHandler> logger)
+        ILogger<DeclineLecturerVerificationRequestCommandHandler> logger,
+        ILecturerNotificationService notificationService)
     {
         _requestRepository = requestRepository;
         _userProfileRepository = userProfileRepository;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task Handle(DeclineLecturerVerificationRequestCommand request, CancellationToken cancellationToken)
@@ -49,5 +52,9 @@ public class DeclineLecturerVerificationRequestCommandHandler : IRequestHandler<
         // Decline is reflected on the request only; no profile status field.
 
         _logger.LogInformation("Declined lecturer verification request {RequestId} for {AuthUserId}", entity.Id, entity.AuthUserId);
+        if (_notificationService != null)
+        {
+            await _notificationService.NotifyRequestDeclinedAsync(entity, cancellationToken);
+        }
     }
 }

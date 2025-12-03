@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.ApproveJoinRequest;
 
@@ -10,15 +11,21 @@ public class ApproveGuildJoinRequestCommandHandler : IRequestHandler<ApproveGuil
     private readonly IGuildRepository _guildRepository;
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildJoinRequestRepository _joinRequestRepository;
+    private readonly IGuildNotificationService? _notificationService;
+    private readonly IGuildInvitationRepository? _invitationRepository;
 
     public ApproveGuildJoinRequestCommandHandler(
         IGuildRepository guildRepository,
         IGuildMemberRepository memberRepository,
-        IGuildJoinRequestRepository joinRequestRepository)
+        IGuildJoinRequestRepository joinRequestRepository,
+        IGuildNotificationService notificationService,
+        IGuildInvitationRepository invitationRepository)
     {
         _guildRepository = guildRepository;
         _memberRepository = memberRepository;
         _joinRequestRepository = joinRequestRepository;
+        _notificationService = notificationService;
+        _invitationRepository = invitationRepository;
     }
 
     public async Task<Unit> Handle(ApproveGuildJoinRequestCommand request, CancellationToken cancellationToken)
@@ -109,6 +116,25 @@ public class ApproveGuildJoinRequestCommandHandler : IRequestHandler<ApproveGuil
         joinReq.Status = GuildJoinRequestStatus.Accepted;
         joinReq.RespondedAt = DateTimeOffset.UtcNow;
         await _joinRequestRepository.UpdateAsync(joinReq, cancellationToken);
+        if (_notificationService != null)
+        {
+            await _notificationService.NotifyJoinRequestApprovedAsync(joinReq, cancellationToken);
+        }
+
+        if (_invitationRepository != null)
+        {
+            var otherInvites = await _invitationRepository.FindAsync(i => i.InviteeId == joinReq.RequesterId, cancellationToken);
+            var toDecline = otherInvites.Where(i => i.Status == InvitationStatus.Pending).ToList();
+            if (toDecline.Any())
+            {
+                foreach (var inv in toDecline)
+                {
+                    inv.Status = InvitationStatus.Declined;
+                    inv.RespondedAt = DateTimeOffset.UtcNow;
+                }
+                await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
+            }
+        }
 
         return Unit.Value;
     }

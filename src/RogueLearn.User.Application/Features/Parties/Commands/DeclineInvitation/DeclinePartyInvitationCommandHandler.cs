@@ -1,16 +1,25 @@
 using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.DeclineInvitation;
 
 public class DeclinePartyInvitationCommandHandler : IRequestHandler<DeclinePartyInvitationCommand, Unit>
 {
     private readonly IPartyInvitationRepository _invitationRepository;
+    private readonly IPartyNotificationService? _notificationService;
 
     public DeclinePartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository)
     {
         _invitationRepository = invitationRepository;
+        _notificationService = null;
+    }
+
+    public DeclinePartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository, IPartyNotificationService notificationService)
+    {
+        _invitationRepository = invitationRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<Unit> Handle(DeclinePartyInvitationCommand request, CancellationToken cancellationToken)
@@ -36,6 +45,10 @@ public class DeclinePartyInvitationCommandHandler : IRequestHandler<DeclineParty
         invitation.Status = InvitationStatus.Declined;
         invitation.RespondedAt = DateTimeOffset.UtcNow;
         await _invitationRepository.UpdateAsync(invitation, cancellationToken);
+        if (_notificationService != null)
+        {
+            await _notificationService.SendInvitationDeclinedNotificationAsync(invitation, cancellationToken);
+        }
 
         return Unit.Value;
     }

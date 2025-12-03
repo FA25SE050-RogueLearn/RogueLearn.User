@@ -2,6 +2,7 @@ using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.AcceptInvitation;
 
@@ -10,12 +11,16 @@ public class AcceptGuildInvitationCommandHandler : IRequestHandler<AcceptGuildIn
     private readonly IGuildInvitationRepository _invitationRepository;
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildRepository _guildRepository;
+    private readonly IGuildNotificationService? _notificationService;
+    private readonly IGuildJoinRequestRepository? _joinRequestRepository;
 
-    public AcceptGuildInvitationCommandHandler(IGuildInvitationRepository invitationRepository, IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
+    public AcceptGuildInvitationCommandHandler(IGuildInvitationRepository invitationRepository, IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IGuildNotificationService notificationService, IGuildJoinRequestRepository joinRequestRepository)
     {
         _invitationRepository = invitationRepository;
         _memberRepository = memberRepository;
         _guildRepository = guildRepository;
+        _notificationService = notificationService;
+        _joinRequestRepository = joinRequestRepository;
     }
 
     public async Task<Unit> Handle(AcceptGuildInvitationCommand request, CancellationToken cancellationToken)
@@ -106,6 +111,21 @@ public class AcceptGuildInvitationCommandHandler : IRequestHandler<AcceptGuildIn
         invitation.Status = InvitationStatus.Accepted;
         invitation.RespondedAt = DateTimeOffset.UtcNow;
         await _invitationRepository.UpdateAsync(invitation, cancellationToken);
+
+        if (_joinRequestRepository != null)
+        {
+            var myRequests = await _joinRequestRepository.GetRequestsByRequesterAsync(request.AuthUserId, cancellationToken);
+            var toRemove = myRequests.Where(r => r.Status == GuildJoinRequestStatus.Pending).Select(r => r.Id).ToList();
+            if (toRemove.Any())
+            {
+                await _joinRequestRepository.DeleteRangeAsync(toRemove, cancellationToken);
+            }
+        }
+
+        if (_notificationService != null)
+        {
+            await _notificationService.NotifyInvitationAcceptedAsync(invitation, cancellationToken);
+        }
 
         var otherForInvitee = await _invitationRepository.FindAsync(
             i => i.InviteeId == request.AuthUserId,

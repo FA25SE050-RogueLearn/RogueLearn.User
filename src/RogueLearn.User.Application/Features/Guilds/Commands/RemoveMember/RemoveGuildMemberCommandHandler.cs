@@ -1,6 +1,7 @@
 using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Guilds.Commands.RemoveMember;
 
@@ -8,11 +9,13 @@ public class RemoveGuildMemberCommandHandler : IRequestHandler<RemoveGuildMember
 {
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildRepository _guildRepository;
+    private readonly IGuildNotificationService? _notificationService;
 
-    public RemoveGuildMemberCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
+    public RemoveGuildMemberCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IGuildNotificationService notificationService)
     {
         _memberRepository = memberRepository;
         _guildRepository = guildRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<Unit> Handle(RemoveGuildMemberCommand request, CancellationToken cancellationToken)
@@ -59,6 +62,11 @@ public class RemoveGuildMemberCommandHandler : IRequestHandler<RemoveGuildMember
         }
 
         await _memberRepository.UpdateRangeAsync(activeOrdered.Concat(nonActive), cancellationToken);
+
+        if (_notificationService != null)
+        {
+            await _notificationService.NotifyMemberRemovedAsync(request.GuildId, member.AuthUserId, cancellationToken);
+        }
 
         return Unit.Value;
     }

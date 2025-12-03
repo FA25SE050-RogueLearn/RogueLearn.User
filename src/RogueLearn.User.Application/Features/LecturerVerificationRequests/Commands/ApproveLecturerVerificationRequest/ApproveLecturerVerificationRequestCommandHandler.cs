@@ -16,6 +16,7 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IGuildRepository _guildRepository;
     private readonly ILogger<ApproveLecturerVerificationRequestCommandHandler> _logger;
+    private readonly ILecturerNotificationService? _notificationService;
 
     public ApproveLecturerVerificationRequestCommandHandler(
         ILecturerVerificationRequestRepository requestRepository,
@@ -23,7 +24,8 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository,
         IGuildRepository guildRepository,
-        ILogger<ApproveLecturerVerificationRequestCommandHandler> logger)
+        ILogger<ApproveLecturerVerificationRequestCommandHandler> logger,
+        ILecturerNotificationService notificationService)
     {
         _requestRepository = requestRepository;
         _userProfileRepository = userProfileRepository;
@@ -31,6 +33,7 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
         _userRoleRepository = userRoleRepository;
         _guildRepository = guildRepository;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task Handle(ApproveLecturerVerificationRequestCommand request, CancellationToken cancellationToken)
@@ -80,5 +83,9 @@ public class ApproveLecturerVerificationRequestCommandHandler : IRequestHandler<
         }
 
         _logger.LogInformation("Approved lecturer verification request {RequestId} for {AuthUserId}", entity.Id, entity.AuthUserId);
+        if (_notificationService != null)
+        {
+            await _notificationService.NotifyRequestApprovedAsync(entity, cancellationToken);
+        }
     }
 }

@@ -31,4 +31,14 @@ public class NotificationRepository : GenericRepository<Notification>, INotifica
             .Count(Supabase.Postgrest.Constants.CountType.Exact, cancellationToken);
         return (int)count;
     }
+
+    public async Task<IEnumerable<Notification>> GetUnreadByUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        var resp = await _supabaseClient
+            .From<Notification>()
+            .Filter("auth_user_id", Supabase.Postgrest.Constants.Operator.Equals, authUserId.ToString())
+            .Filter("is_read", Supabase.Postgrest.Constants.Operator.Equals, "false")
+            .Get(cancellationToken);
+        return resp.Models;
+    }
 }

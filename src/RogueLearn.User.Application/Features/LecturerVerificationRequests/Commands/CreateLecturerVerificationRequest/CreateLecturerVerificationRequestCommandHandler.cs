@@ -4,6 +4,7 @@ using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.LecturerVerificationRequests.Commands.CreateLecturerVerificationRequest;
 
@@ -14,19 +15,22 @@ public class CreateLecturerVerificationRequestCommandHandler : IRequestHandler<C
     private readonly IRoleRepository _roleRepository;
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly ILogger<CreateLecturerVerificationRequestCommandHandler> _logger;
+    private readonly ILecturerNotificationService? _notificationService;
 
     public CreateLecturerVerificationRequestCommandHandler(
         ILecturerVerificationRequestRepository requestRepository,
         IUserProfileRepository userProfileRepository,
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository,
-        ILogger<CreateLecturerVerificationRequestCommandHandler> logger)
+        ILogger<CreateLecturerVerificationRequestCommandHandler> logger,
+        ILecturerNotificationService notificationService)
     {
         _requestRepository = requestRepository;
         _userProfileRepository = userProfileRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task<CreateLecturerVerificationRequestResponse> Handle(CreateLecturerVerificationRequestCommand request, CancellationToken cancellationToken)

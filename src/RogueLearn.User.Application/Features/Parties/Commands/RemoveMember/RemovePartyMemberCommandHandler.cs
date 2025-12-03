@@ -1,16 +1,25 @@
 using MediatR;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.RemoveMember;
 
 public class RemovePartyMemberCommandHandler : IRequestHandler<RemovePartyMemberCommand, Unit>
 {
     private readonly IPartyMemberRepository _memberRepository;
+    private readonly IPartyNotificationService? _notificationService;
 
     public RemovePartyMemberCommandHandler(IPartyMemberRepository memberRepository)
     {
         _memberRepository = memberRepository;
+        _notificationService = null;
+    }
+
+    public RemovePartyMemberCommandHandler(IPartyMemberRepository memberRepository, IPartyNotificationService notificationService)
+    {
+        _memberRepository = memberRepository;
+        _notificationService = notificationService;
     }
 
     public async Task<Unit> Handle(RemovePartyMemberCommand request, CancellationToken cancellationToken)
@@ -29,6 +38,10 @@ public class RemovePartyMemberCommandHandler : IRequestHandler<RemovePartyMember
         }
 
         await _memberRepository.DeleteAsync(member.Id, cancellationToken);
+        if (_notificationService != null)
+        {
+            await _notificationService.SendMemberRemovedNotificationAsync(request.PartyId, member.AuthUserId, cancellationToken);
+        }
 
         return Unit.Value;
     }
