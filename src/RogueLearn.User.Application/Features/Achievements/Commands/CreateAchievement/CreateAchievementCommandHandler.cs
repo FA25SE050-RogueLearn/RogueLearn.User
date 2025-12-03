@@ -75,7 +75,6 @@ public class CreateAchievementCommandHandler : IRequestHandler<CreateAchievement
             RuleType = string.IsNullOrWhiteSpace(request.RuleType) ? null : request.RuleType.Trim(),
             RuleConfig = ruleConfigDict,
             Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
-            Icon = string.IsNullOrWhiteSpace(request.Icon) ? null : request.Icon.Trim(),
             IconUrl = string.IsNullOrWhiteSpace(request.IconUrl) ? null : request.IconUrl,
             Version = request.Version <= 0 ? 1 : request.Version,
             IsActive = request.IsActive,

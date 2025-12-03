@@ -19,7 +19,6 @@ public class CreateAchievementResponseTests
             RuleType = "type",
             RuleConfig = "{}",
             Category = "cat",
-            Icon = "i",
             IconUrl = "url",
             Version = 2,
             IsActive = true,
@@ -33,7 +32,6 @@ public class CreateAchievementResponseTests
         r.RuleType.Should().Be("type");
         r.RuleConfig.Should().Be("{}");
         r.Category.Should().Be("cat");
-        r.Icon.Should().Be("i");
         r.IconUrl.Should().Be("url");
         r.Version.Should().Be(2);
         r.IsActive.Should().BeTrue();

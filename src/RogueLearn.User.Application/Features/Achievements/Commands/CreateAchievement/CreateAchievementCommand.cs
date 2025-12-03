@@ -16,8 +16,6 @@ public class CreateAchievementCommand : IRequest<CreateAchievementResponse>
 
     // Categorization and icon metadata (optional)
     public string? Category { get; set; }
-    public string? Icon { get; set; }
-
     public string? IconUrl { get; set; }
 
     // Versioning & activation
