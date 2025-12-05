@@ -1,37 +1,21 @@
 // src/RogueLearn.User.Application/Plugins/IQuestGenerationPlugin.cs
-using RogueLearn.User.Application.Models;
-using RogueLearn.User.Domain.Entities;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RogueLearn.User.Application.Plugins;
 
 /// <summary>
 /// Interface for quest step generation plugin using AI.
-/// Generates activities for a SINGLE week per call.
-/// This plugin is called multiple times (once per week) to generate all quest steps.
-/// Now includes roadmap.sh context for industry-aligned content generation.
+/// Supports the "Master Quest" architecture by executing prompts that generate parallel difficulty tracks.
 /// </summary>
 public interface IQuestGenerationPlugin
 {
     /// <summary>
-    /// Generates quest steps for a SINGLE week using AI.
-    /// Called once per week to generate all quest steps sequentially.
+    /// Executes a raw prompt to generate Master Quest steps with 3 difficulty variants.
+    /// This decouples the prompt logic (now in QuestStepsPromptBuilder) from the AI execution logic.
     /// </summary>
-    /// <param name="weekContext">The aggregated context for the week (topics + pooled resources)</param>
-    /// <param name="userContext">User/class context for personalization</param>
-    /// <param name="relevantSkills">List of skills linked to the subject</param>
-    /// <param name="subjectName">Name of the subject</param>
-    /// <param name="courseDescription">Course description for context</param>
-    /// <param name="academicContext">User's academic performance context</param>
-    /// <param name="userClass">User's class containing roadmap.sh URL and skill focus areas</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>JSON response with activities array: { "activities": [...] }</returns>
-    Task<string?> GenerateQuestStepsJsonAsync(
-        WeekContext weekContext,
-        string userContext,
-        List<Skill> relevantSkills,
-        string subjectName,
-        string courseDescription,
-        AcademicContext academicContext,
-        Class? userClass = null,
-        CancellationToken cancellationToken = default);
+    /// <param name="prompt">The fully constructed prompt string asking for 3-lane JSON.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The raw JSON response from the AI, containing 'standard', 'supportive', and 'challenging' keys.</returns>
+    Task<string?> GenerateFromPromptAsync(string prompt, CancellationToken cancellationToken = default);
 }

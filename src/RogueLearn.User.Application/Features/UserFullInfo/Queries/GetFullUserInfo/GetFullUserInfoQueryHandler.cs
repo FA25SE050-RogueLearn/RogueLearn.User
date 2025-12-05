@@ -260,7 +260,7 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
 
         foreach (var attempt in attempts)
         {
-            var steps = await _questStepRepository.FindByQuestIdAsync(attempt.QuestId, cancellationToken);
+            var steps = await _questStepRepository.GetByQuestIdAsync(attempt.QuestId, cancellationToken);
             var stepsTotal = steps.Count();
             var stepsCompleted = await _userQuestStepProgressRepository.GetCompletedStepsCountForAttemptAsync(attempt.Id, cancellationToken);
 

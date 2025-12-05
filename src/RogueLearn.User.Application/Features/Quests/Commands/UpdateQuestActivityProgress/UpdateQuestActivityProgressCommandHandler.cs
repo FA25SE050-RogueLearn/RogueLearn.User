@@ -111,15 +111,23 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
     private async Task<UserQuestAttempt> CreateNewAttemptAsync(Guid authUserId, Guid questId, CancellationToken cancellationToken)
     {
+        // Fetch the parent quest to get the recommended difficulty
+        var quest = await _questRepository.GetByIdAsync(questId, cancellationToken);
+        var assignedDifficulty = quest?.ExpectedDifficulty ?? "Standard";
+
         var newAttempt = new UserQuestAttempt
         {
             AuthUserId = authUserId,
             QuestId = questId,
             Status = QuestAttemptStatus.InProgress,
-            StartedAt = DateTimeOffset.UtcNow
+            StartedAt = DateTimeOffset.UtcNow,
+            // ⭐ CRITICAL: Lock in the difficulty level at the start of the attempt.
+            // This ensures the user sees consistent content even if their academic record updates later.
+            AssignedDifficulty = assignedDifficulty
         };
         var createdAttempt = await _attemptRepository.AddAsync(newAttempt, cancellationToken);
-        _logger.LogInformation("Created new UserQuestAttempt {AttemptId} for Quest {QuestId}", createdAttempt.Id, questId);
+        _logger.LogInformation("Created new UserQuestAttempt {AttemptId} for Quest {QuestId} with Difficulty {Difficulty}",
+            createdAttempt.Id, questId, assignedDifficulty);
         return createdAttempt;
     }
 
@@ -580,7 +588,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             var attempt = await _attemptRepository.GetByIdAsync(attemptId, cancellationToken)
                 ?? throw new NotFoundException("UserQuestAttempt", attemptId);
 
-            var allStepsForQuest = await _questStepRepository.FindByQuestIdAsync(attempt.QuestId, cancellationToken);
+            var allStepsForQuest = await _questStepRepository.GetByQuestIdAsync(attempt.QuestId, cancellationToken);
             var allStepIdsForQuest = allStepsForQuest.Select(s => s.Id).ToHashSet();
 
             // ⭐ FIX: Fetch ALL step progress first (no enum filter), then filter in-memory

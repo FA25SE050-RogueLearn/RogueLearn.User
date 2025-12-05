@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Services;
 
@@ -71,7 +71,7 @@ public static class EscapeSequenceCleaner
         };
 
         var result = value;
-        
+
         // Apply replacements in order (more specific first)
         foreach (var kvp in replacements)
         {
@@ -80,7 +80,7 @@ public static class EscapeSequenceCleaner
 
         // Safety: reduce any remaining runs of 3+ backslashes to 2
         result = Regex.Replace(result, @"\\{3,}", @"\\");
-        
+
         return result;
     }
 
@@ -127,7 +127,7 @@ public static class EscapeSequenceCleaner
 
         // First, reduce excessive backslash runs before escape characters
         // Pattern: 4 or more backslashes followed by a known escape character
-        json = Regex.Replace(json, @"\\{4,}([0ntrfvabe\\""'])", m => 
+        json = Regex.Replace(json, @"\\{4,}([0ntrfvabe\\""'])", m =>
         {
             // Keep only 2 backslashes (which represents 1 backslash in the actual string)
             return @"\\" + m.Groups[1].Value;
@@ -174,13 +174,18 @@ public static class EscapeSequenceCleaner
         {
             var cleaned = CleanEscapeSequences(rawJson);
             using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
-            
-            // Validate structure
-            if (!doc.RootElement.TryGetProperty("activities", out _))
+
+            // ⭐ UPDATED: Validate structure
+            // Support BOTH old schema (root 'activities') AND new schema (root 'standard')
+            var root = doc.RootElement;
+            bool isOldSchema = root.TryGetProperty("activities", out _);
+            bool isNewSchema = root.TryGetProperty("standard", out _) || root.TryGetProperty("Standard", out _);
+
+            if (!isOldSchema && !isNewSchema)
             {
-                return (false, null, "Missing 'activities' property in JSON root");
+                return (false, null, "JSON root missing required keys (either 'activities' or 'standard')");
             }
-            
+
             return (true, cleaned, null);
         }
         catch (System.Text.Json.JsonException)
@@ -190,14 +195,18 @@ public static class EscapeSequenceCleaner
             {
                 var normalized = NormalizeEscapeSequences(rawJson);
                 var cleaned = CleanEscapeSequences(normalized);
-                
+
                 using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
-                
-                if (!doc.RootElement.TryGetProperty("activities", out _))
+
+                var root = doc.RootElement;
+                bool isOldSchema = root.TryGetProperty("activities", out _);
+                bool isNewSchema = root.TryGetProperty("standard", out _) || root.TryGetProperty("Standard", out _);
+
+                if (!isOldSchema && !isNewSchema)
                 {
-                    return (false, null, "Missing 'activities' property after normalization");
+                    return (false, null, "Missing required keys after normalization");
                 }
-                
+
                 return (true, cleaned, null);
             }
             catch (System.Text.Json.JsonException ex2)
@@ -224,24 +233,24 @@ public static class EscapeSequenceCleaner
         {
             var lineNumber = ex.LineNumber ?? 0;
             var lines = json.Split('\n');
-            
+
             if (lineNumber > 0 && lineNumber <= lines.Length)
             {
                 var startLine = Math.Max(0, (int)lineNumber - 3);
                 var endLine = Math.Min(lines.Length, (int)lineNumber + 3);
-                
+
                 var contextLines = new List<string>();
                 for (int i = startLine; i < endLine; i++)
                 {
                     var marker = (i == lineNumber - 1) ? ">>> " : "    ";
                     contextLines.Add($"{marker}Line {i + 1}: {lines[i]}");
                 }
-                
+
                 return string.Join("\n", contextLines);
             }
         }
         catch { }
-        
+
         return "Could not extract error context";
     }
 }

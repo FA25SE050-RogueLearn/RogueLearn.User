@@ -90,14 +90,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IConstructiveQuestionGenerationPlugin, ConstructiveQuestionGenerationPlugin>();
         // MODIFICATION END
 
-
-
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
         services.AddScoped<QuestStepsPromptBuilder>();
         services.AddScoped<IAcademicContextBuilder, AcademicContextBuilder>();
         services.AddScoped<IQuestDifficultyResolver, QuestDifficultyResolver>();
         services.AddScoped<IGradeExperienceCalculator, GradeExperienceCalculator>();
+        // ADDED: Topic Grouper Service
+        services.AddScoped<ITopicGrouperService, TopicGrouperService>();
+
         services.AddSingleton<IMemoryStore, InMemoryStore>();
         services.AddScoped<IAiQueryClassificationService, AiQueryClassificationService>();
 

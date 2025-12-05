@@ -1,4 +1,4 @@
-// src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
+// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
 using System.Text;
 using System.Text.Json;
 using RogueLearn.User.Application.Models;
@@ -7,26 +7,24 @@ using RogueLearn.User.Domain.Entities;
 namespace RogueLearn.User.Application.Services;
 
 /// <summary>
-/// Builds LLM-friendly prompts for generating quest steps using a resource-pooling strategy.
-/// Aggregates topics and resources for a week to create cohesive activities.
-/// Now includes roadmap.sh context for industry-aligned content generation.
+/// Builds LLM-friendly prompts for generating "Master Quest" steps.
+/// Generates three parallel difficulty tracks (Standard, Supportive, Challenging) for a single module.
 /// </summary>
 public class QuestStepsPromptBuilder
 {
-    public string BuildPrompt(
-        WeekContext weekContext,
-        string userContext,
+    public string BuildMasterPrompt(
+        QuestStepDefinition module,
         List<Skill> relevantSkills,
         string subjectName,
         string courseDescription,
-        AcademicContext academicContext,
         Class? userClass = null,
         string? errorHint = null)
     {
         var prompt = new StringBuilder();
 
-        prompt.AppendLine("You are an expert curriculum designer creating a personalized, gamified weekly learning module.");
-        prompt.AppendLine($"**Objective:** Create a tailored learning path for Week {weekContext.WeekNumber} of {weekContext.TotalWeeks} for '{subjectName}'.");
+        // ... (Header sections 1, 2, 3 remain the same) ...
+        prompt.AppendLine("You are an expert curriculum designer creating a MASTER QUEST MODULE.");
+        prompt.AppendLine($"**Objective:** Create content for **Module {module.ModuleNumber}: {module.Title}** of '{subjectName}'.");
         prompt.AppendLine();
         prompt.AppendLine("---");
 
@@ -36,139 +34,49 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine($"**Course Description:** {courseDescription}");
         prompt.AppendLine();
 
-        // 1.1 Career Roadmap Context (NEW)
+        // 1.1 Career Roadmap Context
         if (userClass != null)
         {
-            prompt.AppendLine("### Career Roadmap Alignment");
-            prompt.AppendLine($"**Learning Track:** {userClass.Name}");
-            if (!string.IsNullOrEmpty(userClass.Description))
-            {
-                prompt.AppendLine($"**Track Goal:** {userClass.Description}");
-            }
+            prompt.AppendLine("### Career Alignment");
+            prompt.AppendLine($"**Track:** {userClass.Name}");
             if (!string.IsNullOrEmpty(userClass.RoadmapUrl))
             {
-                prompt.AppendLine($"**Industry Roadmap:** {userClass.RoadmapUrl}");
-                prompt.AppendLine("**IMPORTANT:** This roadmap from roadmap.sh defines the industry-standard learning path.");
-                prompt.AppendLine("Your generated content should align with the skills and progression defined in this roadmap.");
-            }
-            prompt.AppendLine($"**Track Difficulty Level:** {userClass.DifficultyLevel}");
-            if (userClass.EstimatedDurationMonths.HasValue)
-            {
-                prompt.AppendLine($"**Expected Completion Time:** {userClass.EstimatedDurationMonths} months");
+                prompt.AppendLine($"**Roadmap:** {userClass.RoadmapUrl}");
             }
             if (userClass.SkillFocusAreas != null && userClass.SkillFocusAreas.Any())
             {
-                prompt.AppendLine($"**Core Skill Focus Areas:** {string.Join(", ", userClass.SkillFocusAreas)}");
-                prompt.AppendLine();
-                prompt.AppendLine("**Roadmap Alignment Instructions:**");
-                prompt.AppendLine("- Prioritize examples and scenarios relevant to: " + string.Join(", ", userClass.SkillFocusAreas));
-                prompt.AppendLine("- Frame questions in the context of real-world applications for this career path");
-                prompt.AppendLine("- Include industry best practices mentioned in the roadmap where applicable");
-                prompt.AppendLine("- Connect theoretical concepts to practical skills needed in this field");
+                prompt.AppendLine($"**Focus Areas:** {string.Join(", ", userClass.SkillFocusAreas)}");
             }
-            prompt.AppendLine();
-        }
-
-        prompt.AppendLine("**Student Profile:**");
-        prompt.AppendLine(userContext);
-        prompt.AppendLine();
-
-        prompt.AppendLine("## 2. Academic Performance Context");
-        prompt.AppendLine("**IMPORTANT:** Use this information to personalize difficulty, pacing, and focus areas.");
-        prompt.AppendLine();
-        prompt.AppendLine($"**Overall GPA:** {academicContext.CurrentGpa:F2}/10.0");
-        prompt.AppendLine($"**Quest Attempt Status:** {GetAttemptReasonDescription(academicContext.AttemptReason)}");
-        if (academicContext.PreviousAttempts > 0)
-        {
-            prompt.AppendLine($"**Previous Attempts:** {academicContext.PreviousAttempts} time(s)");
-        }
-        if (academicContext.PrerequisiteHistory.Any())
-        {
-            prompt.AppendLine();
-            prompt.AppendLine("**Prerequisite Subject Performance:**");
-            foreach (var prereq in academicContext.PrerequisiteHistory.Take(5))
-            {
-                prompt.AppendLine($"- {prereq.SubjectCode} ({prereq.SubjectName}): {prereq.PerformanceLevel} - Grade: {prereq.Grade ?? "N/A"}");
-            }
-            var weakPrereqs = academicContext.PrerequisiteHistory.Where(p => p.PerformanceLevel == "Weak").ToList();
-            if (weakPrereqs.Any())
-            {
-                prompt.AppendLine();
-                prompt.AppendLine("⚠️ **Foundation Gaps Detected:**");
-                foreach (var weak in weakPrereqs.Take(3))
-                {
-                    prompt.AppendLine($"   - Struggled with {weak.SubjectCode}: Include additional foundational review");
-                }
-            }
-        }
-        if (academicContext.RelatedSubjects.Any())
-        {
-            prompt.AppendLine();
-            prompt.AppendLine("**Related Subject Grades:**");
-            foreach (var related in academicContext.RelatedSubjects.Take(5))
-            {
-                prompt.AppendLine($"- {related.SubjectCode}: {related.Grade ?? "N/A"}/10.0");
-            }
-        }
-        if (academicContext.StrengthAreas.Any())
-        {
-            prompt.AppendLine();
-            prompt.AppendLine("✅ **Proven Strengths:**");
-            foreach (var strength in academicContext.StrengthAreas)
-            {
-                prompt.AppendLine($"   - {strength}");
-            }
-            prompt.AppendLine("   → Leverage these areas for confidence-building");
-        }
-        if (academicContext.ImprovementAreas.Any())
-        {
-            prompt.AppendLine();
-            prompt.AppendLine("📈 **Areas Needing Support:**");
-            foreach (var area in academicContext.ImprovementAreas)
-            {
-                prompt.AppendLine($"   - {area}");
-            }
-            prompt.AppendLine("   → Provide extra scaffolding, examples, and practice in these areas");
         }
 
         prompt.AppendLine();
-        prompt.AppendLine("### Personalization Directives:");
-        prompt.AppendLine(GetPersonalizationInstructions(academicContext));
-        prompt.AppendLine();
-        prompt.AppendLine("---");
+        prompt.AppendLine("## 2. Module Objectives (Topics & Resources)");
+        prompt.AppendLine("The content must cover these sessions. Use the provided URLs when available:");
 
-        // 2. Week Objectives (The "What")
-        prompt.AppendLine("## 3. Week Learning Objectives (Topics to Cover)");
-        prompt.AppendLine("You must cover the following topics. Group related topics into logical activities.");
-        foreach (var topic in weekContext.TopicsToCover)
+        foreach (var session in module.Sessions)
         {
-            prompt.AppendLine($"- {topic}");
-        }
-        prompt.AppendLine();
+            prompt.AppendLine($"### Session {session.SessionNumber}: {session.Topic}");
 
-        // 3. Approved Resources (The "How")
-        prompt.AppendLine("## 4. Approved Resource Pool");
-        prompt.AppendLine("Assign these specific URLs to your Reading activities. Do NOT invent URLs.");
-        if (weekContext.AvailableResources.Any())
-        {
-            for (int i = 0; i < weekContext.AvailableResources.Count; i++)
+            // Explicitly listing the high-quality URL for the AI to use
+            if (!string.IsNullOrWhiteSpace(session.SuggestedUrl))
             {
-                var res = weekContext.AvailableResources[i];
-                prompt.AppendLine($"[{i + 1}] {res.Url} (Context: {res.SourceContext})");
+                prompt.AppendLine($"  ✅ **APPROVED RESOURCE URL:** {session.SuggestedUrl}");
+            }
+            else
+            {
+                prompt.AppendLine($"  ⚠️ **NO URL PROVIDED** - Create summary-based reading content");
+            }
+
+            if (session.Readings != null && session.Readings.Any())
+            {
+                prompt.AppendLine($"  📖 **Syllabus Reference:** {string.Join(", ", session.Readings)}");
             }
         }
-        else
-        {
-            prompt.AppendLine("**No External URLs Available:**");
-            prompt.AppendLine("- Do NOT create any Reading activities");
-            prompt.AppendLine("- Generate only KnowledgeCheck and Quiz activities");
-            prompt.AppendLine("- Use clear, plain-text math and examples derived from Topics");
-        }
         prompt.AppendLine();
 
-        // 4. Skills
-        prompt.AppendLine("## 5. Skill Mapping");
-        prompt.AppendLine("Assign a `skillId` from this list to every activity based on relevance:");
+        // 3. Skills
+        prompt.AppendLine("## 3. Skill Mapping");
+        prompt.AppendLine("Assign a `skillId` from this list to EVERY activity you create:");
         if (relevantSkills.Any())
         {
             var skillsJson = JsonSerializer.Serialize(
@@ -179,148 +87,194 @@ public class QuestStepsPromptBuilder
             prompt.AppendLine(skillsJson);
             prompt.AppendLine("```");
         }
-        else
-        {
-            prompt.AppendLine("WARNING: No skills provided. Use placeholder GUIDs if necessary, but prefer real mapping.");
-        }
         prompt.AppendLine();
 
-        // 5. Rules & Schema
-        prompt.AppendLine("## 6. Construction Rules");
-        prompt.AppendLine("1. **Group Topics:** Combine 2-3 related topics into each `Reading` activity.");
-        prompt.AppendLine("2. **Distribute Resources:** Use the Approved Resource Pool when available. If limited URLs exist, reuse strong sources across grouped topics.");
-        prompt.AppendLine("3. **Activity Count:** Generate **6 to 9** activities total.");
-        if (weekContext.AvailableResources.Any())
-        {
-            prompt.AppendLine("   - 0-3 `Reading` activities (use only approved URLs; do not invent or duplicate)");
-            prompt.AppendLine("   - 2-4 `KnowledgeCheck` activities (3-5 questions each)");
-            prompt.AppendLine("   - 1 `Quiz` (10-15 questions)");
-        }
-        else
-        {
-            prompt.AppendLine("   - 0 `Reading` activities (no URLs provided)");
-            prompt.AppendLine("   - 3-5 `KnowledgeCheck` activities (3-5 questions each)");
-            prompt.AppendLine("   - 1-2 `Quiz` activities (10-15 questions each)");
-        }
-        prompt.AppendLine("4. **No Coding:** Do not generate coding activities.");
-        prompt.AppendLine("5. **JSON Only:** Output valid JSON matching the schema below. No markdown.");
+        // 4. Activity Types Explained
+        prompt.AppendLine("## 4. Activity Types & Purpose");
         prompt.AppendLine();
-        prompt.AppendLine("### CRITICAL: HOW TO HANDLE C ESCAPE SEQUENCES IN JSON");
+        prompt.AppendLine("### 📖 Reading Activities");
+        prompt.AppendLine("**Purpose:** Introduce new concepts and knowledge");
+        prompt.AppendLine("**Payload Structure:**");
+        prompt.AppendLine("- If an APPROVED RESOURCE URL exists → MUST include `url` field");
+        prompt.AppendLine("- If NO URL provided → Use `summary` field with detailed content");
+        prompt.AppendLine("- Always include `articleTitle` and `summary` (even when URL is present)");
         prompt.AppendLine();
-        prompt.AppendLine("**PROBLEM:** C escape sequences like \\n, \\t, \\0 will break JSON parsing.");
-        prompt.AppendLine();
-        prompt.AppendLine("**SOLUTION:** Never write literal backslash characters in your JSON strings.");
-        prompt.AppendLine();
-        prompt.AppendLine("When discussing C escape sequences in questions, explanations, or options:");
-        prompt.AppendLine();
-        prompt.AppendLine("❌ WRONG (will cause JSON errors):");
-        prompt.AppendLine("  \"question\": \"What does \\n represent?\"");
-        prompt.AppendLine("  \"explanation\": \"The \\0 character marks...\"");
-        prompt.AppendLine();
-        prompt.AppendLine("✅ CORRECT (use descriptive text):");
-        prompt.AppendLine("  \"question\": \"What does the newline escape sequence represent?\"");
-        prompt.AppendLine("  \"explanation\": \"The null character (backslash-zero) marks...\"");
-        prompt.AppendLine();
-        prompt.AppendLine("Reference:");
-        prompt.AppendLine("- \\n → 'newline' or 'backslash-n'");
-        prompt.AppendLine("- \\t → 'tab' or 'backslash-t'");
-        prompt.AppendLine("- \\0 → 'null character' or 'backslash-zero'");
-        prompt.AppendLine("- \\r → 'carriage return' or 'backslash-r'");
-        prompt.AppendLine("- \\\\ → 'backslash' or 'single backslash'");
-        prompt.AppendLine("- \\\" → 'double quote' or 'backslash-quote'");
-        prompt.AppendLine();
-        prompt.AppendLine("**NEVER USE ACTUAL BACKSLASHES IN YOUR CONTENT**");
-        prompt.AppendLine("### CRITICAL JSON STRING ENCODING RULES");
-        prompt.AppendLine("1) Double backslashes in JSON strings: \\\\n, \\\\t, \\\\0, \\\\\\\\ ");
-        prompt.AppendLine("2) If showing C code with escapes, double ALL backslashes");
-        prompt.AppendLine("3) Escape double quotes as \\\" inside strings");
-        prompt.AppendLine("4) Prefer describing escapes in words if unsure");
-        prompt.AppendLine("### STRING AND CODE REPRESENTATION RULES (ESCAPES IN JSON)");
-        prompt.AppendLine("- You may use C escape sequences in text (\\0, \\n, \\t, \\r, \\a, \\v, \\e)");
-        prompt.AppendLine("- IMPORTANT: In JSON strings, backslashes MUST be doubled: \\0, \\n, \\t, \\r, \\a, \\v, \\e");
-        prompt.AppendLine("- Keep code examples concise; avoid markdown code fences; output JSON only");
-        prompt.AppendLine("**Output Schema:**");
+        prompt.AppendLine("**Example with URL:**");
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
-        prompt.AppendLine("  \"activities\": [");
-        prompt.AppendLine("    {");
-        prompt.AppendLine("      \"activityId\": \"<UUID>\",");
-        prompt.AppendLine("      \"type\": \"Reading | KnowledgeCheck | Quiz\",");
-        prompt.AppendLine("      \"payload\": {");
-        prompt.AppendLine("         // For Reading:");
-        prompt.AppendLine("         \"skillId\": \"<UUID>\", \"experiencePoints\": 15, \"articleTitle\": \"<Title>\", \"summary\": \"<Text>\", \"url\": \"<From Resource Pool>\"");
-        prompt.AppendLine("         // For KnowledgeCheck:");
-        prompt.AppendLine("         \"skillId\": \"<UUID>\", \"experiencePoints\": 35, \"topic\": \"<Text>\", \"questions\": [ { \"question\": \"...\", \"options\": [...], \"correctAnswer\": \"...\", \"explanation\": \"...\" } ]");
-        prompt.AppendLine("         // For Quiz:");
-        prompt.AppendLine("         \"skillId\": \"<UUID>\", \"experiencePoints\": 50, \"questions\": [ ...10-15 questions... ]");
-        prompt.AppendLine("      }");
-        prompt.AppendLine("    }");
-        prompt.AppendLine("  ]");
+        prompt.AppendLine("  \"type\": \"Reading\",");
+        prompt.AppendLine("  \"activityId\": \"M1-S-1-1\",");
+        prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
+        prompt.AppendLine("  \"payload\": {");
+        prompt.AppendLine("    \"url\": \"https://www.geeksforgeeks.org/c-programming/\",");
+        prompt.AppendLine("    \"articleTitle\": \"Introduction to C Programming\",");
+        prompt.AppendLine("    \"summary\": \"Learn the basics of C programming...\"");
+        prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### ✅ KnowledgeCheck Activities");
+        prompt.AppendLine("**Purpose:** Quick comprehension checks after reading material");
+        prompt.AppendLine("**Requirements:**");
+        prompt.AppendLine("- **3-4 questions** grouped in a single activity"); // Updated requirement
+        prompt.AppendLine("- Tests understanding of recently covered content");
+        prompt.AppendLine("- Provides immediate feedback via explanation");
+        prompt.AppendLine();
+        prompt.AppendLine("**Payload Structure (Array of Questions):**"); // Updated label
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"type\": \"KnowledgeCheck\",");
+        prompt.AppendLine("  \"activityId\": \"M1-S-1-3\",");
+        prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
+        prompt.AppendLine("  \"payload\": {");
+        prompt.AppendLine("    \"questions\": ["); // Array wrapper
+        prompt.AppendLine("      {");
+        prompt.AppendLine("        \"question\": \"What is a compiler?\",");
+        prompt.AppendLine("        \"options\": [\"A\", \"B\", \"C\", \"D\"],");
+        prompt.AppendLine("        \"answer\": \"A\",");
+        prompt.AppendLine("        \"explanation\": \"...\"");
+        prompt.AppendLine("      },");
+        prompt.AppendLine("      {");
+        prompt.AppendLine("        \"question\": \"Question 2...\",");
+        prompt.AppendLine("        \"options\": [...],");
+        prompt.AppendLine("        \"answer\": \"...\",");
+        prompt.AppendLine("        \"explanation\": \"...\"");
+        prompt.AppendLine("      }");
+        prompt.AppendLine("    ]");
+        prompt.AppendLine("  }");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### 🎓 Quiz Activities");
+        prompt.AppendLine("**Purpose:** Comprehensive assessment of the entire module");
+        prompt.AppendLine("**Requirements:**");
+        prompt.AppendLine("- **SUPPORTIVE Track:** 7-8 questions (foundational, 70% passing grade)");
+        prompt.AppendLine("- **STANDARD Track:** 8-9 questions (balanced difficulty, 70% passing grade)");
+        prompt.AppendLine("- **CHALLENGING Track:** 9-10 questions (advanced/application level, 70% passing grade)");
+        prompt.AppendLine("- Must be placed at the END of the activity sequence");
+        prompt.AppendLine("- Consolidate all questions into a SINGLE Quiz activity"); // Explicit instruction
+        prompt.AppendLine();
+        prompt.AppendLine("**Payload Structure (Array of Questions):**"); // Updated label
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"type\": \"Quiz\",");
+        prompt.AppendLine("  \"activityId\": \"M1-Supportive-Final-Quiz\",");
+        prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
+        prompt.AppendLine("  \"payload\": {");
+        prompt.AppendLine("    \"questions\": ["); // Array wrapper
+        prompt.AppendLine("      {");
+        prompt.AppendLine("        \"question\": \"Quiz Question 1?\",");
+        prompt.AppendLine("        \"options\": [\"A\", \"B\", \"C\", \"D\"],");
+        prompt.AppendLine("        \"answer\": \"Correct answer\",");
+        prompt.AppendLine("        \"explanation\": \"Explanation...\"");
+        prompt.AppendLine("      },");
+        prompt.AppendLine("      // ... more questions ...");
+        prompt.AppendLine("    ]");
+        prompt.AppendLine("  }");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
+        prompt.AppendLine();
+
+        // 5. The "Three-Lane" Requirement
+        prompt.AppendLine("## 5. The Three-Lane Architecture");
+        prompt.AppendLine("You MUST generate THREE complete, parallel versions of this module.");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### 🟢 SUPPORTIVE Track (For struggling students)");
+        prompt.AppendLine("**Philosophy:** Extra scaffolding, simpler language, more guidance");
+        prompt.AppendLine("- **Reading:** Break complex topics into smaller chunks, use analogies");
+        prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, simple recall focus");
+        prompt.AppendLine("- **Quiz:** 7-8 questions, straightforward");
+        prompt.AppendLine("- **Total Activities:** 6-8 activities");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### 🟡 STANDARD Track (The balanced path)");
+        prompt.AppendLine("**Philosophy:** Comprehensive coverage at appropriate depth");
+        prompt.AppendLine("- **Reading:** Cover all learning outcomes");
+        prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, comprehension focus");
+        prompt.AppendLine("- **Quiz:** 8-9 questions, balanced");
+        prompt.AppendLine("- **Total Activities:** 7-9 activities");
+        prompt.AppendLine("- **MUST use APPROVED RESOURCE URLs** when available");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### 🔴 CHALLENGING Track (For advanced students)");
+        prompt.AppendLine("**Philosophy:** Deeper exploration, edge cases, real-world complexity");
+        prompt.AppendLine("- **Reading:** Advanced patterns, industry best practices");
+        prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, scenario-based");
+        prompt.AppendLine("- **Quiz:** 9-10 questions, application/analysis level");
+        prompt.AppendLine("- **Total Activities:** 8-10 activities");
+        prompt.AppendLine();
+
+        prompt.AppendLine("**CRITICAL:** All three tracks MUST cover the same core topics but at different depths.");
+        prompt.AppendLine();
+
+        // 6. Activity Flow Pattern
+        prompt.AppendLine("## 6. Recommended Activity Flow");
+        prompt.AppendLine("For each track, follow this general pattern:");
+        prompt.AppendLine("1. Reading (introduce concept)");
+        prompt.AppendLine("2. KnowledgeCheck (3-4 questions)");
+        prompt.AppendLine("3. Reading (next concept)");
+        prompt.AppendLine("4. KnowledgeCheck (3-4 questions)");
+        prompt.AppendLine("5. Quiz (Comprehensive module assessment)");
+        prompt.AppendLine();
+
+        // 7. Output Rules
+        prompt.AppendLine("## 7. Output Rules & Constraints");
+        prompt.AppendLine();
+        prompt.AppendLine("### ✅ MUST DO:");
+        prompt.AppendLine("1. Return ONLY valid JSON (no markdown code fences)");
+        prompt.AppendLine("2. Generate activities for all 3 tracks: `supportive`, `standard`, `challenging`");
+        prompt.AppendLine("3. Use APPROVED RESOURCE URLs in Reading activities when provided");
+        prompt.AppendLine("4. Assign a valid `skillId` to every activity");
+        prompt.AppendLine("5. Use unique `activityId` format: `M{module}-{track}-{session}-{number}`");
+        prompt.AppendLine("6. Group questions into `questions` arrays for KnowledgeCheck and Quiz"); // Updated rule
+        prompt.AppendLine("7. Place Quiz as the LAST activity in each track");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### ❌ MUST NOT DO:");
+        prompt.AppendLine("1. Do NOT generate coding activities or exercises");
+        prompt.AppendLine("2. Do NOT use literal escape sequences like `\\n` or `\\t` in strings");
+        prompt.AppendLine("3. Do NOT create single-question activities"); // Updated rule
+        prompt.AppendLine();
+
+        // 8. JSON Schema
+        prompt.AppendLine("## 8. Output JSON Schema");
+        prompt.AppendLine();
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"supportive\": {");
+        prompt.AppendLine("    \"activities\": [");
+        prompt.AppendLine("      { \"type\": \"Reading\", ... },");
+        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"payload\": { \"questions\": [...] } },");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"payload\": { \"questions\": [...] } }");
+        prompt.AppendLine("    ]");
+        prompt.AppendLine("  },");
+        prompt.AppendLine("  \"standard\": { \"activities\": [...] },");
+        prompt.AppendLine("  \"challenging\": { \"activities\": [...] }");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
+        prompt.AppendLine();
+
+        // 9. String Formatting Guidelines
+        prompt.AppendLine("## 9. String Formatting Guidelines");
+        prompt.AppendLine("When writing text for questions, explanations, and summaries:");
+        prompt.AppendLine("- Use plain English with normal punctuation");
+        prompt.AppendLine("- For line breaks, write complete sentences instead of using escape codes");
+        prompt.AppendLine("- For emphasis, use natural language or Markdown (*italic*, **bold**)");
+        prompt.AppendLine("- Example: Instead of 'First step\\nSecond step', write 'First step. Second step.'");
+        prompt.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(errorHint))
         {
-            prompt.AppendLine();
-            prompt.AppendLine("## CORRECTION REQUIRED");
+            prompt.AppendLine("## ⚠️ CORRECTION REQUIRED");
             prompt.AppendLine("Your previous output was invalid. Please fix the following error:");
+            prompt.AppendLine("```");
             prompt.AppendLine(errorHint);
+            prompt.AppendLine("```");
         }
 
         return prompt.ToString();
-    }
-
-    private string GetAttemptReasonDescription(QuestAttemptReason reason)
-    {
-        return reason switch
-        {
-            QuestAttemptReason.FirstTime => "First Attempt (Standard pace)",
-            QuestAttemptReason.Retake => "Retaking after failure (Needs reinforcement)",
-            QuestAttemptReason.CurrentlyStudying => "Currently enrolled (Real-time support)",
-            QuestAttemptReason.Advancement => "Already passed (Advanced enrichment)",
-            _ => "Unknown"
-        };
-    }
-
-    private string GetPersonalizationInstructions(AcademicContext context)
-    {
-        var instructions = new StringBuilder();
-        if (context.CurrentGpa >= 8.5)
-        {
-            instructions.AppendLine("- **High Achiever (GPA ≥ 8.5):** Include challenging questions with minimal scaffolding. Add extension questions.");
-        }
-        else if (context.CurrentGpa >= 7.0)
-        {
-            instructions.AppendLine("- **Good Performance (GPA 7.0-8.5):** Balance difficulty with moderate guidance.");
-        }
-        else if (context.CurrentGpa > 0)
-        {
-            instructions.AppendLine("- **Needs Support (GPA < 7.0):** Provide step-by-step explanations. Break complex concepts into smaller parts. Include more worked examples.");
-        }
-        switch (context.AttemptReason)
-        {
-            case QuestAttemptReason.Retake:
-                instructions.AppendLine("- **Retake Student:** Focus on common failure points. Add prerequisite review questions. Use varied question formats to address different learning gaps.");
-                break;
-            case QuestAttemptReason.CurrentlyStudying:
-                instructions.AppendLine("- **Current Student:** Align with typical semester pacing. Include practical application questions relevant to assignments.");
-                break;
-            case QuestAttemptReason.Advancement:
-                instructions.AppendLine("- **Already Passed:** Focus on advanced applications, deeper insights, and connections to upcoming topics.");
-                break;
-        }
-        if (context.PrerequisiteHistory.Any(p => p.PerformanceLevel == "Weak"))
-        {
-            instructions.AppendLine("- **Foundation Gaps:** Include brief refreshers on prerequisite concepts before introducing new material. Link new concepts explicitly to prior knowledge.");
-        }
-        if (context.ImprovementAreas.Any())
-        {
-            instructions.AppendLine($"- **Remediation Focus:** Pay special attention to {string.Join(", ", context.ImprovementAreas.Take(2))}. Provide extra practice and concrete examples in these areas.");
-        }
-        if (context.StrengthAreas.Any())
-        {
-            instructions.AppendLine($"- **Leverage Strengths:** Connect new material to their strong areas ({string.Join(", ", context.StrengthAreas.Take(2))}) to build confidence.");
-        }
-        return instructions.ToString();
     }
 }

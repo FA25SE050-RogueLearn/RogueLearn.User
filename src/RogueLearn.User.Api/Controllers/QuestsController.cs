@@ -29,7 +29,7 @@ using System.Text.Json.Serialization;
 [ApiController]
 [Route("api/quests")]
 [Authorize]
-    public class QuestsController : ControllerBase
+public class QuestsController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly IBackgroundJobClient _backgroundJobClient;
@@ -56,7 +56,9 @@ using System.Text.Json.Serialization;
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetQuestById(Guid id)
     {
-        var result = await _mediator.Send(new GetQuestByIdQuery { Id = id });
+        // Pass AuthUserId to enable personalized content filtering
+        var authUserId = User.GetAuthUserId();
+        var result = await _mediator.Send(new GetQuestByIdQuery { Id = id, AuthUserId = authUserId });
         return result is not null ? Ok(result) : NotFound();
     }
 
@@ -234,7 +236,7 @@ using System.Text.Json.Serialization;
 
     [HttpPost("{questId:guid}/steps/{stepId:guid}/activities/{activityId:guid}/progress")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]  
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateQuestActivityProgress(
     Guid questId,
@@ -349,7 +351,7 @@ using System.Text.Json.Serialization;
 
     // Add DTO classes at bottom of controller file:
 
-    
+
 }
 
 public class SubmitQuizAnswerRequest
@@ -458,4 +460,3 @@ public class UpdateQuestActivityProgressRequest
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public StepCompletionStatus Status { get; set; }
 }
-    
