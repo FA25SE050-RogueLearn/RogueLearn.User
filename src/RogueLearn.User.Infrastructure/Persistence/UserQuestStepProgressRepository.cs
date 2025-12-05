@@ -35,4 +35,14 @@ public class UserQuestStepProgressRepository : GenericRepository<UserQuestStepPr
 
         return (int)response;
     }
+
+    public async Task<IEnumerable<UserQuestStepProgress>> GetByAttemptIdAsync(Guid attemptId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<UserQuestStepProgress>()
+            .Filter("attempt_id", Operator.Equals, attemptId.ToString())
+            .Get(cancellationToken);
+
+        return response.Models;
+    }
 }

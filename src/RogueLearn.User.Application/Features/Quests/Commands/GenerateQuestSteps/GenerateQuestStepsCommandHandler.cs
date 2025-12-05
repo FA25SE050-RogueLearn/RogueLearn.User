@@ -18,7 +18,6 @@ namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestStep
 
 public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestStepsCommand, List<GeneratedQuestStepDto>>
 {
-    // ... (Constants and Fields remain the same)
     // ========== CONFIGURATION CONSTANTS ==========
     private const int SessionsPerWeek = 5;
     private const int MinQuestSteps = 5;
@@ -71,17 +70,13 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _userSkillRepository = userSkillRepository;
         _topicGrouperService = topicGrouperService;
     }
-    // ... (Constructor remains the same)
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
-        // ... (Pre-condition checks remain the same until loop) ...
         // ========== 1. PRE-CONDITION CHECKS ==========
         var questHasSteps = await _questStepRepository.QuestContainsSteps(request.QuestId, cancellationToken);
         if (questHasSteps)
         {
-            // Optional: Allow regeneration if explicitly requested, but for now fail fast
-            // throw new BadRequestException("Quest Steps already created."); 
             _logger.LogWarning("Quest {QuestId} already has steps. Proceeding (might create duplicates if not cleared).", request.QuestId);
         }
 
@@ -124,6 +119,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => relevantSkillIds.Contains(s.Id)).ToList();
 
         // ========== 4. TOPIC GROUPING ==========
+        // ⭐ FIXED TYPO HERE: GroupSessionsIntoModules
         var modules = _topicGrouperService.GroupSessionsIntoModules(allSessions);
 
         UpdateHangfireJobProgress(request.HangfireJobId, 0, modules.Count, "Starting master quest generation...");
@@ -153,15 +149,23 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                     {
                         if (variantContent.TryGetProperty("activities", out var activitiesElement))
                         {
-                            // ⭐ CRITICAL FIX: Deserialize to explicit List<Dictionary<string, object>>
-                            // This unwraps the JsonElement into a pure C# object graph that Supabase/Newtonsoft can serialize correctly.
                             var options = new JsonSerializerOptions();
-                            options.Converters.Add(new ObjectToInferredTypesConverter()); // Use your existing converter
+                            options.Converters.Add(new ObjectToInferredTypesConverter());
 
                             var activitiesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(
                                 activitiesElement.GetRawText(),
                                 options
                             );
+
+                            // ⭐ CRITICAL FIX: Enforce UUIDs for all activity IDs
+                            // This overwrites whatever the AI generated (e.g., "M1-standard-1") with a valid GUID.
+                            if (activitiesList != null)
+                            {
+                                foreach (var activity in activitiesList)
+                                {
+                                    activity["activityId"] = Guid.NewGuid().ToString();
+                                }
+                            }
 
                             int xp = CalculateTotalExperience(activitiesElement);
 
@@ -173,14 +177,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                                 _ => "Standard"
                             };
 
-                            // Unique step number logic: 
-                            // Old way: StepNumber = ModuleNumber (caused constraint violation)
-                            // New way: We must still use StepNumber for sequencing in UI, 
-                            // but the DB constraint must be on (QuestId, Module, Variant).
-                            // If your UI relies on StepNumber being unique per Quest, we might need to calculate it:
-                            // e.g. StepNumber = (Module-1)*3 + VariantIndex.
-                            // BUT, for now, let's assume StepNumber = ModuleNumber and rely on the DB constraint fix.
-
                             var step = new QuestStep
                             {
                                 QuestId = request.QuestId,
@@ -190,13 +186,11 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                                 Title = $"{module.Title} ({dbVariant})",
                                 Description = $"Module {module.ModuleNumber} - {dbVariant} Track",
                                 ExperiencePoints = xp,
-                                // Store as Dictionary for Supabase JSONB
-                                Content = new Dictionary<string, object> { { "activities", activitiesList } },
+                                Content = new Dictionary<string, object> { { "activities", activitiesList ?? new List<Dictionary<string, object>>() } },
                                 CreatedAt = DateTimeOffset.UtcNow,
                                 UpdatedAt = DateTimeOffset.UtcNow
                             };
 
-                            // Note: This AddAsync call relies on the DB constraint being fixed!
                             await _questStepRepository.AddAsync(step, cancellationToken);
                             createdSteps.Add(step);
                             _logger.LogInformation("Saved Module {Module} Variant {Variant}", module.ModuleNumber, dbVariant);
@@ -208,7 +202,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating Module {Module}", module.ModuleNumber);
-                // Continue to next module, don't crash job
             }
         }
 
@@ -216,7 +209,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         return _mapper.Map<List<GeneratedQuestStepDto>>(createdSteps);
     }
 
-    // ... (Helpers remain same) ...
     private int CalculateTotalExperience(JsonElement activitiesElement)
     {
         int total = 0;

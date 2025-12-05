@@ -3,9 +3,10 @@ using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using RogueLearn.User.Application.Features.QuestProgress.Queries.GetUserProgressForQuest;
 using RogueLearn.User.Application.Features.QuestProgress.Queries.GetStepProgress;
 using RogueLearn.User.Application.Features.QuestProgress.Queries.GetCompletedActivities;
+// MODIFIED: Using the robust query from Features.Quests that handles difficulty filtering
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestProgress;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -24,12 +25,14 @@ public class UserQuestProgressController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the authenticated user's overall progress for a specific quest, including the status of each step.
+    /// Gets the authenticated user's overall progress for a specific quest.
+    /// Returns the list of steps filtered by the user's assigned difficulty track, with their status and lock state.
     /// </summary>
     /// <param name="questId">The quest ID</param>
-    /// <returns>Quest progress with all steps and their completion status</returns>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of step progress details for the user's track</returns>
     [HttpGet("quests/{questId:guid}")]
-    [ProducesResponseType(typeof(GetUserProgressForQuestResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<QuestStepProgressDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserQuestProgress(Guid questId, CancellationToken cancellationToken)
     {
@@ -39,13 +42,21 @@ public class UserQuestProgressController : ControllerBase
 
         try
         {
-            var query = new GetUserProgressForQuestQuery
+            // MODIFIED: Switched to GetQuestProgressQuery (Features.Quests) 
+            // This handler correctly filters steps based on the user's UserQuestAttempt.AssignedDifficulty
+            // and calculates IsLocked logic based on sequence.
+            var query = new GetQuestProgressQuery
             {
                 AuthUserId = authUserId,
                 QuestId = questId
             };
             var result = await _mediator.Send(query, cancellationToken);
-            return result is not null ? Ok(result) : NotFound("No progress found for this quest.");
+            return Ok(result);
+        }
+        catch (Application.Exceptions.NotFoundException ex)
+        {
+            _logger.LogWarning("Quest attempt not found: {Message}", ex.Message);
+            return NotFound(new { error = ex.Message });
         }
         catch (Exception ex)
         {
@@ -59,6 +70,7 @@ public class UserQuestProgressController : ControllerBase
     /// </summary>
     /// <param name="questId">The quest ID</param>
     /// <param name="stepId">The step ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Step progress with completed activities count and percentage</returns>
     [HttpGet("quests/{questId:guid}/steps/{stepId:guid}")]
     [ProducesResponseType(typeof(GetStepProgressResponse), StatusCodes.Status200OK)]
@@ -78,7 +90,7 @@ public class UserQuestProgressController : ControllerBase
                 StepId = stepId
             };
             var result = await _mediator.Send(query, cancellationToken);
-            return result is not null ? Ok(result) : NotFound("No progress found for this step.");
+            return result is not null ? Ok(result) : NotFound(new { error = "No progress found for this step." });
         }
         catch (Exception ex)
         {
@@ -92,6 +104,7 @@ public class UserQuestProgressController : ControllerBase
     /// </summary>
     /// <param name="questId">The quest ID</param>
     /// <param name="stepId">The step ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of activities with completion status and details</returns>
     [HttpGet("quests/{questId:guid}/steps/{stepId:guid}/activities")]
     [ProducesResponseType(typeof(GetCompletedActivitiesResponse), StatusCodes.Status200OK)]
@@ -111,7 +124,7 @@ public class UserQuestProgressController : ControllerBase
                 StepId = stepId
             };
             var result = await _mediator.Send(query, cancellationToken);
-            return result is not null ? Ok(result) : NotFound("No activities found for this step.");
+            return result is not null ? Ok(result) : NotFound(new { error = "No activities found for this step." });
         }
         catch (Exception ex)
         {
