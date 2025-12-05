@@ -18,13 +18,19 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
     private readonly IMapper _mapper;
     private readonly ILogger<UpdateMyProfileCommandHandler> _logger;
 
+    // ADDED: Repositories for validation
+    private readonly IClassRepository _classRepository;
+    private readonly ICurriculumProgramRepository _curriculumProgramRepository;
+
     public UpdateMyProfileCommandHandler(
         IUserProfileRepository userProfileRepository,
         IUserRoleRepository userRoleRepository,
         IRoleRepository roleRepository,
         IAvatarStorage avatarStorage,
         IMapper mapper,
-        ILogger<UpdateMyProfileCommandHandler> logger)
+        ILogger<UpdateMyProfileCommandHandler> logger,
+        IClassRepository classRepository,
+        ICurriculumProgramRepository curriculumProgramRepository)
     {
         _userProfileRepository = userProfileRepository;
         _userRoleRepository = userRoleRepository;
@@ -32,6 +38,8 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
         _avatarStorage = avatarStorage;
         _mapper = mapper;
         _logger = logger;
+        _classRepository = classRepository;
+        _curriculumProgramRepository = curriculumProgramRepository;
     }
 
     public async Task<UserProfileDto> Handle(UpdateMyProfileCommand request, CancellationToken cancellationToken)
@@ -78,6 +86,27 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
             profile.Preferences = string.IsNullOrWhiteSpace(request.PreferencesJson)
                 ? null
                 : JsonSerializer.Deserialize<Dictionary<string, object>>(request.PreferencesJson);
+        }
+
+        // ADDED: Academic path updates with validation
+        if (request.ClassId.HasValue)
+        {
+            var classExists = await _classRepository.ExistsAsync(request.ClassId.Value, cancellationToken);
+            if (!classExists)
+            {
+                throw new NotFoundException("Class", request.ClassId.Value);
+            }
+            profile.ClassId = request.ClassId.Value;
+        }
+
+        if (request.RouteId.HasValue)
+        {
+            var routeExists = await _curriculumProgramRepository.ExistsAsync(request.RouteId.Value, cancellationToken);
+            if (!routeExists)
+            {
+                throw new NotFoundException("CurriculumProgram", request.RouteId.Value);
+            }
+            profile.RouteId = request.RouteId.Value;
         }
 
         profile.UpdatedAt = DateTimeOffset.UtcNow;

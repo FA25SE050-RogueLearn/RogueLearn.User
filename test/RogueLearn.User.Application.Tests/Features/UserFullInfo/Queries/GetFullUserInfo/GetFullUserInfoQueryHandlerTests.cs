@@ -212,7 +212,7 @@ public class GetFullUserInfoQueryHandlerTests
             .Returns(new List<Quest> { new() { Id = questId, Title = "Quest X" } });
 
         var stepRepo = Substitute.For<IQuestStepRepository>();
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { new() { Id = Guid.NewGuid(), QuestId = questId }, new() { Id = Guid.NewGuid(), QuestId = questId }, new() { Id = Guid.NewGuid(), QuestId = questId } });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { new() { Id = Guid.NewGuid(), QuestId = questId }, new() { Id = Guid.NewGuid(), QuestId = questId }, new() { Id = Guid.NewGuid(), QuestId = questId } });
 
         var stepProgressRepo = Substitute.For<IUserQuestStepProgressRepository>();
         stepProgressRepo.GetCompletedStepsCountForAttemptAsync(attemptId, Arg.Any<CancellationToken>()).Returns(2);
