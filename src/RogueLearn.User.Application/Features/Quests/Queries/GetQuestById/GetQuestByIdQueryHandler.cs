@@ -1,5 +1,7 @@
-﻿using AutoMapper;
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestById/GetQuestByIdQueryHandler.cs
+using AutoMapper;
 using MediatR;
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById; // Fix namespace resolution
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -30,7 +32,8 @@ public class GetQuestByIdQueryHandler : IRequestHandler<GetQuestByIdQuery, Quest
         var quest = await _questRepository.GetByIdAsync(request.Id, cancellationToken);
         if (quest == null)
         {
-            return null;
+            // MediatR pipeline might expect null or exception. Returning null allows Controller to 404.
+            return null!;
         }
 
         // Default difficulty strategy
@@ -62,6 +65,7 @@ public class GetQuestByIdQueryHandler : IRequestHandler<GetQuestByIdQuery, Quest
 
         // 3. Filter steps to show ONLY the track matching the user's difficulty
         // The Master Quest contains steps for all 3 variants (Standard, Supportive, Challenging)
+        // We case-insensitive match just to be safe
         var filteredSteps = allSteps
             .Where(s => string.Equals(s.DifficultyVariant, targetDifficulty, StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.StepNumber)

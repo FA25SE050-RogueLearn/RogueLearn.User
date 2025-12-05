@@ -1,7 +1,4 @@
 // RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestsController.cs
-// CORRECTED HANGFIRE API - Using proper JobStorage.Current.GetMonitoringApi()
-// ⭐ UPDATED: Pass null for PerformContext - Hangfire injects it automatically
-
 using BuildingBlocks.Shared.Authentication;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Hangfire;
@@ -14,8 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
-// MODIFIED: This using is updated to point to the refactored command location.
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
+using RogueLearn.User.Application.Features.Quests.Commands.StartQuest;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Features.Quests.Queries.GetMyQuestsWithSubjects;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestSkills;
@@ -56,16 +53,26 @@ public class QuestsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetQuestById(Guid id)
     {
-        // Pass AuthUserId to enable personalized content filtering
         var authUserId = User.GetAuthUserId();
         var result = await _mediator.Send(new GetQuestByIdQuery { Id = id, AuthUserId = authUserId });
         return result is not null ? Ok(result) : NotFound();
     }
 
     /// <summary>
-    /// Schedules quest step generation as a background job.
-    /// Returns immediately (202 Accepted) with a JobId for status tracking.
+    /// Explicitly starts a quest for the user.
+    /// This is required before any progress can be tracked.
+    /// Idempotent: returns existing attempt info if already started.
     /// </summary>
+    [HttpPost("{questId:guid}/start")]
+    [ProducesResponseType(typeof(StartQuestResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> StartQuest(Guid questId)
+    {
+        var authUserId = User.GetAuthUserId();
+        var result = await _mediator.Send(new StartQuestCommand(questId, authUserId));
+        return Ok(result);
+    }
+
     [HttpPost("{questId:guid}/generate-steps")]
     [ProducesResponseType(typeof(GeneratedQuestStepsResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -75,43 +82,26 @@ public class QuestsController : ControllerBase
         var authUserId = User.GetAuthUserId();
 
         _logger.LogInformation(
-            "GenerateQuestSteps endpoint called for Quest {QuestId} by user {AuthUserId}. " +
-            "Scheduling background job instead of blocking request.",
+            "GenerateQuestSteps endpoint called for Quest {QuestId} by user {AuthUserId}. Scheduling background job.",
             questId, authUserId);
 
         try
         {
-            // ========== FAST VALIDATION CHECKS ==========
-
-            // Validate quest exists (fail fast)
             var quest = await _questRepository.GetByIdAsync(questId, CancellationToken.None);
             if (quest == null)
             {
-                _logger.LogWarning("Quest {QuestId} not found", questId);
                 return NotFound($"Quest {questId} not found");
             }
 
-            // Check if steps already exist
             var hasSteps = await _questStepRepository.QuestContainsSteps(questId, CancellationToken.None);
             if (hasSteps)
             {
-                _logger.LogWarning("Quest {QuestId} already has steps generated", questId);
                 return BadRequest("Quest steps have already been generated for this quest");
             }
 
-            // ========== SCHEDULE BACKGROUND JOB ==========
-
-            // ⭐ UPDATED: Pass null for PerformContext - Hangfire will inject it automatically
             var jobId = _backgroundJobClient.Schedule<IQuestStepGenerationService>(
-                service => service.GenerateQuestStepsAsync(authUserId, questId, null!),  // ⭐ Pass null here
-                TimeSpan.Zero); // Immediate scheduling
-
-            _logger.LogInformation(
-                "Successfully scheduled background job {JobId} for quest step generation. " +
-                "Quest: {QuestId}, User: {AuthUserId}",
-                jobId, questId, authUserId);
-
-            // ========== RETURN 202 ACCEPTED WITH JOB ID ==========
+                service => service.GenerateQuestStepsAsync(authUserId, questId, null!),
+                TimeSpan.Zero);
 
             return AcceptedAtAction(
                 nameof(GetQuestGenerationStatus),
@@ -120,7 +110,7 @@ public class QuestsController : ControllerBase
                 {
                     JobId = jobId,
                     Status = "Processing",
-                    Message = "Quest step generation has been scheduled. You will receive a notification when completed.",
+                    Message = "Quest step generation has been scheduled.",
                     QuestId = questId
                 });
         }
@@ -131,17 +121,6 @@ public class QuestsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Checks the status of a quest step generation background job.
-    /// Use this to poll and track job progress.
-    /// 
-    /// Returns job state information including:
-    /// - Processing: Job is still running
-    /// - Succeeded: Job completed successfully
-    /// - Failed: Job failed (check Error property for details)
-    /// - Scheduled: Job is scheduled but not yet running
-    /// - Deleted: Job was deleted
-    /// </summary>
     [HttpGet("generation-status/{jobId}")]
     [ProducesResponseType(typeof(JobStatusResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -149,14 +128,12 @@ public class QuestsController : ControllerBase
     {
         try
         {
-            // FIXED: Use proper Hangfire API - JobStorage.Current.GetConnection()
             using (var connection = JobStorage.Current.GetConnection())
             {
                 var jobData = connection.GetJobData(jobId);
 
                 if (jobData == null)
                 {
-                    _logger.LogWarning("Job {JobId} not found in Hangfire storage", jobId);
                     return NotFound($"Job {jobId} not found or has expired");
                 }
 
@@ -167,32 +144,20 @@ public class QuestsController : ControllerBase
                     CreatedAt = DateTime.UtcNow
                 };
 
-                // FIXED: Properly access exception details from FailedState
                 if (jobData.State == FailedState.StateName)
                 {
-                    // Get the detailed state information
                     var stateData = connection.GetStateData(jobId);
-                    if (stateData != null && stateData.Data.ContainsKey("Exception"))
-                    {
-                        response.Error = stateData.Data["Exception"];
-                    }
-                    else
-                    {
-                        response.Error = "Job failed - exception details not available";
-                    }
-                    _logger.LogWarning("Job {JobId} failed. Error: {Error}", jobId, response.Error);
+                    response.Error = stateData != null && stateData.Data.ContainsKey("Exception")
+                        ? stateData.Data["Exception"]
+                        : "Job failed";
                 }
-                // Check if job is in Succeeded state
                 else if (jobData.State == SucceededState.StateName)
                 {
                     response.Message = "Quest step generation completed successfully!";
-                    _logger.LogInformation("Job {JobId} succeeded", jobId);
                 }
-                // Check if job is still processing
                 else if (jobData.State == ProcessingState.StateName || jobData.State == EnqueuedState.StateName)
                 {
                     response.Status = "Processing";
-                    _logger.LogInformation("Job {JobId} is processing", jobId);
                 }
 
                 return await Task.FromResult(Ok(response));
@@ -205,10 +170,6 @@ public class QuestsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Gets the real-time progress of a Hangfire quest generation job.
-    /// ⭐ NEW: Returns detailed progress information including current step, total steps, and percentage.
-    /// </summary>
     [HttpGet("generation-progress/{jobId}")]
     [ProducesResponseType(typeof(QuestGenerationProgressDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -262,14 +223,13 @@ public class QuestsController : ControllerBase
         }
         catch (ValidationException ex)
         {
-            // ✅ GRACEFUL: Return 400 Bad Request with error message
             _logger.LogWarning("Validation failed: {Message}", ex.Message);
             return BadRequest(new { error = ex.Message });
         }
         catch (NotFoundException ex)
         {
             _logger.LogWarning("Not found: {Message}", ex.Message);
-            return NotFound();
+            return NotFound(new { error = ex.Message });
         }
         catch (Exception ex)
         {
@@ -290,13 +250,8 @@ public class QuestsController : ControllerBase
     {
         var authUserId = User.GetAuthUserId();
 
-        _logger.LogInformation(
-            "Quiz submission endpoint - User: {UserId}, Quest: {QuestId}, Step: {StepId}, Activity: {ActivityId}",
-            authUserId, questId, stepId, activityId);
-
         try
         {
-            // Fast validation - quest and step exist
             var quest = await _questRepository.GetByIdAsync(questId);
             if (quest == null)
                 return NotFound(new { message = $"Quest {questId} not found" });
@@ -305,7 +260,6 @@ public class QuestsController : ControllerBase
             if (step == null || step.QuestId != questId)
                 return NotFound(new { message = $"Step {stepId} not found in quest {questId}" });
 
-            // Create command and send to handler
             var command = new SubmitQuizAnswerCommand
             {
                 AuthUserId = authUserId,
@@ -336,10 +290,6 @@ public class QuestsController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Gets the skills associated with a quest through its subject mapping.
-    /// Returns the skills that will be developed by completing this quest.
-    /// </summary>
     [HttpGet("{questId:guid}/skills")]
     [ProducesResponseType(typeof(GetQuestSkillsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -348,10 +298,6 @@ public class QuestsController : ControllerBase
         var result = await _mediator.Send(new GetQuestSkillsQuery { QuestId = questId }, cancellationToken);
         return result is not null ? Ok(result) : NotFound();
     }
-
-    // Add DTO classes at bottom of controller file:
-
-
 }
 
 public class SubmitQuizAnswerRequest
@@ -360,101 +306,33 @@ public class SubmitQuizAnswerRequest
     public int CorrectAnswerCount { get; set; }
     public int TotalQuestions { get; set; }
 }
-// ========== RESPONSE DTOs ==========
 
-/// <summary>
-/// Response returned when a background job is scheduled (202 Accepted).
-/// Use the JobId to poll the GetQuestGenerationStatus endpoint.
-/// </summary>
 public class GeneratedQuestStepsResponse
 {
-    /// <summary>
-    /// Unique identifier for the background job.
-    /// Use this to check job status via GET /api/quests/generation-status/{jobId}
-    /// </summary>
     public string JobId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Current status: "Processing", "Succeeded", "Failed", etc.
-    /// </summary>
     public string Status { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Human-readable message about the job.
-    /// </summary>
     public string Message { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The quest ID this job is generating steps for.
-    /// </summary>
     public Guid QuestId { get; set; }
 }
 
-/// <summary>
-/// Response for checking the status of a quest step generation job.
-/// </summary>
 public class JobStatusResponse
 {
-    /// <summary>
-    /// Unique identifier for the background job.
-    /// </summary>
     public string JobId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Current job state: "Processing", "Succeeded", "Failed", "Scheduled", etc.
-    /// Uses Hangfire's built-in state names.
-    /// </summary>
     public string Status { get; set; } = string.Empty;
-
-    /// <summary>
-    /// When the job was created/scheduled.
-    /// </summary>
     public DateTime CreatedAt { get; set; }
-
-    /// <summary>
-    /// Error details if the job failed. Null if successful.
-    /// Contains the full exception details from the FailedState.
-    /// </summary>
     public string? Error { get; set; }
-
-    /// <summary>
-    /// Human-readable status message.
-    /// </summary>
     public string? Message { get; set; }
 }
 
-/// <summary>
-/// ⭐ NEW: Real-time progress of quest generation job from Hangfire job parameters.
-/// </summary>
 public class QuestGenerationProgressDto
 {
-    /// <summary>
-    /// Current step being processed (0-based).
-    /// </summary>
     public int CurrentStep { get; set; }
-
-    /// <summary>
-    /// Total steps to complete.
-    /// </summary>
     public int TotalSteps { get; set; }
-
-    /// <summary>
-    /// Human-readable progress message.
-    /// </summary>
     public string Message { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Progress percentage (0-100).
-    /// </summary>
     public int ProgressPercentage { get; set; }
-
-    /// <summary>
-    /// When this progress was last updated.
-    /// </summary>
     public DateTime UpdatedAt { get; set; }
 }
 
-// MODIFIED: Renamed request DTO for clarity.
 public class UpdateQuestActivityProgressRequest
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
