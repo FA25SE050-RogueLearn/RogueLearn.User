@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -16,10 +15,10 @@ namespace RogueLearn.User.Application.Tests.Features.UserProfiles.Queries.GetAll
 
 public class GetAllUserProfilesQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_MapsProfilesAndRoles(GetAllUserProfilesQuery query)
+    [Fact]
+    public async Task Handle_MapsProfilesAndRoles()
     {
+        var query = new GetAllUserProfilesQuery();
         var userRepo = Substitute.For<IUserProfileRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();
@@ -39,10 +38,10 @@ public class GetAllUserProfilesQueryHandlerTests
         res.UserProfiles[0].Roles.Should().ContainSingle(r => r == "RoleA");
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Empty_ReturnsEmptyList(GetAllUserProfilesQuery query)
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmptyList()
     {
+        var query = new GetAllUserProfilesQuery();
         var userRepo = Substitute.For<IUserProfileRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();

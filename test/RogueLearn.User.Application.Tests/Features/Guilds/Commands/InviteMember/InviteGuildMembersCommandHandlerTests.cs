@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.InviteMember;
@@ -15,9 +14,8 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.InviteMembe
 
 public class InviteGuildMembersCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_SelfInvite_Throws(InviteGuildMembersCommand cmd)
+    [Fact]
+    public async Task Handle_SelfInvite_Throws()
     {
         var invRepo = Substitute.For<IGuildInvitationRepository>();
         var userRepo = Substitute.For<IUserProfileRepository>();
@@ -25,8 +23,10 @@ public class InviteGuildMembersCommandHandlerTests
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
-        var sut = new InviteGuildMembersCommandHandler(invRepo, userRepo, guildRepo, memberRepo, roleRepo, userRoleRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IGuildNotificationService>();
+        var sut = new InviteGuildMembersCommandHandler(invRepo, userRepo, guildRepo, memberRepo, roleRepo, userRoleRepo, notificationService);
 
+        var cmd = new InviteGuildMembersCommand(Guid.NewGuid(), Guid.NewGuid(), Array.Empty<InviteTarget>(), "msg");
         invRepo.GetPendingInvitationsByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildInvitation>());
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new Guild { Id = cmd.GuildId, MaxMembers = 50 });
         var target = new InviteTarget(cmd.InviterAuthUserId, null);
@@ -34,9 +34,8 @@ public class InviteGuildMembersCommandHandlerTests
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_EmailResolvesAndCreates(InviteGuildMembersCommand cmd)
+    [Fact]
+    public async Task Handle_EmailResolvesAndCreates()
     {
         var invRepo = Substitute.For<IGuildInvitationRepository>();
         var userRepo = Substitute.For<IUserProfileRepository>();
@@ -44,8 +43,10 @@ public class InviteGuildMembersCommandHandlerTests
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
-        var sut = new InviteGuildMembersCommandHandler(invRepo, userRepo, guildRepo, memberRepo, roleRepo, userRoleRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IGuildNotificationService>();
+        var sut = new InviteGuildMembersCommandHandler(invRepo, userRepo, guildRepo, memberRepo, roleRepo, userRoleRepo, notificationService);
 
+        var cmd = new InviteGuildMembersCommand(Guid.NewGuid(), Guid.NewGuid(), Array.Empty<InviteTarget>(), "msg");
         invRepo.GetPendingInvitationsByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildInvitation>());
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new Guild { Id = cmd.GuildId, MaxMembers = 50 });
         var invitee = new UserProfile { Id = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Email = "target@example.com" };

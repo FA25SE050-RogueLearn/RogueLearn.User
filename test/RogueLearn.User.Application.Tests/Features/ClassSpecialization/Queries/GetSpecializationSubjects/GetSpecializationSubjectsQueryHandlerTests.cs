@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
@@ -13,14 +12,14 @@ namespace RogueLearn.User.Application.Tests.Features.ClassSpecialization.Queries
 
 public class GetSpecializationSubjectsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMapped(GetSpecializationSubjectsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMapped()
     {
         var repo = Substitute.For<IClassSpecializationSubjectRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new GetSpecializationSubjectsQueryHandler(repo, mapper);
 
+        var query = new GetSpecializationSubjectsQuery { ClassId = System.Guid.NewGuid() };
         var items = new List<ClassSpecializationSubject> { new() { Id = System.Guid.NewGuid(), ClassId = query.ClassId, SubjectId = System.Guid.NewGuid(), Semester = 1, PlaceholderSubjectCode = "PH" } };
         repo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<System.Func<ClassSpecializationSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(items);
         mapper.Map<List<SpecializationSubjectDto>>(items).Returns(new List<SpecializationSubjectDto> { new() { Id = items[0].Id, ClassId = items[0].ClassId, SubjectId = items[0].SubjectId, Semester = items[0].Semester, PlaceholderSubjectCode = items[0].PlaceholderSubjectCode } });

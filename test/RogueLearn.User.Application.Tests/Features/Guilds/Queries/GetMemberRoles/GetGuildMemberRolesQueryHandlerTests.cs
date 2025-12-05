@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMemberRoles;
@@ -13,23 +12,23 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Queries.GetMemberRol
 
 public class GetGuildMemberRolesQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoMember_ReturnsEmpty(GetGuildMemberRolesQuery query)
+    [Fact]
+    public async Task Handle_NoMember_ReturnsEmpty()
     {
         var repo = Substitute.For<IGuildMemberRepository>();
         var sut = new GetGuildMemberRolesQueryHandler(repo);
+        var query = new GetGuildMemberRolesQuery(Guid.NewGuid(), Guid.NewGuid());
         repo.GetMemberAsync(query.GuildId, query.MemberAuthUserId, Arg.Any<CancellationToken>()).Returns((GuildMember?)null);
         var result = await sut.Handle(query, CancellationToken.None);
         result.Should().BeEmpty();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsRole(GetGuildMemberRolesQuery query)
+    [Fact]
+    public async Task Handle_ReturnsRole()
     {
         var repo = Substitute.For<IGuildMemberRepository>();
         var sut = new GetGuildMemberRolesQueryHandler(repo);
+        var query = new GetGuildMemberRolesQuery(Guid.NewGuid(), Guid.NewGuid());
         repo.GetMemberAsync(query.GuildId, query.MemberAuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember { Role = GuildRole.Officer });
         var result = await sut.Handle(query, CancellationToken.None);
         result.Should().ContainSingle().Which.Should().Be(GuildRole.Officer);

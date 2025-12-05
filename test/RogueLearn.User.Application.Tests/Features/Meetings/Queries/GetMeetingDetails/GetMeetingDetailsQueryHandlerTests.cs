@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
@@ -15,9 +14,8 @@ namespace RogueLearn.User.Application.Tests.Features.Meetings.Queries.GetMeeting
 
 public class GetMeetingDetailsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsDetails(GetMeetingDetailsQuery query)
+    [Fact]
+    public async Task Handle_Success_ReturnsDetails()
     {
         var meetingRepo = Substitute.For<IMeetingRepository>();
         var participantRepo = Substitute.For<IMeetingParticipantRepository>();
@@ -25,6 +23,7 @@ public class GetMeetingDetailsQueryHandlerTests
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new GetMeetingDetailsQueryHandler(meetingRepo, participantRepo, summaryRepo, mapper);
 
+        var query = new GetMeetingDetailsQuery(Guid.NewGuid());
         var meeting = new Meeting { MeetingId = query.MeetingId };
         var participants = new List<MeetingParticipant> { new() { ParticipantId = Guid.NewGuid(), MeetingId = query.MeetingId } };
         var summary = new MeetingSummary { MeetingSummaryId = Guid.NewGuid(), MeetingId = query.MeetingId, SummaryText = "S" };

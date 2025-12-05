@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Meetings.Commands.ProcessArtifactsAndSummarize;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
@@ -15,15 +14,14 @@ namespace RogueLearn.User.Application.Tests.Features.Meetings.Commands.ProcessAr
 
 public class ProcessArtifactsAndSummarizeCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_SummarizesAndStores(ProcessArtifactsAndSummarizeCommand cmd)
+    [Fact]
+    public async Task Handle_SummarizesAndStores()
     {
         var plugin = Substitute.For<IFileSummarizationPlugin>();
         var repo = Substitute.For<IMeetingSummaryRepository>();
         var sut = new ProcessArtifactsAndSummarizeCommandHandler(plugin, repo);
 
-        cmd = new ProcessArtifactsAndSummarizeCommand(cmd.MeetingId, new List<ArtifactInputDto> {
+        var cmd = new ProcessArtifactsAndSummarizeCommand(System.Guid.NewGuid(), new List<ArtifactInputDto> {
             new ArtifactInputDto { ArtifactType = "note", Url = "https://example.com/a" },
             new ArtifactInputDto { ArtifactType = "file", Url = "https://example.com/b" }
         });

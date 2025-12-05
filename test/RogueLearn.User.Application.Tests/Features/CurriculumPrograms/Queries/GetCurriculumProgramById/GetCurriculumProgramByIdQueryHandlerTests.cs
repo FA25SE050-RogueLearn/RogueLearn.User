@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -16,28 +15,28 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumPrograms.Queries.
 
 public class GetCurriculumProgramByIdQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(GetCurriculumProgramByIdQuery query)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var repo = Substitute.For<ICurriculumProgramRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<GetCurriculumProgramByIdQueryHandler>>();
         var sut = new GetCurriculumProgramByIdQueryHandler(repo, mapper, logger);
 
+        var query = new GetCurriculumProgramByIdQuery { Id = Guid.NewGuid() };
         repo.GetByIdAsync(query.Id, Arg.Any<CancellationToken>()).Returns((CurriculumProgram?)null);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(query, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsDto(GetCurriculumProgramByIdQuery query)
+    [Fact]
+    public async Task Handle_Success_ReturnsDto()
     {
         var repo = Substitute.For<ICurriculumProgramRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<GetCurriculumProgramByIdQueryHandler>>();
         var sut = new GetCurriculumProgramByIdQueryHandler(repo, mapper, logger);
 
+        var query = new GetCurriculumProgramByIdQuery { Id = Guid.NewGuid() };
         var program = new CurriculumProgram { Id = query.Id, ProgramCode = "PC" };
         repo.GetByIdAsync(query.Id, Arg.Any<CancellationToken>()).Returns(program);
         var dto = new CurriculumProgramDto { Id = program.Id, ProgramCode = program.ProgramCode };

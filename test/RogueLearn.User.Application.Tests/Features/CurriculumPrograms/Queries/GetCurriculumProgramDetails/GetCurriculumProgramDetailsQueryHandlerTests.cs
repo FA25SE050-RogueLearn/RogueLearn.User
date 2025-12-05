@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -29,9 +28,8 @@ public class GetCurriculumProgramDetailsQueryHandlerTests
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(q, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(Guid programId)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var cpRepo = Substitute.For<ICurriculumProgramRepository>();
         var cpsRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
@@ -40,14 +38,14 @@ public class GetCurriculumProgramDetailsQueryHandlerTests
         var logger = Substitute.For<ILogger<GetCurriculumProgramDetailsQueryHandler>>();
         var sut = new GetCurriculumProgramDetailsQueryHandler(cpRepo, cpsRepo, subjRepo, mapper, logger);
 
+        var programId = Guid.NewGuid();
         cpRepo.GetByIdAsync(programId, Arg.Any<CancellationToken>()).Returns((CurriculumProgram?)null);
         var q = new GetCurriculumProgramDetailsQuery { ProgramId = programId };
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(q, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoSubjects_ReturnsAnalysis(Guid programId)
+    [Fact]
+    public async Task Handle_NoSubjects_ReturnsAnalysis()
     {
         var cpRepo = Substitute.For<ICurriculumProgramRepository>();
         var cpsRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
@@ -56,6 +54,7 @@ public class GetCurriculumProgramDetailsQueryHandlerTests
         var logger = Substitute.For<ILogger<GetCurriculumProgramDetailsQueryHandler>>();
         var sut = new GetCurriculumProgramDetailsQueryHandler(cpRepo, cpsRepo, subjRepo, mapper, logger);
 
+        var programId = Guid.NewGuid();
         var program = new CurriculumProgram { Id = programId, ProgramCode = "PC", CreatedAt = DateTimeOffset.UtcNow };
         cpRepo.GetByIdAsync(programId, Arg.Any<CancellationToken>()).Returns(program);
         mapper.Map<CurriculumProgramDetailsResponse>(program).Returns(new CurriculumProgramDetailsResponse { Id = programId });

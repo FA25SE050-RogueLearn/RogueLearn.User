@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -14,10 +13,10 @@ namespace RogueLearn.User.Application.Tests.Features.Roles.Queries.GetAllRoles;
 
 public class GetAllRolesQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMappedRoles(GetAllRolesQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMappedRoles()
     {
+        var query = new GetAllRolesQuery();
         var roleRepo = Substitute.For<IRoleRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<GetAllRolesQueryHandler>>();
@@ -32,10 +31,10 @@ public class GetAllRolesQueryHandlerTests
         res.Roles[0].Name.Should().Be("r1");
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Empty_ReturnsEmptyList(GetAllRolesQuery query)
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmptyList()
     {
+        var query = new GetAllRolesQuery();
         var roleRepo = Substitute.For<IRoleRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<GetAllRolesQueryHandler>>();

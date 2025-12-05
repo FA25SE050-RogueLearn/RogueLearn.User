@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.GuildPosts.Queries.GetGuildPostById;
@@ -13,10 +12,10 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Queries.GetGuild
 
 public class GetGuildPostByIdQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_ReturnsNull(GetGuildPostByIdQuery query)
+    [Fact]
+    public async Task Handle_NotFound_ReturnsNull()
     {
+        var query = new GetGuildPostByIdQuery(System.Guid.NewGuid(), System.Guid.NewGuid());
         var repo = Substitute.For<IGuildPostRepository>();
         var sut = new GetGuildPostByIdQueryHandler(repo);
         repo.GetByIdAsync(query.GuildId, query.PostId, Arg.Any<CancellationToken>()).Returns((GuildPost?)null);
@@ -24,10 +23,10 @@ public class GetGuildPostByIdQueryHandlerTests
         res.Should().BeNull();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Found_Maps(GetGuildPostByIdQuery query)
+    [Fact]
+    public async Task Handle_Found_Maps()
     {
+        var query = new GetGuildPostByIdQuery(System.Guid.NewGuid(), System.Guid.NewGuid());
         var repo = Substitute.For<IGuildPostRepository>();
         var sut = new GetGuildPostByIdQueryHandler(repo);
         var post = new GuildPost { Id = query.PostId, GuildId = query.GuildId, AuthorId = Guid.NewGuid(), Title = "T", Content = "C", IsPinned = true, IsLocked = false };

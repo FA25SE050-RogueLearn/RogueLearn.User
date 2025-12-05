@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
@@ -18,9 +17,8 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Commands.CreateG
 
 public class CreateGuildPostCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotMember_Throws(CreateGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_NotMember_Throws()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
@@ -28,15 +26,15 @@ public class CreateGuildPostCommandHandlerTests
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new CreateGuildPostCommandHandler(postRepo, memberRepo, guildRepo, storage);
 
+        var cmd = new CreateGuildPostCommand(Guid.NewGuid(), Guid.NewGuid(), new CreateGuildPostRequest { Title = "T", Content = "C" });
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new Guild { Id = cmd.GuildId, RequiresApproval = false });
         memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthorAuthUserId, Arg.Any<CancellationToken>()).Returns((GuildMember?)null);
 
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_InactiveMember_Throws(CreateGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_InactiveMember_Throws()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
@@ -44,15 +42,15 @@ public class CreateGuildPostCommandHandlerTests
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new CreateGuildPostCommandHandler(postRepo, memberRepo, guildRepo, storage);
 
+        var cmd = new CreateGuildPostCommand(Guid.NewGuid(), Guid.NewGuid(), new CreateGuildPostRequest { Title = "T", Content = "C" });
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new Guild { Id = cmd.GuildId, RequiresApproval = false });
         memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthorAuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember { Status = MemberStatus.Inactive });
 
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_SavesImagesAndAddsPost(CreateGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_SavesImagesAndAddsPost()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
@@ -60,6 +58,7 @@ public class CreateGuildPostCommandHandlerTests
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new CreateGuildPostCommandHandler(postRepo, memberRepo, guildRepo, storage);
 
+        var cmd = new CreateGuildPostCommand(Guid.NewGuid(), Guid.NewGuid(), new CreateGuildPostRequest { Title = "T", Content = "C" });
         var guild = new Guild { Id = cmd.GuildId, RequiresApproval = false };
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
         memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthorAuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember { Status = MemberStatus.Active });

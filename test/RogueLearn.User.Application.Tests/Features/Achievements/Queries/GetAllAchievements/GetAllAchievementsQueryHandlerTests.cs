@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -14,9 +13,8 @@ namespace RogueLearn.User.Application.Tests.Features.Achievements.Queries.GetAll
 
 public class GetAllAchievementsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMappedList(GetAllAchievementsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMappedList()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
@@ -35,15 +33,14 @@ public class GetAllAchievementsQueryHandlerTests
         });
 
         var sut = new GetAllAchievementsQueryHandler(repo, mapper, logger);
-        var res = await sut.Handle(query, CancellationToken.None);
+        var res = await sut.Handle(new GetAllAchievementsQuery(), CancellationToken.None);
 
         res.Achievements.Should().HaveCount(2);
         res.Achievements[0].Key.Should().Be("k1");
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Empty_ReturnsEmptyList(GetAllAchievementsQuery query)
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmptyList()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
@@ -53,7 +50,7 @@ public class GetAllAchievementsQueryHandlerTests
         mapper.Map<List<AchievementDto>>(Arg.Any<List<Achievement>>()).Returns((List<AchievementDto>?)null);
 
         var sut = new GetAllAchievementsQueryHandler(repo, mapper, logger);
-        var res = await sut.Handle(query, CancellationToken.None);
+        var res = await sut.Handle(new GetAllAchievementsQuery(), CancellationToken.None);
 
         res.Achievements.Should().NotBeNull();
         res.Achievements.Should().BeEmpty();

@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.AcceptInvitation;
 using RogueLearn.User.Domain.Entities;
@@ -12,15 +11,15 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.AcceptInvi
 
 public class AcceptPartyInvitationCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_AddsMemberAndUpdatesInvitation(AcceptPartyInvitationCommand cmd)
+    [Fact]
+    public async Task Handle_Success_AddsMemberAndUpdatesInvitation()
     {
         var invitationRepo = Substitute.For<IPartyInvitationRepository>();
         var memberRepo = Substitute.For<IPartyMemberRepository>();
-        var partyRepo = Substitute.For<IPartyRepository>();
-        var sut = new AcceptPartyInvitationCommandHandler(invitationRepo, memberRepo, partyRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IPartyNotificationService>();
+        var sut = new AcceptPartyInvitationCommandHandler(invitationRepo, memberRepo, notificationService);
 
+        var cmd = new AcceptPartyInvitationCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var inv = new PartyInvitation { Id = cmd.InvitationId, PartyId = cmd.PartyId, InviteeId = cmd.AuthUserId, Status = InvitationStatus.Pending, ExpiresAt = System.DateTimeOffset.UtcNow.AddDays(1) };
         invitationRepo.GetByIdAsync(cmd.InvitationId, Arg.Any<CancellationToken>()).Returns(inv);
         memberRepo.GetMemberAsync(cmd.PartyId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns((PartyMember?)null);

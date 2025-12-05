@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.QuestFeedback.Queries.GetQuestFeedbackList;
@@ -14,12 +13,14 @@ namespace RogueLearn.User.Application.Tests.Features.QuestFeedback.Queries.GetQu
 
 public class GetQuestFeedbackListQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_BySubject_UnresolvedOnly_Filters(GetQuestFeedbackListQuery query)
+    [Fact]
+    public async Task Handle_BySubject_UnresolvedOnly_Filters()
     {
-        query.SubjectId = System.Guid.NewGuid();
-        query.UnresolvedOnly = true;
+        var query = new GetQuestFeedbackListQuery
+        {
+            SubjectId = System.Guid.NewGuid(),
+            UnresolvedOnly = true
+        };
 
         var repo = Substitute.For<IUserQuestStepFeedbackRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();

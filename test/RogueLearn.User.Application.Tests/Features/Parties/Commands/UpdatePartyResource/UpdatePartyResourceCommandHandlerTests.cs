@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Parties.Commands.UpdatePartyResource;
@@ -13,10 +12,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.UpdatePart
 
 public class UpdatePartyResourceCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_WrongParty_Throws(UpdatePartyResourceCommand cmd)
+    [Fact]
+    public async Task Handle_WrongParty_Throws()
     {
+        var cmd = new UpdatePartyResourceCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid(), new UpdatePartyResourceRequest("T", new object(), new[] { "tag" }));
         var repo = Substitute.For<IPartyStashItemRepository>();
         var sut = new UpdatePartyResourceCommandHandler(repo);
         var item = new PartyStashItem { Id = cmd.StashItemId, PartyId = System.Guid.NewGuid() };
@@ -24,18 +23,16 @@ public class UpdatePartyResourceCommandHandlerTests
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_Updates(UpdatePartyResourceCommand cmd)
+    [Fact]
+    public async Task Handle_Success_Updates()
     {
+        var cmd = new UpdatePartyResourceCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid(), new UpdatePartyResourceRequest("T", new object(), new[] { "tag" }));
         var repo = Substitute.For<IPartyStashItemRepository>();
         var sut = new UpdatePartyResourceCommandHandler(repo);
         var item = new PartyStashItem { Id = cmd.StashItemId, PartyId = cmd.PartyId };
         repo.GetByIdAsync(cmd.StashItemId, Arg.Any<CancellationToken>()).Returns(item);
         repo.UpdateAsync(Arg.Any<PartyStashItem>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<PartyStashItem>());
 
-        var request = new UpdatePartyResourceRequest("T", new object(), new[] { "tag" });
-        cmd = new UpdatePartyResourceCommand(cmd.PartyId, cmd.StashItemId, cmd.ActorAuthUserId, request);
         await sut.Handle(cmd, CancellationToken.None);
         await repo.Received(1).UpdateAsync(Arg.Is<PartyStashItem>(s => s.Title == "T"), Arg.Any<CancellationToken>());
     }

@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,28 +14,26 @@ namespace RogueLearn.User.Application.Tests.Features.Subjects.Commands.UpdateSub
 
 public class UpdateSubjectHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(UpdateSubjectCommand cmd)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var repo = Substitute.For<ISubjectRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<UpdateSubjectHandler>>();
         var sut = new UpdateSubjectHandler(repo, mapper, logger);
-
+        var cmd = new UpdateSubjectCommand { Id = Guid.NewGuid(), SubjectCode = "CS101", SubjectName = "Intro", Credits = 3, Description = "desc" };
         repo.GetByIdAsync(cmd.Id, Arg.Any<CancellationToken>()).Returns((Subject?)null);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_Updates(UpdateSubjectCommand cmd)
+    [Fact]
+    public async Task Handle_Success_Updates()
     {
         var repo = Substitute.For<ISubjectRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<UpdateSubjectHandler>>();
         var sut = new UpdateSubjectHandler(repo, mapper, logger);
-
+        var cmd = new UpdateSubjectCommand { Id = Guid.NewGuid(), SubjectCode = "CS201", SubjectName = "Algo", Credits = 4, Description = "desc2" };
         var subject = new Subject { Id = cmd.Id, SubjectCode = cmd.SubjectCode, SubjectName = cmd.SubjectName, Credits = cmd.Credits, Description = cmd.Description };
         repo.GetByIdAsync(cmd.Id, Arg.Any<CancellationToken>()).Returns(subject);
         repo.UpdateAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Subject>());

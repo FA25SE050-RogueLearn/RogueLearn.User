@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -17,54 +16,50 @@ namespace RogueLearn.User.Application.Tests.Features.Tags.Commands.UpdateTag;
 
 public class UpdateTagCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(UpdateTagCommand cmd)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var repo = Substitute.For<ITagRepository>();
         var logger = Substitute.For<ILogger<UpdateTagCommandHandler>>();
         var sut = new UpdateTagCommandHandler(repo, logger);
-
+        var cmd = new UpdateTagCommand { AuthUserId = Guid.NewGuid(), TagId = Guid.NewGuid(), Name = "Name" };
         repo.GetByIdAsync(cmd.TagId, Arg.Any<CancellationToken>()).Returns((Tag?)null);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Forbidden_Throws(UpdateTagCommand cmd)
+    [Fact]
+    public async Task Handle_Forbidden_Throws()
     {
         var repo = Substitute.For<ITagRepository>();
         var logger = Substitute.For<ILogger<UpdateTagCommandHandler>>();
         var sut = new UpdateTagCommandHandler(repo, logger);
-
+        var cmd = new UpdateTagCommand { AuthUserId = Guid.NewGuid(), TagId = Guid.NewGuid(), Name = "Name" };
         var tag = new Tag { Id = cmd.TagId, AuthUserId = Guid.NewGuid(), Name = "Old" };
-        cmd.AuthUserId = Guid.NewGuid();
         repo.GetByIdAsync(cmd.TagId, Arg.Any<CancellationToken>()).Returns(tag);
-        await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
+        var forbiddenCmd = new UpdateTagCommand { AuthUserId = Guid.NewGuid(), TagId = cmd.TagId, Name = cmd.Name };
+        await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(forbiddenCmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_EmptyName_Throws(UpdateTagCommand cmd)
+    [Fact]
+    public async Task Handle_EmptyName_Throws()
     {
         var repo = Substitute.For<ITagRepository>();
         var logger = Substitute.For<ILogger<UpdateTagCommandHandler>>();
         var sut = new UpdateTagCommandHandler(repo, logger);
-
+        var cmd = new UpdateTagCommand { AuthUserId = Guid.NewGuid(), TagId = Guid.NewGuid(), Name = "Name" };
         var tag = new Tag { Id = cmd.TagId, AuthUserId = cmd.AuthUserId, Name = "Old" };
         repo.GetByIdAsync(cmd.TagId, Arg.Any<CancellationToken>()).Returns(tag);
-        cmd.Name = "  ";
-        await Assert.ThrowsAsync<FluentValidation.ValidationException>(() => sut.Handle(cmd, CancellationToken.None));
+        var invalidCmd = new UpdateTagCommand { AuthUserId = cmd.AuthUserId, TagId = cmd.TagId, Name = "  " };
+        await Assert.ThrowsAsync<FluentValidation.ValidationException>(() => sut.Handle(invalidCmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Conflict_Throws(UpdateTagCommand cmd)
+    [Fact]
+    public async Task Handle_Conflict_Throws()
     {
         var repo = Substitute.For<ITagRepository>();
         var logger = Substitute.For<ILogger<UpdateTagCommandHandler>>();
         var sut = new UpdateTagCommandHandler(repo, logger);
-
+        var cmd = new UpdateTagCommand { AuthUserId = Guid.NewGuid(), TagId = Guid.NewGuid(), Name = "Name" };
         var tag = new Tag { Id = cmd.TagId, AuthUserId = cmd.AuthUserId, Name = "Old" };
         repo.GetByIdAsync(cmd.TagId, Arg.Any<CancellationToken>()).Returns(tag);
 
@@ -75,14 +70,13 @@ public class UpdateTagCommandHandlerTests
         await Assert.ThrowsAsync<ConflictException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_Updates(UpdateTagCommand cmd)
+    [Fact]
+    public async Task Handle_Success_Updates()
     {
         var repo = Substitute.For<ITagRepository>();
         var logger = Substitute.For<ILogger<UpdateTagCommandHandler>>();
         var sut = new UpdateTagCommandHandler(repo, logger);
-
+        var cmd = new UpdateTagCommand { AuthUserId = Guid.NewGuid(), TagId = Guid.NewGuid(), Name = "NewName" };
         var tag = new Tag { Id = cmd.TagId, AuthUserId = cmd.AuthUserId, Name = "Old" };
         repo.GetByIdAsync(cmd.TagId, Arg.Any<CancellationToken>()).Returns(tag);
         repo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())

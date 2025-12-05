@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
-using AutoFixture.Xunit2;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using NSubstitute;
@@ -54,38 +53,40 @@ public class AiQueryClassificationServiceTests
         res.Should().BeEquivalentTo(cached);
     }
 
-    public static IEnumerable<object[]> FallbackData => new[]
-    {
-        new object[] { "C Programming Basics", "CS101", "Intro course", SubjectCategory.Programming },
-        new object[] { "Operating Systems Theory", "CS201", "theory fundamentals", SubjectCategory.ComputerScience },
-        new object[] { "Tư tưởng Hồ Chí Minh", "POL101", "chính trị", SubjectCategory.VietnamesePolitics },
-        new object[] { "Văn học Việt Nam", "LIT101", "ngữ văn", SubjectCategory.VietnameseLiterature },
-        new object[] { "World War II history", "HIS200", "historical analysis", SubjectCategory.History },
-        new object[] { "Calculus mathematics", "SCI101", "theory", SubjectCategory.Science },
-        new object[] { "Marketing fundamentals", "BUS101", "business", SubjectCategory.Business }
-    };
-
-    [Theory]
-    [MemberData(nameof(FallbackData))]
-    public async Task ClassifySubjectAsync_FallbackHeuristics_Work(string name, string code, string desc, SubjectCategory expected)
+    [Fact]
+    public async Task ClassifySubjectAsync_FallbackHeuristics_Work()
     {
         var kernel = Kernel.CreateBuilder().Build();
         var logger = Substitute.For<ILogger<AiQueryClassificationService>>();
         var store = Substitute.For<IMemoryStore>();
-        store.GetAsync($"category_{code}", Arg.Any<CancellationToken>()).Returns(expected.ToString());
         var sut = new AiQueryClassificationService(kernel, logger, store);
+        var data = new[]
+        {
+            ("C Programming Basics", "CS101", "Intro course", SubjectCategory.Programming),
+            ("Operating Systems Theory", "CS201", "theory fundamentals", SubjectCategory.ComputerScience),
+            ("Tư tưởng Hồ Chí Minh", "POL101", "chính trị", SubjectCategory.VietnamesePolitics),
+            ("Văn học Việt Nam", "LIT101", "ngữ văn", SubjectCategory.VietnameseLiterature),
+            ("World War II history", "HIS200", "historical analysis", SubjectCategory.History),
+            ("Calculus mathematics", "SCI101", "theory", SubjectCategory.Science),
+            ("Marketing fundamentals", "BUS101", "business", SubjectCategory.Business)
+        };
 
-        var cat = await sut.ClassifySubjectAsync(name, code, desc, CancellationToken.None);
-        cat.Should().Be(expected);
+        foreach (var (name, code, desc, expected) in data)
+        {
+            store.GetAsync($"category_{code}", Arg.Any<CancellationToken>()).Returns(expected.ToString());
+            var cat = await sut.ClassifySubjectAsync(name, code, desc, CancellationToken.None);
+            cat.Should().Be(expected);
+        }
     }
 
-    [Theory]
-    [InlineAutoData("RecyclerView", "Android")]
-    public async Task GenerateQueryVariantsAsync_Fallbacks_WhenAiFails(string topic, string subjectContext)
+    [Fact]
+    public async Task GenerateQueryVariantsAsync_Fallbacks_WhenAiFails()
     {
         var kernel = Kernel.CreateBuilder().Build();
         var logger = Substitute.For<ILogger<AiQueryClassificationService>>();
         var store = Substitute.For<IMemoryStore>();
+        var topic = "RecyclerView";
+        var subjectContext = "Android";
         store.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(System.Text.Json.JsonSerializer.Serialize(new List<string> { $"{subjectContext} {topic} tutorial" }));
         var sut = new AiQueryClassificationService(kernel, logger, store);
@@ -95,13 +96,13 @@ public class AiQueryClassificationServiceTests
         res[0].ToLowerInvariant().Should().Contain(subjectContext.ToLowerInvariant());
     }
 
-    [Theory]
-    [InlineData("Android")]
-    public async Task GenerateBatchQueryVariantsAsync_ProducesEntries_WhenAiFails(string subjectContext)
+    [Fact]
+    public async Task GenerateBatchQueryVariantsAsync_ProducesEntries_WhenAiFails()
     {
         var kernel = Kernel.CreateBuilder().Build();
         var logger = Substitute.For<ILogger<AiQueryClassificationService>>();
         var store = Substitute.For<IMemoryStore>();
+        var subjectContext = "Android";
         store.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(System.Text.Json.JsonSerializer.Serialize(new List<string> { $"{subjectContext} RecyclerView tutorial", $"{subjectContext} Adapters guide" }));
         var sut = new AiQueryClassificationService(kernel, logger, store);

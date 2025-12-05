@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.RemoveMember;
 using RogueLearn.User.Domain.Entities;
@@ -12,10 +11,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.RemoveMemb
 
 public class RemovePartyMemberCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_CannotRemoveLeader(RemovePartyMemberCommand cmd)
+    [Fact]
+    public async Task Handle_CannotRemoveLeader()
     {
+        var cmd = new RemovePartyMemberCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), "reason");
         var repo = Substitute.For<IPartyMemberRepository>();
         var sut = new RemovePartyMemberCommandHandler(repo);
 
@@ -25,10 +24,10 @@ public class RemovePartyMemberCommandHandlerTests
         await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_Deletes(RemovePartyMemberCommand cmd)
+    [Fact]
+    public async Task Handle_Success_Deletes()
     {
+        var cmd = new RemovePartyMemberCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), null);
         var repo = Substitute.For<IPartyMemberRepository>();
         var sut = new RemovePartyMemberCommandHandler(repo);
 

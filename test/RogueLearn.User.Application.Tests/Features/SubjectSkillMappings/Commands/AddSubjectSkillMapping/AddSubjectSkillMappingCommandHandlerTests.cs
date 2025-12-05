@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,44 +14,44 @@ namespace RogueLearn.User.Application.Tests.Features.SubjectSkillMappings.Comman
 
 public class AddSubjectSkillMappingCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_SubjectMissing_Throws(AddSubjectSkillMappingCommand cmd)
+    [Fact]
+    public async Task Handle_SubjectMissing_Throws()
     {
         var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var skillRepo = Substitute.For<ISkillRepository>();
         var logger = Substitute.For<ILogger<AddSubjectSkillMappingCommandHandler>>();
 
+        var cmd = new AddSubjectSkillMappingCommand { SubjectId = Guid.NewGuid(), SkillId = Guid.NewGuid(), RelevanceWeight = 0.5m };
         subjectRepo.ExistsAsync(cmd.SubjectId, Arg.Any<CancellationToken>()).Returns(false);
         var sut = new AddSubjectSkillMappingCommandHandler(mappingRepo, subjectRepo, skillRepo, logger);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_SkillMissing_Throws(AddSubjectSkillMappingCommand cmd)
+    [Fact]
+    public async Task Handle_SkillMissing_Throws()
     {
         var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var skillRepo = Substitute.For<ISkillRepository>();
         var logger = Substitute.For<ILogger<AddSubjectSkillMappingCommandHandler>>();
 
+        var cmd = new AddSubjectSkillMappingCommand { SubjectId = Guid.NewGuid(), SkillId = Guid.NewGuid(), RelevanceWeight = 0.5m };
         subjectRepo.ExistsAsync(cmd.SubjectId, Arg.Any<CancellationToken>()).Returns(true);
         skillRepo.ExistsAsync(cmd.SkillId, Arg.Any<CancellationToken>()).Returns(false);
         var sut = new AddSubjectSkillMappingCommandHandler(mappingRepo, subjectRepo, skillRepo, logger);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_ExistingMapping_Throws(AddSubjectSkillMappingCommand cmd)
+    [Fact]
+    public async Task Handle_ExistingMapping_Throws()
     {
         var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var skillRepo = Substitute.For<ISkillRepository>();
         var logger = Substitute.For<ILogger<AddSubjectSkillMappingCommandHandler>>();
 
+        var cmd = new AddSubjectSkillMappingCommand { SubjectId = Guid.NewGuid(), SkillId = Guid.NewGuid(), RelevanceWeight = 0.5m };
         subjectRepo.ExistsAsync(cmd.SubjectId, Arg.Any<CancellationToken>()).Returns(true);
         skillRepo.ExistsAsync(cmd.SkillId, Arg.Any<CancellationToken>()).Returns(true);
         mappingRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<SubjectSkillMapping, bool>>>(), Arg.Any<CancellationToken>())
@@ -61,15 +60,15 @@ public class AddSubjectSkillMappingCommandHandlerTests
         await Assert.ThrowsAsync<ConflictException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsResponse(AddSubjectSkillMappingCommand cmd)
+    [Fact]
+    public async Task Handle_Success_ReturnsResponse()
     {
         var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var skillRepo = Substitute.For<ISkillRepository>();
         var logger = Substitute.For<ILogger<AddSubjectSkillMappingCommandHandler>>();
 
+        var cmd = new AddSubjectSkillMappingCommand { SubjectId = Guid.NewGuid(), SkillId = Guid.NewGuid(), RelevanceWeight = 0.7m };
         subjectRepo.ExistsAsync(cmd.SubjectId, Arg.Any<CancellationToken>()).Returns(true);
         skillRepo.ExistsAsync(cmd.SkillId, Arg.Any<CancellationToken>()).Returns(true);
         mappingRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<SubjectSkillMapping, bool>>>(), Arg.Any<CancellationToken>())

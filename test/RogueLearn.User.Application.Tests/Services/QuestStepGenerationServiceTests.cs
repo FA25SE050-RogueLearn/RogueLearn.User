@@ -33,28 +33,30 @@ public class QuestStepGenerationServiceTests
         await mediator.Received(1).Send(Arg.Is<GenerateQuestStepsCommand>(c => c.AuthUserId == authUserId && c.QuestId == questId), Arg.Any<CancellationToken>());
     }
 
-    public static IEnumerable<object[]> ErrorCases => new[]
+    [Fact]
+    public async Task GenerateQuestStepsAsync_Throws_OnErrors()
     {
-        new object[] { new Func<Exception>(() => new BadRequestException("invalid")), typeof(BadRequestException) },
-        new object[] { new Func<Exception>(() => new NotFoundException("Quest not found")), typeof(NotFoundException) }
-    };
+        var cases = new (Func<Exception> exFactory, Type expectedType)[]
+        {
+            (new Func<Exception>(() => new BadRequestException("invalid")), typeof(BadRequestException)),
+            (new Func<Exception>(() => new NotFoundException("Quest not found")), typeof(NotFoundException))
+        };
 
-    [Theory]
-    [MemberData(nameof(ErrorCases))]
-    public async Task GenerateQuestStepsAsync_Throws_OnErrors(Func<Exception> exFactory, Type expectedType)
-    {
-        var mediator = Substitute.For<IMediator>();
-        var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
-        var sut = new QuestStepGenerationService(mediator, logger);
+        foreach (var (exFactory, expectedType) in cases)
+        {
+            var mediator = Substitute.For<IMediator>();
+            var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
+            var sut = new QuestStepGenerationService(mediator, logger);
 
-        mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
-            .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw exFactory());
+            mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
+                .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw exFactory());
 
-        var authUserId = Guid.NewGuid();
-        var questId = Guid.NewGuid();
+            var authUserId = Guid.NewGuid();
+            var questId = Guid.NewGuid();
 
-        var act = () => sut.GenerateQuestStepsAsync(authUserId, questId, context: null!);
-        var assertion = await act.Should().ThrowAsync<Exception>();
-        assertion.Which.GetType().Should().Be(expectedType);
+            var act = () => sut.GenerateQuestStepsAsync(authUserId, questId, context: null!);
+            var assertion = await act.Should().ThrowAsync<Exception>();
+            assertion.Which.GetType().Should().Be(expectedType);
+        }
     }
 }

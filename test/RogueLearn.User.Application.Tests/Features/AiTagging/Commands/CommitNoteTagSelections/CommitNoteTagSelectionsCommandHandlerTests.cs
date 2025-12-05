@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.AiTagging.Commands.CommitNoteTagSelections;
@@ -16,29 +15,31 @@ namespace RogueLearn.User.Application.Tests.Features.AiTagging.Commands.CommitNo
 
 public class CommitNoteTagSelectionsCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoteMissingOrForbidden_Throws(Guid noteId, Guid authUserId)
+    [Fact]
+    public async Task Handle_NoteMissingOrForbidden_Throws()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<ITagRepository>();
         var noteTagRepo = Substitute.For<INoteTagRepository>();
         var sut = new CommitNoteTagSelectionsCommandHandler(noteRepo, tagRepo, noteTagRepo);
 
+        var noteId = Guid.NewGuid();
+        var authUserId = Guid.NewGuid();
         noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns((Note?)null);
         var cmd = new CommitNoteTagSelectionsCommand { NoteId = noteId, AuthUserId = authUserId, SelectedTagIds = new List<Guid>(), NewTagNames = new List<string>() };
         await Assert.ThrowsAsync<FluentValidation.ValidationException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_CreatesNewTagsAndAssigns(Guid noteId, Guid authUserId)
+    [Fact]
+    public async Task Handle_CreatesNewTagsAndAssigns()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<ITagRepository>();
         var noteTagRepo = Substitute.For<INoteTagRepository>();
         var sut = new CommitNoteTagSelectionsCommandHandler(noteRepo, tagRepo, noteTagRepo);
 
+        var noteId = Guid.NewGuid();
+        var authUserId = Guid.NewGuid();
         var note = new Note { Id = noteId, AuthUserId = authUserId };
         noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(note);
 

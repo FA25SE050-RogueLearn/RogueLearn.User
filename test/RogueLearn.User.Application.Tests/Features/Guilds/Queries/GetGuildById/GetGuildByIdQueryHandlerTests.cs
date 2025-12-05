@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,20 +14,20 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Queries.GetGuildById
 
 public class GetGuildByIdQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(GetGuildByIdQuery query)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
+        var query = new GetGuildByIdQuery(System.Guid.NewGuid());
         var repo = Substitute.For<IGuildRepository>();
         var sut = new GetGuildByIdQueryHandler(repo);
         repo.GetByIdAsync(query.GuildId, Arg.Any<CancellationToken>()).Returns((Guild?)null);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(query, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsDto(GetGuildByIdQuery query)
+    [Fact]
+    public async Task Handle_Success_ReturnsDto()
     {
+        var query = new GetGuildByIdQuery(System.Guid.NewGuid());
         var repo = Substitute.For<IGuildRepository>();
         var sut = new GetGuildByIdQueryHandler(repo);
         var g = new Guild { Id = query.GuildId, Name = "G", Description = "D", IsPublic = true, IsLecturerGuild = false, MaxMembers = 50, CreatedBy = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow };

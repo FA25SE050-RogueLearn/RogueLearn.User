@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,9 +14,8 @@ namespace RogueLearn.User.Application.Tests.Features.Skills.Queries.GetSkillDeta
 
 public class GetSkillDetailQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_SkillMissing_ReturnsNull(GetSkillDetailQuery query)
+    [Fact]
+    public async Task Handle_SkillMissing_ReturnsNull()
     {
         var skillRepo = Substitute.For<ISkillRepository>();
         var userSkillRepo = Substitute.For<IUserSkillRepository>();
@@ -28,14 +26,14 @@ public class GetSkillDetailQueryHandlerTests
         var logger = Substitute.For<ILogger<GetSkillDetailQueryHandler>>();
         var sut = new GetSkillDetailQueryHandler(skillRepo, userSkillRepo, depRepo, mappingRepo, questRepo, subjectRepo, logger);
 
+        var query = new GetSkillDetailQuery { AuthUserId = Guid.NewGuid(), SkillId = Guid.NewGuid() };
         skillRepo.GetByIdAsync(query.SkillId, Arg.Any<CancellationToken>()).Returns((Skill?)null);
         var result = await sut.Handle(query, CancellationToken.None);
         result.Should().BeNull();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_MapsLearningPath(GetSkillDetailQuery query)
+    [Fact]
+    public async Task Handle_MapsLearningPath()
     {
         var skillRepo = Substitute.For<ISkillRepository>();
         var userSkillRepo = Substitute.For<IUserSkillRepository>();
@@ -46,6 +44,7 @@ public class GetSkillDetailQueryHandlerTests
         var logger = Substitute.For<ILogger<GetSkillDetailQueryHandler>>();
         var sut = new GetSkillDetailQueryHandler(skillRepo, userSkillRepo, depRepo, mappingRepo, questRepo, subjectRepo, logger);
 
+        var query = new GetSkillDetailQuery { AuthUserId = Guid.NewGuid(), SkillId = Guid.NewGuid() };
         var skill = new Skill { Id = query.SkillId, Name = "Skill", Tier = RogueLearn.User.Domain.Enums.SkillTierLevel.Foundation };
         skillRepo.GetByIdAsync(query.SkillId, Arg.Any<CancellationToken>()).Returns(skill);
         userSkillRepo.GetSkillsByAuthIdAsync(query.AuthUserId, Arg.Any<CancellationToken>()).Returns(new List<UserSkill>());

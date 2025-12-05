@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Commands.AcceptInvitation;
 using RogueLearn.User.Domain.Entities;
@@ -14,15 +13,17 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.AcceptInvit
 
 public class AcceptGuildInvitationCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_AddsMemberAndUpdatesInvitation(AcceptGuildInvitationCommand cmd)
+    [Fact]
+    public async Task Handle_Success_AddsMemberAndUpdatesInvitation()
     {
         var invRepo = Substitute.For<IGuildInvitationRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
-        var sut = new AcceptGuildInvitationCommandHandler(invRepo, memberRepo, guildRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IGuildNotificationService>();
+        var joinReqRepo = Substitute.For<IGuildJoinRequestRepository>();
+        var sut = new AcceptGuildInvitationCommandHandler(invRepo, memberRepo, guildRepo, notificationService, joinReqRepo);
 
+        var cmd = new AcceptGuildInvitationCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var guild = new Guild { Id = cmd.GuildId, MaxMembers = 50, CurrentMemberCount = 0 };
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
 

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.LeaveParty;
 using RogueLearn.User.Domain.Entities;
@@ -15,16 +14,18 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.LeaveParty
 
 public class LeavePartyCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_LeaderWithSuccessor_TransfersAndDeletesMember(LeavePartyCommand cmd)
+    [Fact]
+    public async Task Handle_LeaderWithSuccessor_TransfersAndDeletesMember()
     {
         var memberRepo = Substitute.For<IPartyMemberRepository>();
         var partyRepo = Substitute.For<IPartyRepository>();
         var sut = new LeavePartyCommandHandler(memberRepo, partyRepo);
 
-        var leader = new PartyMember { Id = Guid.NewGuid(), PartyId = cmd.PartyId, AuthUserId = cmd.AuthUserId, Role = PartyRole.Leader, Status = MemberStatus.Active, JoinedAt = DateTimeOffset.UtcNow.AddDays(-10) };
-        var successor = new PartyMember { Id = Guid.NewGuid(), PartyId = cmd.PartyId, AuthUserId = Guid.NewGuid(), Role = PartyRole.Member, Status = MemberStatus.Active, JoinedAt = DateTimeOffset.UtcNow.AddDays(-9) };
+        var partyId = Guid.NewGuid();
+        var authUserId = Guid.NewGuid();
+        var cmd = new LeavePartyCommand(partyId, authUserId);
+        var leader = new PartyMember { Id = Guid.NewGuid(), PartyId = partyId, AuthUserId = authUserId, Role = PartyRole.Leader, Status = MemberStatus.Active, JoinedAt = DateTimeOffset.UtcNow.AddDays(-10) };
+        var successor = new PartyMember { Id = Guid.NewGuid(), PartyId = partyId, AuthUserId = Guid.NewGuid(), Role = PartyRole.Member, Status = MemberStatus.Active, JoinedAt = DateTimeOffset.UtcNow.AddDays(-9) };
         memberRepo.GetMemberAsync(cmd.PartyId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(leader);
         memberRepo.CountActiveMembersAsync(cmd.PartyId, Arg.Any<CancellationToken>()).Returns(2);
         memberRepo.GetMembersByPartyAsync(cmd.PartyId, Arg.Any<CancellationToken>()).Returns(new List<PartyMember> { leader, successor });

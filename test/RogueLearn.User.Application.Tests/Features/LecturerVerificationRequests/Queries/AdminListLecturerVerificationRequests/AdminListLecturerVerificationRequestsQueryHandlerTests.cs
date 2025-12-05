@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.LecturerVerificationRequests.Queries.AdminListLecturerVerificationRequests;
@@ -15,17 +14,19 @@ namespace RogueLearn.User.Application.Tests.Features.LecturerVerificationRequest
 
 public class AdminListLecturerVerificationRequestsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_FiltersDeclinedAndPaginates(AdminListLecturerVerificationRequestsQuery query)
+    [Fact]
+    public async Task Handle_FiltersDeclinedAndPaginates()
     {
         var repo = Substitute.For<ILecturerVerificationRequestRepository>();
         var sut = new AdminListLecturerVerificationRequestsQueryHandler(repo);
 
-        query.Status = "declined";
-        query.Page = 1;
-        query.Size = 2;
-        query.UserId = null;
+        var query = new AdminListLecturerVerificationRequestsQuery
+        {
+            Status = "declined",
+            Page = 1,
+            Size = 2,
+            UserId = null
+        };
 
         var docs1 = new Dictionary<string, object> { ["staffId"] = "S1", ["email"] = "e1@example.com" };
         var docs2 = new Dictionary<string, object> { ["staffId"] = "S2", ["email"] = "e2@example.com" };

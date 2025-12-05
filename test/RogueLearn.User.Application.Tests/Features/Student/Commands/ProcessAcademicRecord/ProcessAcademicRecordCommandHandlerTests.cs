@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
@@ -15,10 +14,11 @@ namespace RogueLearn.User.Application.Tests.Features.Student.Commands.ProcessAca
 
 public class ProcessAcademicRecordCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_UserProfileMissing_Throws(ProcessAcademicRecordCommand cmd)
+    [Fact]
+    public async Task Handle_UserProfileMissing_Throws()
     {
+        var html = new string('X', 520) + "<table><tr><td>PRO192</td><td>8.0</td><td>FAP transcript</td></tr></table>";
+        var cmd = new ProcessAcademicRecordCommand { AuthUserId = Guid.NewGuid(), FapHtmlContent = html, CurriculumProgramId = Guid.NewGuid() };
         var fap = Substitute.For<IFapExtractionPlugin>();
         var enrollRepo = Substitute.For<IStudentEnrollmentRepository>();
         var semSubjRepo = Substitute.For<IStudentSemesterSubjectRepository>();

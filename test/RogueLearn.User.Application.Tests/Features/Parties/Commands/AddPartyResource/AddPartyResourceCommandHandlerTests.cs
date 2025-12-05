@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.AddPartyResource;
 using RogueLearn.User.Application.Features.Parties.DTOs;
@@ -13,15 +12,15 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.AddPartyRe
 
 public class AddPartyResourceCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_AddsResourceAndSendsNotification(AddPartyResourceCommand cmd)
+    [Fact]
+    public async Task Handle_AddsResourceAndSendsNotification()
     {
         var repo = Substitute.For<IPartyStashItemRepository>();
         var notif = Substitute.For<IPartyNotificationService>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new AddPartyResourceCommandHandler(repo, notif, mapper);
 
+        var cmd = new AddPartyResourceCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid(), "T", new { text = "body" }, new[] { "tag1" });
         repo.AddAsync(Arg.Any<PartyStashItem>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<PartyStashItem>());
         mapper.Map<PartyStashItemDto>(Arg.Any<PartyStashItem>()).Returns(new PartyStashItemDto(System.Guid.NewGuid(), cmd.PartyId, cmd.OriginalNoteId, cmd.SharedByUserId, cmd.Title, cmd.Content, cmd.Tags, System.DateTimeOffset.UtcNow, System.DateTimeOffset.UtcNow));
 

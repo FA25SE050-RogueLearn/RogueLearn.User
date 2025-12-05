@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.InviteMember;
 using RogueLearn.User.Application.Interfaces;
@@ -14,9 +13,8 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.InviteMemb
 
 public class InviteMemberCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_EmailResolvesAndAdds(InviteMemberCommand cmd)
+    [Fact]
+    public async Task Handle_EmailResolvesAndAdds()
     {
         var invRepo = Substitute.For<IPartyInvitationRepository>();
         var notifService = Substitute.For<IPartyNotificationService>();
@@ -25,7 +23,7 @@ public class InviteMemberCommandHandlerTests
 
         var invitee = new UserProfile { Id = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Email = "target@example.com" };
         var target = new InviteTarget(null, invitee.Email);
-        cmd = new InviteMemberCommand(cmd.PartyId, cmd.InviterAuthUserId, new[] { target }, "msg", DateTimeOffset.UtcNow.AddDays(2));
+        var cmd = new InviteMemberCommand(Guid.NewGuid(), Guid.NewGuid(), new[] { target }, "msg", DateTimeOffset.UtcNow.AddDays(2));
 
         userRepo.GetByEmailAsync(invitee.Email, Arg.Any<CancellationToken>()).Returns(invitee);
         invRepo.GetByPartyAndInviteeAsync(cmd.PartyId, invitee.AuthUserId, Arg.Any<CancellationToken>()).Returns((PartyInvitation?)null);

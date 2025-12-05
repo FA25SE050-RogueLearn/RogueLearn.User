@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -27,14 +26,15 @@ public class AddSubjectToProgramCommandHandlerTests
         return new AddSubjectToProgramCommandHandler(programRepo, subjectRepo, mappingRepo, logger);
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_ProgramNotFound_ThrowsNotFound(Guid programId, Guid subjectId)
+    [Fact]
+    public async Task Handle_ProgramNotFound_ThrowsNotFound()
     {
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var mappingRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
 
+        var programId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
         programRepo.ExistsAsync(programId, Arg.Any<CancellationToken>()).Returns(false);
         var sut = CreateHandler(programRepo, subjectRepo, mappingRepo);
 
@@ -42,14 +42,15 @@ public class AddSubjectToProgramCommandHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_SubjectNotFound_ThrowsNotFound(Guid programId, Guid subjectId)
+    [Fact]
+    public async Task Handle_SubjectNotFound_ThrowsNotFound()
     {
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var mappingRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
 
+        var programId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
         programRepo.ExistsAsync(programId, Arg.Any<CancellationToken>()).Returns(true);
         subjectRepo.ExistsAsync(subjectId, Arg.Any<CancellationToken>()).Returns(false);
 
@@ -59,14 +60,15 @@ public class AddSubjectToProgramCommandHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_MappingExists_ThrowsConflict(Guid programId, Guid subjectId)
+    [Fact]
+    public async Task Handle_MappingExists_ThrowsConflict()
     {
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var mappingRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
 
+        var programId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
         programRepo.ExistsAsync(programId, Arg.Any<CancellationToken>()).Returns(true);
         subjectRepo.ExistsAsync(subjectId, Arg.Any<CancellationToken>()).Returns(true);
         mappingRepo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CurriculumProgramSubject, bool>>>(), Arg.Any<CancellationToken>())
@@ -78,14 +80,15 @@ public class AddSubjectToProgramCommandHandlerTests
         await Assert.ThrowsAsync<ConflictException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsResponse(Guid programId, Guid subjectId)
+    [Fact]
+    public async Task Handle_Success_ReturnsResponse()
     {
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var mappingRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
 
+        var programId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
         programRepo.ExistsAsync(programId, Arg.Any<CancellationToken>()).Returns(true);
         subjectRepo.ExistsAsync(subjectId, Arg.Any<CancellationToken>()).Returns(true);
         mappingRepo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CurriculumProgramSubject, bool>>>(), Arg.Any<CancellationToken>())

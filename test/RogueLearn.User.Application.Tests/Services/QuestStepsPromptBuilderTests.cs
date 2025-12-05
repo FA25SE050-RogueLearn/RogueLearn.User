@@ -48,30 +48,31 @@ public class QuestStepsPromptBuilderTests
         };
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void BuildPrompt_HandlesResourceVariants(bool withResources)
+    [Fact]
+    public void BuildPrompt_HandlesResourceVariants()
     {
         var builder = new QuestStepsPromptBuilder();
-        var prompt = builder.BuildPrompt(
-            BuildWeek(withResources),
-            userContext: "Student X",
-            relevantSkills: new List<Skill>(),
-            subjectName: "C programming",
-            courseDescription: "Basics",
-            academicContext: BuildAcademicContext());
+        foreach (var withResources in new[] { false, true })
+        {
+            var prompt = builder.BuildPrompt(
+                BuildWeek(withResources),
+                userContext: "Student X",
+                relevantSkills: new List<Skill>(),
+                subjectName: "C programming",
+                courseDescription: "Basics",
+                academicContext: BuildAcademicContext());
 
-        if (!withResources)
-        {
-            prompt.Should().Contain("No External URLs Available");
-            prompt.Should().Contain("0 `Reading` activities");
-        }
-        else
-        {
-            prompt.Should().Contain("Approved Resource Pool");
-            prompt.Should().Contain("https://example.com/a");
-            prompt.Should().Contain("https://example.com/b");
+            if (!withResources)
+            {
+                prompt.Should().Contain("No External URLs Available");
+                prompt.Should().Contain("0 `Reading` activities");
+            }
+            else
+            {
+                prompt.Should().Contain("Approved Resource Pool");
+                prompt.Should().Contain("https://example.com/a");
+                prompt.Should().Contain("https://example.com/b");
+            }
         }
     }
 

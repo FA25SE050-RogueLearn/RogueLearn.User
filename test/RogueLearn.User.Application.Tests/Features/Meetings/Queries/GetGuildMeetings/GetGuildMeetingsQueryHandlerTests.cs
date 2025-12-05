@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.Meetings.Queries.GetGuildMe
 
 public class GetGuildMeetingsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMapped(GetGuildMeetingsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMapped()
     {
+        var query = new GetGuildMeetingsQuery(System.Guid.NewGuid());
         var meetingRepo = Substitute.For<IMeetingRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new GetGuildMeetingsQueryHandler(meetingRepo, mapper);

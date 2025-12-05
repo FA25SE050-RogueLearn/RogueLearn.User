@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -24,11 +23,11 @@ public class GetSubjectContentQueryHandlerTests
         return new GetSubjectContentQueryHandler(subjectRepo, logger);
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_SubjectMissing_ThrowsNotFound(Guid subjectId)
+    [Fact]
+    public async Task Handle_SubjectMissing_ThrowsNotFound()
     {
         var repo = Substitute.For<ISubjectRepository>();
+        var subjectId = Guid.NewGuid();
         repo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>())
             .Returns((Subject?)null);
 
@@ -37,11 +36,11 @@ public class GetSubjectContentQueryHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(q, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoContent_ReturnsDefaultDto(Guid subjectId)
+    [Fact]
+    public async Task Handle_NoContent_ReturnsDefaultDto()
     {
         var repo = Substitute.For<ISubjectRepository>();
+        var subjectId = Guid.NewGuid();
         var subject = new Subject { Id = subjectId, SubjectCode = "CS101", SubjectName = "Intro", Content = null };
         repo.GetByIdAsync(subject.Id, Arg.Any<CancellationToken>()).Returns(subject);
 
@@ -55,9 +54,8 @@ public class GetSubjectContentQueryHandlerTests
         result.ConstructiveQuestions.Should().BeEmpty();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_ValidContent_DeserializesCorrectly(Guid subjectId)
+    [Fact]
+    public async Task Handle_ValidContent_DeserializesCorrectly()
     {
         var repo = Substitute.For<ISubjectRepository>();
 
@@ -79,6 +77,7 @@ public class GetSubjectContentQueryHandlerTests
             }
         };
 
+        var subjectId = Guid.NewGuid();
         var subject = new Subject { Id = subjectId, SubjectCode = "CS101", SubjectName = "Intro", Content = content };
         repo.GetByIdAsync(subject.Id, Arg.Any<CancellationToken>()).Returns(subject);
 

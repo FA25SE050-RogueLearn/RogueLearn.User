@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.DTOs;
@@ -16,10 +15,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Queries.GetMyPartie
 
 public class GetMyPartiesQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsCreatedAndMemberParties(GetMyPartiesQuery query)
+    [Fact]
+    public async Task Handle_ReturnsCreatedAndMemberParties()
     {
+        var query = new GetMyPartiesQuery(System.Guid.NewGuid());
         var partyRepo = Substitute.For<IPartyRepository>();
         var memberRepo = Substitute.For<IPartyMemberRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();

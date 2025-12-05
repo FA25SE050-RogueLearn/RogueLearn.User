@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.DeclineInvitation;
 using RogueLearn.User.Domain.Entities;
@@ -12,10 +11,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.DeclineInv
 
 public class DeclinePartyInvitationCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_UpdatesInvitation(DeclinePartyInvitationCommand cmd)
+    [Fact]
+    public async Task Handle_Success_UpdatesInvitation()
     {
+        var cmd = new DeclinePartyInvitationCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var invitationRepo = Substitute.For<IPartyInvitationRepository>();
         var sut = new DeclinePartyInvitationCommandHandler(invitationRepo);
 

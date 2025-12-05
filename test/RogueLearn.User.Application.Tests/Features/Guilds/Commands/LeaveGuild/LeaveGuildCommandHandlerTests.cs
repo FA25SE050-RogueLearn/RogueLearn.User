@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.LeaveGuild;
@@ -14,10 +13,10 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.LeaveGuild;
 
 public class LeaveGuildCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_MasterWithOthers_Disallowed(LeaveGuildCommand cmd)
+    [Fact]
+    public async Task Handle_MasterWithOthers_Disallowed()
     {
+        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
         var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo);
@@ -28,10 +27,10 @@ public class LeaveGuildCommandHandlerTests
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_DeletesAndUpdates(LeaveGuildCommand cmd)
+    [Fact]
+    public async Task Handle_Success_DeletesAndUpdates()
     {
+        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
         var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo);

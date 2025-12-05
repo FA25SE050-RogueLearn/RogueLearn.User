@@ -19,6 +19,7 @@ public class CreateLecturerVerificationRequestTests
         var roleRepo = Substitute.For<IRoleRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var logger = Substitute.For<ILogger<CreateLecturerVerificationRequestCommandHandler>>();
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.ILecturerNotificationService>();
 
         var authId = Guid.NewGuid();
         profileRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId, Email = "e@x.com" });
@@ -27,7 +28,7 @@ public class CreateLecturerVerificationRequestTests
             .Returns(Array.Empty<LecturerVerificationRequest>());
         roleRepo.GetByNameAsync("Verified Lecturer", Arg.Any<CancellationToken>()).Returns((Role?)null);
 
-        var sut = new CreateLecturerVerificationRequestCommandHandler(reqRepo, profileRepo, roleRepo, userRoleRepo, logger);
+        var sut = new CreateLecturerVerificationRequestCommandHandler(reqRepo, profileRepo, roleRepo, userRoleRepo, logger, notificationService);
         var cmd = new CreateLecturerVerificationRequestCommand { AuthUserId = authId, Email = "e@x.com", StaffId = "S" };
         var response = await sut.Handle(cmd, CancellationToken.None);
 
@@ -43,11 +44,12 @@ public class CreateLecturerVerificationRequestTests
         var roleRepo = Substitute.For<IRoleRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var logger = Substitute.For<ILogger<CreateLecturerVerificationRequestCommandHandler>>();
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.ILecturerNotificationService>();
 
         var authId = Guid.NewGuid();
         profileRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId, Email = "real@x.com" });
 
-        var sut = new CreateLecturerVerificationRequestCommandHandler(reqRepo, profileRepo, roleRepo, userRoleRepo, logger);
+        var sut = new CreateLecturerVerificationRequestCommandHandler(reqRepo, profileRepo, roleRepo, userRoleRepo, logger, notificationService);
         var cmd = new CreateLecturerVerificationRequestCommand { AuthUserId = authId, Email = "fake@x.com", StaffId = "S" };
         var act = () => sut.Handle(cmd, CancellationToken.None);
         await act.Should().ThrowAsync<BadRequestException>();

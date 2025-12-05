@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.Images;
@@ -15,49 +14,64 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Commands.Images.
 
 public class UploadGuildPostImagesCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotMember_Throws(UploadGuildPostImagesCommand cmd)
+    [Fact]
+    public async Task Handle_NotMember_Throws()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new UploadGuildPostImagesCommandHandler(postRepo, memberRepo, storage);
 
-        var post = new GuildPost { GuildId = cmd.GuildId, Id = cmd.PostId, AuthorId = cmd.AuthUserId };
-        postRepo.GetByIdAsync(cmd.GuildId, cmd.PostId, Arg.Any<CancellationToken>()).Returns(post);
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns((GuildMember?)null);
+        var guildId = System.Guid.NewGuid();
+        var postId = System.Guid.NewGuid();
+        var authUserId = System.Guid.NewGuid();
+        var images = new List<GuildPostImageUpload> { new GuildPostImageUpload(new byte[] { 1 }, "image/png", "a.png") };
+        var cmd = new UploadGuildPostImagesCommand(guildId, postId, authUserId, images);
+
+        var post = new GuildPost { GuildId = guildId, Id = postId, AuthorId = authUserId };
+        postRepo.GetByIdAsync(guildId, postId, Arg.Any<CancellationToken>()).Returns(post);
+        memberRepo.GetMemberAsync(guildId, authUserId, Arg.Any<CancellationToken>()).Returns((GuildMember?)null);
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotAuthor_Throws(UploadGuildPostImagesCommand cmd)
+    [Fact]
+    public async Task Handle_NotAuthor_Throws()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new UploadGuildPostImagesCommandHandler(postRepo, memberRepo, storage);
 
-        var post = new GuildPost { GuildId = cmd.GuildId, Id = cmd.PostId, AuthorId = System.Guid.NewGuid() };
-        postRepo.GetByIdAsync(cmd.GuildId, cmd.PostId, Arg.Any<CancellationToken>()).Returns(post);
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember());
+        var guildId = System.Guid.NewGuid();
+        var postId = System.Guid.NewGuid();
+        var authUserId = System.Guid.NewGuid();
+        var images = new List<GuildPostImageUpload> { new GuildPostImageUpload(new byte[] { 1 }, "image/png", "a.png") };
+        var cmd = new UploadGuildPostImagesCommand(guildId, postId, authUserId, images);
+
+        var post = new GuildPost { GuildId = guildId, Id = postId, AuthorId = System.Guid.NewGuid() };
+        postRepo.GetByIdAsync(guildId, postId, Arg.Any<CancellationToken>()).Returns(post);
+        memberRepo.GetMemberAsync(guildId, authUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember());
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_SavesImagesAndReturnsUrls(UploadGuildPostImagesCommand cmd)
+    [Fact]
+    public async Task Handle_Success_SavesImagesAndReturnsUrls()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new UploadGuildPostImagesCommandHandler(postRepo, memberRepo, storage);
 
-        var post = new GuildPost { GuildId = cmd.GuildId, Id = cmd.PostId, AuthorId = cmd.AuthUserId, Attachments = new Dictionary<string, object>() };
-        postRepo.GetByIdAsync(cmd.GuildId, cmd.PostId, Arg.Any<CancellationToken>()).Returns(post);
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember());
-        storage.SaveImagesAsync(cmd.GuildId, cmd.PostId, Arg.Any<IEnumerable<(byte[] Content, string ContentType, string FileName)>>()!, Arg.Any<CancellationToken>())
+        var guildId = System.Guid.NewGuid();
+        var postId = System.Guid.NewGuid();
+        var authUserId = System.Guid.NewGuid();
+        var images = new List<GuildPostImageUpload> { new GuildPostImageUpload(new byte[] { 1 }, "image/png", "a.png") };
+        var cmd = new UploadGuildPostImagesCommand(guildId, postId, authUserId, images);
+
+        var post = new GuildPost { GuildId = guildId, Id = postId, AuthorId = authUserId, Attachments = new Dictionary<string, object>() };
+        postRepo.GetByIdAsync(guildId, postId, Arg.Any<CancellationToken>()).Returns(post);
+        memberRepo.GetMemberAsync(guildId, authUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember());
+        storage.SaveImagesAsync(guildId, postId, Arg.Any<IEnumerable<(byte[] Content, string ContentType, string FileName)>>()!, Arg.Any<CancellationToken>())
             .Returns(new List<string> { "https://img/a.png" });
 
         var res = await sut.Handle(cmd, CancellationToken.None);

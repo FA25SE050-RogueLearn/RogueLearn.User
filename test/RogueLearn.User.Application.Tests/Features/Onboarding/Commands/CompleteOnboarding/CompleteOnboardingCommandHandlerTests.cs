@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Onboarding.Commands.CompleteOnboarding;
@@ -13,76 +12,71 @@ namespace RogueLearn.User.Application.Tests.Features.Onboarding.Commands.Complet
 
 public class CompleteOnboardingCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_UserMissing_Throws(CompleteOnboardingCommand cmd)
+    [Fact]
+    public async Task Handle_UserMissing_Throws()
     {
         var userRepo = Substitute.For<IUserProfileRepository>();
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<CompleteOnboardingCommandHandler>>();
         var sut = new CompleteOnboardingCommandHandler(userRepo, programRepo, classRepo, logger);
-
+        var cmd = new CompleteOnboardingCommand { AuthUserId = Guid.NewGuid(), CurriculumProgramId = Guid.NewGuid(), CareerRoadmapId = Guid.NewGuid() };
         userRepo.GetByAuthIdAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns((UserProfile?)null);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_AlreadyCompleted_Throws(CompleteOnboardingCommand cmd)
+    [Fact]
+    public async Task Handle_AlreadyCompleted_Throws()
     {
         var userRepo = Substitute.For<IUserProfileRepository>();
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<CompleteOnboardingCommandHandler>>();
         var sut = new CompleteOnboardingCommandHandler(userRepo, programRepo, classRepo, logger);
-
+        var cmd = new CompleteOnboardingCommand { AuthUserId = Guid.NewGuid(), CurriculumProgramId = Guid.NewGuid(), CareerRoadmapId = Guid.NewGuid() };
         var profile = new UserProfile { AuthUserId = cmd.AuthUserId, OnboardingCompleted = true, RouteId = Guid.NewGuid(), ClassId = Guid.NewGuid() };
         userRepo.GetByAuthIdAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(profile);
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_InvalidProgram_Throws(CompleteOnboardingCommand cmd)
+    [Fact]
+    public async Task Handle_InvalidProgram_Throws()
     {
         var userRepo = Substitute.For<IUserProfileRepository>();
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<CompleteOnboardingCommandHandler>>();
         var sut = new CompleteOnboardingCommandHandler(userRepo, programRepo, classRepo, logger);
-
+        var cmd = new CompleteOnboardingCommand { AuthUserId = Guid.NewGuid(), CurriculumProgramId = Guid.NewGuid(), CareerRoadmapId = Guid.NewGuid() };
         userRepo.GetByAuthIdAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(new UserProfile { AuthUserId = cmd.AuthUserId });
         programRepo.ExistsAsync(cmd.CurriculumProgramId, Arg.Any<CancellationToken>()).Returns(false);
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_InvalidCareerRoadmap_Throws(CompleteOnboardingCommand cmd)
+    [Fact]
+    public async Task Handle_InvalidCareerRoadmap_Throws()
     {
         var userRepo = Substitute.For<IUserProfileRepository>();
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<CompleteOnboardingCommandHandler>>();
         var sut = new CompleteOnboardingCommandHandler(userRepo, programRepo, classRepo, logger);
-
+        var cmd = new CompleteOnboardingCommand { AuthUserId = Guid.NewGuid(), CurriculumProgramId = Guid.NewGuid(), CareerRoadmapId = Guid.NewGuid() };
         userRepo.GetByAuthIdAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(new UserProfile { AuthUserId = cmd.AuthUserId });
         programRepo.ExistsAsync(cmd.CurriculumProgramId, Arg.Any<CancellationToken>()).Returns(true);
         classRepo.ExistsAsync(cmd.CareerRoadmapId, Arg.Any<CancellationToken>()).Returns(false);
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_UpdatesProfile(CompleteOnboardingCommand cmd)
+    [Fact]
+    public async Task Handle_Success_UpdatesProfile()
     {
         var userRepo = Substitute.For<IUserProfileRepository>();
         var programRepo = Substitute.For<ICurriculumProgramRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<CompleteOnboardingCommandHandler>>();
         var sut = new CompleteOnboardingCommandHandler(userRepo, programRepo, classRepo, logger);
-
+        var cmd = new CompleteOnboardingCommand { AuthUserId = Guid.NewGuid(), CurriculumProgramId = Guid.NewGuid(), CareerRoadmapId = Guid.NewGuid() };
         var profile = new UserProfile { AuthUserId = cmd.AuthUserId, OnboardingCompleted = false };
         userRepo.GetByAuthIdAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(profile);
         programRepo.ExistsAsync(cmd.CurriculumProgramId, Arg.Any<CancellationToken>()).Returns(true);

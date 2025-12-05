@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -27,9 +26,8 @@ public class GetCompletedActivitiesQueryHandlerTests
         return new Dictionary<string, object> { ["activities"] = activities };
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoAttempt_ReturnsEmpty(GetCompletedActivitiesQuery query)
+    [Fact]
+    public async Task Handle_NoAttempt_ReturnsEmpty()
     {
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
@@ -38,6 +36,7 @@ public class GetCompletedActivitiesQueryHandlerTests
         var sut = new GetCompletedActivitiesQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
 
         var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var query = new GetCompletedActivitiesQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
         var questStep = new QuestStep { Id = query.StepId, QuestId = query.QuestId, Content = BuildContent(ids) };
         questStepRepo.GetByIdAsync(query.StepId, Arg.Any<CancellationToken>()).Returns(questStep);
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestAttempt?)null);
@@ -48,9 +47,8 @@ public class GetCompletedActivitiesQueryHandlerTests
         result.Activities.All(a => !a.IsCompleted).Should().BeTrue();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_WithProgress_MarksCompleted(GetCompletedActivitiesQuery query)
+    [Fact]
+    public async Task Handle_WithProgress_MarksCompleted()
     {
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
@@ -59,6 +57,7 @@ public class GetCompletedActivitiesQueryHandlerTests
         var sut = new GetCompletedActivitiesQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
 
         var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var query = new GetCompletedActivitiesQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
         var questStep = new QuestStep { Id = query.StepId, QuestId = query.QuestId, Content = BuildContent(ids) };
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = query.AuthUserId, QuestId = query.QuestId };
         var progress = new UserQuestStepProgress { AttemptId = attempt.Id, StepId = query.StepId, CompletedActivityIds = new[] { ids[1], ids[3] } };

@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.RemoveMember;
@@ -14,27 +13,29 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.RemoveMembe
 
 public class RemoveGuildMemberCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_CannotRemoveMaster(RemoveGuildMemberCommand cmd)
+    [Fact]
+    public async Task Handle_CannotRemoveMaster()
     {
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
-        var sut = new RemoveGuildMemberCommandHandler(memberRepo, guildRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IGuildNotificationService>();
+        var sut = new RemoveGuildMemberCommandHandler(memberRepo, guildRepo, notificationService);
 
+        var cmd = new RemoveGuildMemberCommand(Guid.NewGuid(), Guid.NewGuid(), "reason");
         var member = new GuildMember { Id = cmd.MemberId, GuildId = cmd.GuildId, Role = GuildRole.GuildMaster };
         memberRepo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_DeletesAndUpdates(RemoveGuildMemberCommand cmd)
+    [Fact]
+    public async Task Handle_Success_DeletesAndUpdates()
     {
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
-        var sut = new RemoveGuildMemberCommandHandler(memberRepo, guildRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IGuildNotificationService>();
+        var sut = new RemoveGuildMemberCommandHandler(memberRepo, guildRepo, notificationService);
 
+        var cmd = new RemoveGuildMemberCommand(Guid.NewGuid(), Guid.NewGuid(), "reason");
         var member = new GuildMember { Id = cmd.MemberId, GuildId = cmd.GuildId, Role = GuildRole.Member };
         memberRepo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
         var guild = new Guild { Id = cmd.GuildId, CurrentMemberCount = 10 };

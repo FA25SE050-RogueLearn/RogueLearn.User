@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Commands.ApproveJoinRequest;
 using RogueLearn.User.Domain.Entities;
@@ -13,15 +12,17 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.ApproveJoin
 
 public class ApproveGuildJoinRequestCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_AddsMemberAndUpdates(ApproveGuildJoinRequestCommand cmd)
+    [Fact]
+    public async Task Handle_Success_AddsMemberAndUpdates()
     {
         var guildRepo = Substitute.For<IGuildRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var requestRepo = Substitute.For<IGuildJoinRequestRepository>();
-        var sut = new ApproveGuildJoinRequestCommandHandler(guildRepo, memberRepo, requestRepo);
+        var notificationService = Substitute.For<RogueLearn.User.Application.Interfaces.IGuildNotificationService>();
+        var invitationRepo = Substitute.For<IGuildInvitationRepository>();
+        var sut = new ApproveGuildJoinRequestCommandHandler(guildRepo, memberRepo, requestRepo, notificationService, invitationRepo);
 
+        var cmd = new ApproveGuildJoinRequestCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var guild = new Guild { Id = cmd.GuildId, MaxMembers = 50 };
         guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
         var req = new GuildJoinRequest { Id = cmd.RequestId, GuildId = cmd.GuildId, RequesterId = System.Guid.NewGuid(), Status = GuildJoinRequestStatus.Pending };

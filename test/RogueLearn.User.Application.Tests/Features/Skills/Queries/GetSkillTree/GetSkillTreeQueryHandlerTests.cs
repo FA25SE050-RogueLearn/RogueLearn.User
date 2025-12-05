@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Skills.Queries.GetSkillTree;
@@ -14,9 +13,8 @@ namespace RogueLearn.User.Application.Tests.Features.Skills.Queries.GetSkillTree
 
 public class GetSkillTreeQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsNodesAndDependencies(GetSkillTreeQuery query)
+    [Fact]
+    public async Task Handle_ReturnsNodesAndDependencies()
     {
         var skillRepo = Substitute.For<ISkillRepository>();
         var userSkillRepo = Substitute.For<IUserSkillRepository>();
@@ -28,6 +26,7 @@ public class GetSkillTreeQueryHandlerTests
         var dep = new SkillDependency { SkillId = skill.Id, PrerequisiteSkillId = System.Guid.NewGuid(), RelationshipType = SkillRelationshipType.Prerequisite };
 
         skillRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Skill> { skill });
+        var query = new GetSkillTreeQuery { AuthUserId = System.Guid.NewGuid() };
         userSkillRepo.GetSkillsByAuthIdAsync(query.AuthUserId, Arg.Any<CancellationToken>()).Returns(new List<UserSkill> { userSkill });
         depRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<SkillDependency> { dep });
 

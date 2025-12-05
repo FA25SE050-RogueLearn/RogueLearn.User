@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.Comments.EditGuildPostComment;
@@ -13,30 +12,42 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Commands.Comment
 
 public class EditGuildPostCommentCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_PostLocked_Throws(EditGuildPostCommentCommand cmd)
+    [Fact]
+    public async Task Handle_PostLocked_Throws()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var commentRepo = Substitute.For<IGuildPostCommentRepository>();
         var sut = new EditGuildPostCommentCommandHandler(postRepo, commentRepo);
 
-        var post = new GuildPost { GuildId = cmd.GuildId, Id = cmd.PostId, IsLocked = true };
-        postRepo.GetByIdAsync(cmd.GuildId, cmd.PostId, Arg.Any<CancellationToken>()).Returns(post);
+        var guildId = System.Guid.NewGuid();
+        var postId = System.Guid.NewGuid();
+        var commentId = System.Guid.NewGuid();
+        var authorId = System.Guid.NewGuid();
+        var req = new EditGuildPostCommentRequest { Content = "c" };
+        var cmd = new EditGuildPostCommentCommand(guildId, postId, commentId, authorId, req);
+
+        var post = new GuildPost { GuildId = guildId, Id = postId, IsLocked = true };
+        postRepo.GetByIdAsync(guildId, postId, Arg.Any<CancellationToken>()).Returns(post);
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotOwnerOrMismatch_Throws(EditGuildPostCommentCommand cmd)
+    [Fact]
+    public async Task Handle_NotOwnerOrMismatch_Throws()
     {
         var postRepo = Substitute.For<IGuildPostRepository>();
         var commentRepo = Substitute.For<IGuildPostCommentRepository>();
         var sut = new EditGuildPostCommentCommandHandler(postRepo, commentRepo);
 
-        var post = new GuildPost { GuildId = cmd.GuildId, Id = cmd.PostId, IsLocked = false };
-        postRepo.GetByIdAsync(cmd.GuildId, cmd.PostId, Arg.Any<CancellationToken>()).Returns(post);
-        commentRepo.GetByIdAsync(cmd.CommentId, Arg.Any<CancellationToken>()).Returns(new GuildPostComment { PostId = cmd.PostId, AuthorId = System.Guid.NewGuid() });
+        var guildId = System.Guid.NewGuid();
+        var postId = System.Guid.NewGuid();
+        var commentId = System.Guid.NewGuid();
+        var authorId = System.Guid.NewGuid();
+        var req = new EditGuildPostCommentRequest { Content = "c" };
+        var cmd = new EditGuildPostCommentCommand(guildId, postId, commentId, authorId, req);
+
+        var post = new GuildPost { GuildId = guildId, Id = postId, IsLocked = false };
+        postRepo.GetByIdAsync(guildId, postId, Arg.Any<CancellationToken>()).Returns(post);
+        commentRepo.GetByIdAsync(commentId, Arg.Any<CancellationToken>()).Returns(new GuildPostComment { PostId = postId, AuthorId = System.Guid.NewGuid() });
 
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }

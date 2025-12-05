@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -30,10 +29,10 @@ public class GetStepProgressQueryHandlerTests
         return new Dictionary<string, object> { ["activities"] = activities };
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoStepProgress_ReturnsEmpty(GetStepProgressQuery query)
+    [Fact]
+    public async Task Handle_NoStepProgress_ReturnsEmpty()
     {
+        var query = new GetStepProgressQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var questStepRepo = Substitute.For<IQuestStepRepository>();
@@ -52,10 +51,10 @@ public class GetStepProgressQueryHandlerTests
         result.ProgressPercentage.Should().Be(0);
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_WithProgress_ComputesCounts(GetStepProgressQuery query)
+    [Fact]
+    public async Task Handle_WithProgress_ComputesCounts()
     {
+        var query = new GetStepProgressQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var questStepRepo = Substitute.For<IQuestStepRepository>();

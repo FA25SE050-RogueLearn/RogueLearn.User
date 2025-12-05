@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,31 +14,32 @@ namespace RogueLearn.User.Application.Tests.Features.Roles.Commands.UpdateRole;
 
 public class UpdateRoleCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(UpdateRoleCommand cmd)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var roleRepo = Substitute.For<IRoleRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<UpdateRoleCommandHandler>>();
 
+        var cmd = new UpdateRoleCommand { Id = Guid.NewGuid(), Name = "n" };
         roleRepo.GetByIdAsync(cmd.Id, Arg.Any<CancellationToken>()).Returns((Role?)null);
 
         var sut = new UpdateRoleCommandHandler(roleRepo, mapper, logger);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_UpdatesAndMaps(UpdateRoleCommand cmd)
+    [Fact]
+    public async Task Handle_Success_UpdatesAndMaps()
     {
         var roleRepo = Substitute.For<IRoleRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var logger = Substitute.For<ILogger<UpdateRoleCommandHandler>>();
 
-        var role = new Role { Id = cmd.Id, Name = "old", Description = "d" };
-        var updated = new Role { Id = cmd.Id, Name = cmd.Name, Description = cmd.Description };
-        roleRepo.GetByIdAsync(cmd.Id, Arg.Any<CancellationToken>()).Returns(role);
+        var roleId = Guid.NewGuid();
+        var cmd = new UpdateRoleCommand { Id = roleId, Name = "new", Description = "desc" };
+        var role = new Role { Id = roleId, Name = "old", Description = "d" };
+        var updated = new Role { Id = roleId, Name = cmd.Name, Description = cmd.Description };
+        roleRepo.GetByIdAsync(roleId, Arg.Any<CancellationToken>()).Returns(role);
         roleRepo.UpdateAsync(Arg.Any<Role>(), Arg.Any<CancellationToken>()).Returns(updated);
         mapper.Map<UpdateRoleResponse>(updated).Returns(new UpdateRoleResponse { Id = updated.Id, Name = updated.Name, Description = updated.Description });
 

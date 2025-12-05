@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Parties.Commands.DeletePartyResource;
@@ -12,10 +11,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.DeletePart
 
 public class DeletePartyResourceCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_WrongParty_Throws(DeletePartyResourceCommand cmd)
+    [Fact]
+    public async Task Handle_WrongParty_Throws()
     {
+        var cmd = new DeletePartyResourceCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var repo = Substitute.For<IPartyStashItemRepository>();
         var sut = new DeletePartyResourceCommandHandler(repo);
         var item = new PartyStashItem { Id = cmd.StashItemId, PartyId = System.Guid.NewGuid() };
@@ -23,10 +22,12 @@ public class DeletePartyResourceCommandHandlerTests
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_Deletes(DeletePartyResourceCommand cmd)
+    [Fact]
+    public async Task Handle_Success_Deletes()
     {
+        var partyId = System.Guid.NewGuid();
+        var stashId = System.Guid.NewGuid();
+        var cmd = new DeletePartyResourceCommand(partyId, stashId, System.Guid.NewGuid());
         var repo = Substitute.For<IPartyStashItemRepository>();
         var sut = new DeletePartyResourceCommandHandler(repo);
         var item = new PartyStashItem { Id = cmd.StashItemId, PartyId = cmd.PartyId };

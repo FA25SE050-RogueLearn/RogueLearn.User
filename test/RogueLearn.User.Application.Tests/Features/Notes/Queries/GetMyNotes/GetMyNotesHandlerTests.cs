@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
@@ -15,9 +14,8 @@ namespace RogueLearn.User.Application.Tests.Features.Notes.Queries.GetMyNotes;
 
 public class GetMyNotesHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsNotesWithRelations(Guid authUserId)
+    [Fact]
+    public async Task Handle_ReturnsNotesWithRelations()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
@@ -25,6 +23,7 @@ public class GetMyNotesHandlerTests
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetMyNotesHandler>>();
         var sut = new GetMyNotesHandler(noteRepo, tagRepo, mapper, logger);
 
+        var authUserId = Guid.NewGuid();
         var notes = new List<Note> { new() { Id = Guid.NewGuid(), AuthUserId = authUserId, Title = "T", Content = new object() } };
         noteRepo.GetByUserAsync(authUserId, Arg.Any<CancellationToken>()).Returns(notes);
         mapper.Map<List<NoteDto>>(Arg.Any<List<Note>>()).Returns(new List<NoteDto> { new() { Id = notes[0].Id, AuthUserId = authUserId, Title = "T" } });
