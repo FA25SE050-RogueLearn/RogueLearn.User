@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.LeaveGuild;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -19,7 +20,10 @@ public class LeaveGuildCommandHandlerTests
         var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var notification = Substitute.For<IGuildNotificationService>();
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
 
         var master = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.GuildMaster };
         memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(master);
@@ -33,7 +37,10 @@ public class LeaveGuildCommandHandlerTests
         var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var notification = Substitute.For<IGuildNotificationService>();
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
 
         var member = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.Member };
         memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(member);

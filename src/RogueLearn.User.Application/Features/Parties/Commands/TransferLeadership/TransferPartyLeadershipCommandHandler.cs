@@ -12,22 +12,6 @@ public class TransferPartyLeadershipCommandHandler : IRequestHandler<TransferPar
     private readonly IRoleRepository _roleRepository;
     private readonly IPartyNotificationService? _notificationService;
 
-    public TransferPartyLeadershipCommandHandler(IPartyMemberRepository memberRepository)
-    {
-        _memberRepository = memberRepository;
-        _userRoleRepository = null!;
-        _roleRepository = null!;
-        _notificationService = null;
-    }
-
-    public TransferPartyLeadershipCommandHandler(IPartyMemberRepository memberRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository)
-    {
-        _memberRepository = memberRepository;
-        _userRoleRepository = userRoleRepository;
-        _roleRepository = roleRepository;
-        _notificationService = null;
-    }
-
     public TransferPartyLeadershipCommandHandler(IPartyMemberRepository memberRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository, IPartyNotificationService notificationService)
     {
         _memberRepository = memberRepository;

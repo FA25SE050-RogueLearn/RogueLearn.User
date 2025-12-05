@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Commands.TransferLeadership;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -24,7 +25,11 @@ public class TransferGuildLeadershipCommandHandlerTests
         repo.GetMembersByGuildAsync(guildId, Arg.Any<CancellationToken>())
             .Returns(new[] { currentMaster, otherMaster, target, inactiveTarget });
 
-        var sut = new TransferGuildLeadershipCommandHandler(repo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        roleRepo.GetByNameAsync("Guild Master", Arg.Any<CancellationToken>()).Returns(new Role { Id = Guid.NewGuid(), Name = "Guild Master" });
+        var notification = Substitute.For<IGuildNotificationService>();
+        var sut = new TransferGuildLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
         await sut.Handle(new TransferGuildLeadershipCommand(guildId, newMasterUserId), CancellationToken.None);
 
         target.Role.Should().Be(GuildRole.GuildMaster);
@@ -45,7 +50,11 @@ public class TransferGuildLeadershipCommandHandlerTests
         repo.GetMembersByGuildAsync(guildId, Arg.Any<CancellationToken>())
             .Returns(new[] { activeMember });
 
-        var sut = new TransferGuildLeadershipCommandHandler(repo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        roleRepo.GetByNameAsync("Guild Master", Arg.Any<CancellationToken>()).Returns(new Role { Id = Guid.NewGuid(), Name = "Guild Master" });
+        var notification = Substitute.For<IGuildNotificationService>();
+        var sut = new TransferGuildLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
         var act = () => sut.Handle(new TransferGuildLeadershipCommand(guildId, newMasterUserId), CancellationToken.None);
         await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
@@ -61,7 +70,11 @@ public class TransferGuildLeadershipCommandHandlerTests
         repo.GetMembersByGuildAsync(guildId, Arg.Any<CancellationToken>())
             .Returns(new[] { master, inactiveTarget });
 
-        var sut = new TransferGuildLeadershipCommandHandler(repo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        roleRepo.GetByNameAsync("Guild Master", Arg.Any<CancellationToken>()).Returns(new Role { Id = Guid.NewGuid(), Name = "Guild Master" });
+        var notification = Substitute.For<IGuildNotificationService>();
+        var sut = new TransferGuildLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
         var act = () => sut.Handle(new TransferGuildLeadershipCommand(guildId, toUserId), CancellationToken.None);
         await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }

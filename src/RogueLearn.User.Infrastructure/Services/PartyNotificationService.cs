@@ -17,14 +17,6 @@ public class PartyNotificationService : IPartyNotificationService
     private readonly IPartyRepository? _partyRepository;
     private readonly IUserProfileRepository? _userProfileRepository;
 
-    public PartyNotificationService(ILogger<PartyNotificationService> logger, INotificationRepository notificationRepository)
-    {
-        _logger = logger;
-        _notificationRepository = notificationRepository;
-        _partyRepository = null;
-        _userProfileRepository = null;
-    }
-
     public PartyNotificationService(ILogger<PartyNotificationService> logger, INotificationRepository notificationRepository, IPartyRepository partyRepository, IUserProfileRepository userProfileRepository)
     {
         _logger = logger;

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.TransferLeadership;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -22,7 +23,11 @@ public class TransferPartyLeadershipCommandHandlerTests
 
         repo.GetMembersByPartyAsync(partyId, Arg.Any<CancellationToken>()).Returns(new[] { currentLeader, otherLeader, target });
 
-        var sut = new TransferPartyLeadershipCommandHandler(repo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        roleRepo.GetByNameAsync("Party Leader", Arg.Any<CancellationToken>()).Returns(new Role { Id = Guid.NewGuid(), Name = "Party Leader" });
+        var notification = Substitute.For<IPartyNotificationService>();
+        var sut = new TransferPartyLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
         await sut.Handle(new TransferPartyLeadershipCommand(partyId, toUserId), CancellationToken.None);
 
         target.Role.Should().Be(PartyRole.Leader);
@@ -41,7 +46,11 @@ public class TransferPartyLeadershipCommandHandlerTests
         var target = new PartyMember { PartyId = partyId, AuthUserId = toUserId, Role = PartyRole.Member, Status = MemberStatus.Active };
         repo.GetMembersByPartyAsync(partyId, Arg.Any<CancellationToken>()).Returns(new[] { target });
 
-        var sut = new TransferPartyLeadershipCommandHandler(repo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        roleRepo.GetByNameAsync("Party Leader", Arg.Any<CancellationToken>()).Returns(new Role { Id = Guid.NewGuid(), Name = "Party Leader" });
+        var notification = Substitute.For<IPartyNotificationService>();
+        var sut = new TransferPartyLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
         var act = () => sut.Handle(new TransferPartyLeadershipCommand(partyId, toUserId), CancellationToken.None);
         await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
@@ -56,7 +65,11 @@ public class TransferPartyLeadershipCommandHandlerTests
         var target = new PartyMember { PartyId = partyId, AuthUserId = toUserId, Role = PartyRole.Member, Status = MemberStatus.Inactive };
         repo.GetMembersByPartyAsync(partyId, Arg.Any<CancellationToken>()).Returns(new[] { leader, target });
 
-        var sut = new TransferPartyLeadershipCommandHandler(repo);
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        roleRepo.GetByNameAsync("Party Leader", Arg.Any<CancellationToken>()).Returns(new Role { Id = Guid.NewGuid(), Name = "Party Leader" });
+        var notification = Substitute.For<IPartyNotificationService>();
+        var sut = new TransferPartyLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
         var act = () => sut.Handle(new TransferPartyLeadershipCommand(partyId, toUserId), CancellationToken.None);
         await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }

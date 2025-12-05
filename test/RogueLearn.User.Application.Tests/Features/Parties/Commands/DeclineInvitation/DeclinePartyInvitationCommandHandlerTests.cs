@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.DeclineInvitation;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -16,7 +17,8 @@ public class DeclinePartyInvitationCommandHandlerTests
     {
         var cmd = new DeclinePartyInvitationCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var invitationRepo = Substitute.For<IPartyInvitationRepository>();
-        var sut = new DeclinePartyInvitationCommandHandler(invitationRepo);
+        var notification = Substitute.For<IPartyNotificationService>();
+        var sut = new DeclinePartyInvitationCommandHandler(invitationRepo, notification);
 
         var inv = new PartyInvitation { Id = cmd.InvitationId, PartyId = cmd.PartyId, InviteeId = cmd.AuthUserId, Status = InvitationStatus.Pending, ExpiresAt = System.DateTimeOffset.UtcNow.AddDays(1) };
         invitationRepo.GetByIdAsync(cmd.InvitationId, Arg.Any<CancellationToken>()).Returns(inv);

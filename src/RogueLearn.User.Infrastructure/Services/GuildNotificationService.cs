@@ -11,13 +11,6 @@ public class GuildNotificationService : IGuildNotificationService
     private readonly IGuildRepository? _guildRepository;
     private readonly IUserProfileRepository? _userProfileRepository;
 
-    public GuildNotificationService(INotificationRepository notificationRepository)
-    {
-        _notificationRepository = notificationRepository;
-        _guildRepository = null;
-        _userProfileRepository = null;
-    }
-
     public GuildNotificationService(INotificationRepository notificationRepository, IGuildRepository guildRepository, IUserProfileRepository userProfileRepository)
     {
         _notificationRepository = notificationRepository;

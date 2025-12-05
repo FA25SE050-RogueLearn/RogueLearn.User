@@ -10,12 +10,6 @@ public class RemovePartyMemberCommandHandler : IRequestHandler<RemovePartyMember
     private readonly IPartyMemberRepository _memberRepository;
     private readonly IPartyNotificationService? _notificationService;
 
-    public RemovePartyMemberCommandHandler(IPartyMemberRepository memberRepository)
-    {
-        _memberRepository = memberRepository;
-        _notificationService = null;
-    }
-
     public RemovePartyMemberCommandHandler(IPartyMemberRepository memberRepository, IPartyNotificationService notificationService)
     {
         _memberRepository = memberRepository;

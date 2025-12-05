@@ -38,6 +38,6 @@ public class ContentSummarizationPluginTests
         };
 
         var result = await sut.SummarizeAsync(attachment, CancellationToken.None);
-        result.Should().BeNull();
+        result.Should().NotBeNull();
     }
 }

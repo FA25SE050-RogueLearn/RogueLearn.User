@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.Commands.RemoveMember;
+using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -16,7 +17,8 @@ public class RemovePartyMemberCommandHandlerTests
     {
         var cmd = new RemovePartyMemberCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), "reason");
         var repo = Substitute.For<IPartyMemberRepository>();
-        var sut = new RemovePartyMemberCommandHandler(repo);
+        var notification = Substitute.For<IPartyNotificationService>();
+        var sut = new RemovePartyMemberCommandHandler(repo, notification);
 
         var member = new PartyMember { Id = cmd.MemberId, PartyId = cmd.PartyId, Role = PartyRole.Leader };
         repo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
@@ -29,7 +31,8 @@ public class RemovePartyMemberCommandHandlerTests
     {
         var cmd = new RemovePartyMemberCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), null);
         var repo = Substitute.For<IPartyMemberRepository>();
-        var sut = new RemovePartyMemberCommandHandler(repo);
+        var notification = Substitute.For<IPartyNotificationService>();
+        var sut = new RemovePartyMemberCommandHandler(repo, notification);
 
         var member = new PartyMember { Id = cmd.MemberId, PartyId = cmd.PartyId, Role = PartyRole.Member };
         repo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);

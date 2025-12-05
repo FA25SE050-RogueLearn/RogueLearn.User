@@ -19,13 +19,6 @@ public class AcceptPartyInvitationCommandHandler : IRequestHandler<AcceptPartyIn
         _notificationService = notificationService;
     }
 
-    public AcceptPartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository, IPartyMemberRepository memberRepository)
-    {
-        _invitationRepository = invitationRepository;
-        _memberRepository = memberRepository;
-        _notificationService = null;
-    }
-
     public async Task<Unit> Handle(AcceptPartyInvitationCommand request, CancellationToken cancellationToken)
     {
         var invitation = await _invitationRepository.GetByIdAsync(request.InvitationId, cancellationToken)
