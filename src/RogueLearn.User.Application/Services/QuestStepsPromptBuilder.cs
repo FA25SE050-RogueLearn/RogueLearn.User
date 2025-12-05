@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
 using System.Text;
 using System.Text.Json;
 using RogueLearn.User.Application.Models;
@@ -89,15 +90,18 @@ public class QuestStepsPromptBuilder
 
         // 4. Activity Types Explained
         prompt.AppendLine("## 4. Activity Types & Purpose");
+        prompt.AppendLine("⚠️ **CRITICAL:** You MUST include an integer `experiencePoints` field in the `payload` of EVERY activity.");
         prompt.AppendLine();
+
         prompt.AppendLine("### 📖 Reading Activities");
         prompt.AppendLine("**Purpose:** Introduce new concepts and knowledge");
+        prompt.AppendLine("**XP Value:** 10-20 XP");
         prompt.AppendLine("**Payload Structure:**");
         prompt.AppendLine("- If an APPROVED RESOURCE URL exists → MUST include `url` field");
         prompt.AppendLine("- If NO URL provided → Use `summary` field with detailed content");
-        prompt.AppendLine("- Always include `articleTitle` and `summary` (even when URL is present)");
+        prompt.AppendLine("- Always include `articleTitle`, `summary`, and `experiencePoints`");
         prompt.AppendLine();
-        prompt.AppendLine("**Example with URL:**");
+        prompt.AppendLine("**Example:**");
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"type\": \"Reading\",");
@@ -106,7 +110,8 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"payload\": {");
         prompt.AppendLine("    \"url\": \"https://www.geeksforgeeks.org/c-programming/\",");
         prompt.AppendLine("    \"articleTitle\": \"Introduction to C Programming\",");
-        prompt.AppendLine("    \"summary\": \"Learn the basics of C programming...\"");
+        prompt.AppendLine("    \"summary\": \"Learn the basics of C programming...\",");
+        prompt.AppendLine("    \"experiencePoints\": 15");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
@@ -114,6 +119,7 @@ public class QuestStepsPromptBuilder
 
         prompt.AppendLine("### ✅ KnowledgeCheck Activities");
         prompt.AppendLine("**Purpose:** Quick comprehension checks after reading material");
+        prompt.AppendLine("**XP Value:** 25-35 XP");
         prompt.AppendLine("**Requirements:**");
         prompt.AppendLine("- **3-4 questions** grouped in a single activity");
         prompt.AppendLine("- Tests understanding of recently covered content");
@@ -127,6 +133,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"activityId\": \"placeholder-id\",");
         prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
         prompt.AppendLine("  \"payload\": {");
+        prompt.AppendLine("    \"experiencePoints\": 30,");
         prompt.AppendLine("    \"questions\": [");
         prompt.AppendLine("      {");
         prompt.AppendLine("        \"question\": \"What is a compiler?\",");
@@ -148,6 +155,7 @@ public class QuestStepsPromptBuilder
 
         prompt.AppendLine("### 🎓 Quiz Activities");
         prompt.AppendLine("**Purpose:** Comprehensive assessment of the entire module (MANDATORY FINAL ACTIVITY)");
+        prompt.AppendLine("**XP Value:** 50-100 XP (Higher for challenging track)");
         prompt.AppendLine();
         prompt.AppendLine("⚠️ **CRITICAL REQUIREMENT:** EVERY quest step MUST end with a Quiz activity. NO EXCEPTIONS.");
         prompt.AppendLine();
@@ -166,6 +174,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"activityId\": \"placeholder-id\",");
         prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
         prompt.AppendLine("  \"payload\": {");
+        prompt.AppendLine("    \"experiencePoints\": 80,");
         prompt.AppendLine("    \"questions\": [");
         prompt.AppendLine("      {");
         prompt.AppendLine("        \"question\": \"Quiz Question 1?\",");
@@ -237,8 +246,9 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("3. **END EACH TRACK WITH A QUIZ ACTIVITY** (7-10 questions depending on track)");
         prompt.AppendLine("4. Use APPROVED RESOURCE URLs in Reading activities when provided");
         prompt.AppendLine("5. Assign a valid `skillId` to every activity");
-        prompt.AppendLine("6. Group questions into `questions` arrays for KnowledgeCheck and Quiz");
-        prompt.AppendLine("7. Ensure Quiz covers all major topics from the module");
+        prompt.AppendLine("6. Include `experiencePoints` in EVERY activity payload");
+        prompt.AppendLine("7. Group questions into `questions` arrays for KnowledgeCheck and Quiz");
+        prompt.AppendLine("8. Ensure Quiz covers all major topics from the module");
         prompt.AppendLine();
 
         prompt.AppendLine("### ❌ MUST NOT DO:");
@@ -246,7 +256,8 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("2. Do NOT use literal escape sequences like `\\n` or `\\t` in strings");
         prompt.AppendLine("3. Do NOT create single-question activities");
         prompt.AppendLine("4. **DO NOT omit the Quiz activity - it is MANDATORY**");
-        prompt.AppendLine("5. Do NOT wrap JSON output in markdown code fences");
+        prompt.AppendLine("5. Do NOT omit `experiencePoints` from payloads");
+        prompt.AppendLine("6. Do NOT wrap JSON output in markdown code fences");
         prompt.AppendLine();
 
         // 8. JSON Schema
@@ -256,22 +267,22 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("{");
         prompt.AppendLine("  \"supportive\": {");
         prompt.AppendLine("    \"activities\": [");
-        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": {...} },");
-        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"questions\": [...] } },");
-        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": {...} },");
-        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"questions\": [7-8 questions] } }");
+        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
+        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, \"questions\": [...] } },");
+        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 60, \"questions\": [7-8 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  },");
         prompt.AppendLine("  \"standard\": {");
         prompt.AppendLine("    \"activities\": [");
         prompt.AppendLine("      // ... similar structure ...");
-        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"questions\": [8-9 questions] } }");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 80, \"questions\": [8-9 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  },");
         prompt.AppendLine("  \"challenging\": {");
         prompt.AppendLine("    \"activities\": [");
         prompt.AppendLine("      // ... similar structure ...");
-        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"questions\": [9-10 questions] } }");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 100, \"questions\": [9-10 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
@@ -304,6 +315,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("Before submitting, verify:");
         prompt.AppendLine("- [ ] Generated all 3 tracks (supportive, standard, challenging)");
         prompt.AppendLine("- [ ] **EACH TRACK ENDS WITH A QUIZ ACTIVITY (CRITICAL)**");
+        prompt.AppendLine("- [ ] Included `experiencePoints` for EVERY activity");
         prompt.AppendLine("- [ ] Quiz has correct question count (Supportive: 7-8, Standard: 8-9, Challenging: 9-10)");
         prompt.AppendLine("- [ ] KnowledgeChecks have 3-4 questions each");
         prompt.AppendLine("- [ ] All Reading activities with URLs use APPROVED RESOURCE URLs");

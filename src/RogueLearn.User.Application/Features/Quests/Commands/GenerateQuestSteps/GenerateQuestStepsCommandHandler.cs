@@ -119,7 +119,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         var relevantSkills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => relevantSkillIds.Contains(s.Id)).ToList();
 
         // ========== 4. TOPIC GROUPING ==========
-        // ⭐ FIXED TYPO HERE: GroupSessionsIntoModules
         var modules = _topicGrouperService.GroupSessionsIntoModules(allSessions);
 
         UpdateHangfireJobProgress(request.HangfireJobId, 0, modules.Count, "Starting master quest generation...");
@@ -157,17 +156,27 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                                 options
                             );
 
-                            // ⭐ CRITICAL FIX: Enforce UUIDs for all activity IDs
-                            // This overwrites whatever the AI generated (e.g., "M1-standard-1") with a valid GUID.
                             if (activitiesList != null)
                             {
                                 foreach (var activity in activitiesList)
                                 {
+                                    // Ensure valid GUID
                                     activity["activityId"] = Guid.NewGuid().ToString();
+
+                                    // Ensure XP exists, if not, patch it with default
+                                    PatchActivityExperience(activity);
                                 }
                             }
 
-                            int xp = CalculateTotalExperience(activitiesElement);
+                            // Recalculate total from the list now that we've patched it
+                            int xp = activitiesList?.Sum(a =>
+                                a.TryGetValue("payload", out var pl) &&
+                                pl is Dictionary<string, object> payload &&
+                                payload.TryGetValue("experiencePoints", out var pts) &&
+                                int.TryParse(pts.ToString(), out var val) ? val : 0) ?? 0;
+
+                            // Fallback total if list sum failed or was 0
+                            if (xp == 0) xp = 200; // Minimum step value
 
                             string dbVariant = variantKey switch
                             {
@@ -193,7 +202,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                             await _questStepRepository.AddAsync(step, cancellationToken);
                             createdSteps.Add(step);
-                            _logger.LogInformation("Saved Module {Module} Variant {Variant}", module.ModuleNumber, dbVariant);
+                            _logger.LogInformation("Saved Module {Module} Variant {Variant} (XP: {XP})", module.ModuleNumber, dbVariant, xp);
                         }
                     }
                 }
@@ -209,22 +218,31 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         return _mapper.Map<List<GeneratedQuestStepDto>>(createdSteps);
     }
 
-    private int CalculateTotalExperience(JsonElement activitiesElement)
+    private void PatchActivityExperience(Dictionary<string, object> activity)
     {
-        int total = 0;
-        if (activitiesElement.ValueKind == JsonValueKind.Array)
+        if (!activity.ContainsKey("payload") || activity["payload"] is not Dictionary<string, object> payload)
         {
-            foreach (var act in activitiesElement.EnumerateArray())
-            {
-                if (act.TryGetProperty("payload", out var payload) &&
-                    payload.TryGetProperty("experiencePoints", out var xpEl) &&
-                    xpEl.TryGetInt32(out var xp))
-                {
-                    total += xp;
-                }
-            }
+            // Create payload if missing
+            payload = new Dictionary<string, object>();
+            activity["payload"] = payload;
         }
-        return total;
+
+        // Check if experiencePoints exists
+        if (!payload.ContainsKey("experiencePoints"))
+        {
+            var type = activity.ContainsKey("type") ? activity["type"]?.ToString() : "Unknown";
+            int defaultXp = type switch
+            {
+                "Quiz" => 80,
+                "KnowledgeCheck" => 30,
+                "Reading" => 15,
+                _ => 10
+            };
+
+            payload["experiencePoints"] = defaultXp;
+            // Also log/print that we patched it?
+            // Console.WriteLine($"Patched XP for {type}: {defaultXp}");
+        }
     }
 
     private void UpdateHangfireJobProgress(string jobId, int current, int total, string message)

@@ -6,6 +6,7 @@ using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent; // Added namespace
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 
@@ -14,17 +15,29 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
     private readonly IQuestStepRepository _questStepRepository;
+    private readonly IUserSkillRepository _userSkillRepository;
+    private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
+    private readonly IQuestRepository _questRepository;
+    private readonly IMediator _mediator; // Added Mediator
     private readonly ILogger<UpdateQuestActivityProgressCommandHandler> _logger;
 
     public UpdateQuestActivityProgressCommandHandler(
         IUserQuestAttemptRepository attemptRepository,
         IUserQuestStepProgressRepository stepProgressRepository,
         IQuestStepRepository questStepRepository,
+        IUserSkillRepository userSkillRepository,
+        ISubjectSkillMappingRepository subjectSkillMappingRepository,
+        IQuestRepository questRepository,
+        IMediator mediator, // Added Mediator injection
         ILogger<UpdateQuestActivityProgressCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
         _stepProgressRepository = stepProgressRepository;
         _questStepRepository = questStepRepository;
+        _userSkillRepository = userSkillRepository;
+        _subjectSkillMappingRepository = subjectSkillMappingRepository;
+        _questRepository = questRepository;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -38,7 +51,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         }
 
         // 2. Fetch the User's Quest Attempt (Must already exist)
-        // REMOVED LAZY CREATION: This endpoint now expects the quest to be started explicitly
         var attempt = await _attemptRepository.FirstOrDefaultAsync(
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
@@ -102,8 +114,48 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 stepProgress.Status = StepCompletionStatus.Completed;
                 stepProgress.CompletedAt = DateTimeOffset.UtcNow;
 
+                // Award XP to Attempt total
                 attempt.TotalExperienceEarned += step.ExperiencePoints;
                 await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+
+                // --- NEW: DISTRIBUTE XP TO USER PROFILE & SKILLS ---
+                // We assume the quest is linked to a Subject, which is linked to Skills.
+                // If the Quest has a SubjectId, we fetch related skills to award XP.
+                var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
+                if (quest != null && quest.SubjectId.HasValue)
+                {
+                    // Fetch skill mappings for this subject
+                    var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(
+                        new[] { quest.SubjectId.Value }, cancellationToken);
+
+                    if (skillMappings.Any())
+                    {
+                        // Distribute the step's XP across the skills based on relevance weight
+                        // Logic matches GradeExperienceCalculator but for quest XP
+                        int totalXpToDistribute = step.ExperiencePoints;
+
+                        // Simple distribution: Award the full step XP to *each* relevant skill, 
+                        // weighted by relevance. (e.g. 100 XP step * 0.8 weight = 80 XP to Skill A)
+                        foreach (var mapping in skillMappings)
+                        {
+                            int pointsForSkill = (int)(totalXpToDistribute * mapping.RelevanceWeight);
+                            if (pointsForSkill > 0)
+                            {
+                                await _mediator.Send(new IngestXpEventCommand
+                                {
+                                    AuthUserId = request.AuthUserId,
+                                    SkillId = mapping.SkillId,
+                                    Points = pointsForSkill,
+                                    SourceService = "QuestSystem",
+                                    SourceType = "QuestComplete", // Using generic type for step completion
+                                    SourceId = request.StepId,    // Idempotency key: StepId
+                                    Reason = $"Completed step: {step.Title}"
+                                }, cancellationToken);
+                            }
+                        }
+                    }
+                }
+                // ---------------------------------------------------
             }
             else
             {
@@ -120,7 +172,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             stepProgress.CompletedAt = null;
         }
 
-        // 5. Persist Changes (Single DB Operation)
+        // 5. Persist Changes
         if (isNewStepProgress)
         {
             stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
