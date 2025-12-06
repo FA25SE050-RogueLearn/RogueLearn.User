@@ -2,6 +2,7 @@
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -15,6 +16,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
     private readonly ISubjectRepository _subjectRepository;
     private readonly IQuestRepository _questRepository;
     private readonly IUserQuestAttemptRepository _attemptRepository;
+    private readonly IUserProfileRepository _userProfileRepository;
+    private readonly ICurriculumProgramSubjectRepository _programSubjectRepository;
+    private readonly IClassSpecializationSubjectRepository _classSpecializationSubjectRepository;
     private readonly ILogger<GetMyLearningPathQueryHandler> _logger;
 
     public GetMyLearningPathQueryHandler(
@@ -23,6 +27,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         ISubjectRepository subjectRepository,
         IQuestRepository questRepository,
         IUserQuestAttemptRepository attemptRepository,
+        IUserProfileRepository userProfileRepository,
+        ICurriculumProgramSubjectRepository programSubjectRepository,
+        IClassSpecializationSubjectRepository classSpecializationSubjectRepository,
         ILogger<GetMyLearningPathQueryHandler> logger)
     {
         _learningPathRepository = learningPathRepository;
@@ -30,6 +37,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         _subjectRepository = subjectRepository;
         _questRepository = questRepository;
         _attemptRepository = attemptRepository;
+        _userProfileRepository = userProfileRepository;
+        _programSubjectRepository = programSubjectRepository;
+        _classSpecializationSubjectRepository = classSpecializationSubjectRepository;
         _logger = logger;
     }
 
@@ -37,59 +47,73 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
     {
         _logger.LogInformation("Fetching dynamic learning path for user {AuthUserId}", request.AuthUserId);
 
-        // 1. Get the shell learning path (mostly for metadata like Name/Description)
-        var learningPath = await _learningPathRepository.GetLatestByUserAsync(request.AuthUserId, cancellationToken);
-        if (learningPath == null)
+        // 1. Get User Profile to determine Curriculum (Route) and Specialization (Class)
+        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
+        if (userProfile == null)
         {
-            // Create a virtual default if none exists
-            learningPath = new LearningPath
-            {
-                Id = Guid.NewGuid(),
-                Name = "My Academic Journey",
-                Description = "Personalized curriculum based on your academic record."
-            };
+            _logger.LogWarning("User profile not found for {AuthUserId}", request.AuthUserId);
+            return null;
         }
 
-        // 2. Fetch User's Academic Record (The Source of Truth for the Path)
-        var studentSubjects = (await _studentSubjectRepository.FindAsync(
-            ss => ss.AuthUserId == request.AuthUserId,
-            cancellationToken)).ToList();
-
-        if (!studentSubjects.Any())
+        if (userProfile.RouteId == null || userProfile.ClassId == null)
         {
+            _logger.LogInformation("User {AuthUserId} has incomplete academic path setup.", request.AuthUserId);
             return new LearningPathDto
             {
-                Id = learningPath.Id,
-                Name = learningPath.Name,
-                Description = learningPath.Description,
+                Id = Guid.Empty,
+                Name = "Unassigned Path",
+                Description = "Please complete onboarding to view your learning path.",
                 Chapters = new List<QuestChapterDto>(),
                 CompletionPercentage = 0
             };
         }
 
-        // 3. Fetch related Master Subjects
-        var subjectIds = studentSubjects.Select(ss => ss.SubjectId).Distinct().ToList();
-        var subjects = (await _subjectRepository.GetByIdsAsync(subjectIds, cancellationToken)).ToDictionary(s => s.Id);
+        // 2. Fetch all subjects defined in the User's Curriculum (Program + Class)
+        // A. Program Subjects
+        var programSubjects = await _programSubjectRepository.FindAsync(
+            ps => ps.ProgramId == userProfile.RouteId.Value, cancellationToken);
+        var programSubjectIds = programSubjects.Select(ps => ps.SubjectId).ToHashSet();
 
-        // 4. Fetch Master Quests for these subjects
-        // We assume 1-to-1 mapping: Subject -> Master Quest
+        // B. Class Specialization Subjects
+        var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(
+            userProfile.ClassId.Value, cancellationToken);
+        var classSubjectIds = classSubjects.Select(cs => cs.Id).ToHashSet();
+
+        // Combine all subject IDs for the roadmap
+        var allSubjectIds = programSubjectIds.Union(classSubjectIds).ToList();
+
+        if (!allSubjectIds.Any())
+        {
+            return new LearningPathDto { Name = "Empty Curriculum", Chapters = new List<QuestChapterDto>() };
+        }
+
+        // 3. Fetch Master Subject Details
+        var subjects = (await _subjectRepository.GetByIdsAsync(allSubjectIds, cancellationToken))
+                       .ToDictionary(s => s.Id);
+
+        // 4. Fetch User's Academic Progress (Grades/Status)
+        var studentRecords = (await _studentSubjectRepository.FindAsync(
+            ss => ss.AuthUserId == request.AuthUserId, cancellationToken))
+            .ToDictionary(ss => ss.SubjectId); // Map for quick lookup
+
+        // 5. Fetch Master Quests (Content)
         var masterQuests = (await _questRepository.GetAllAsync(cancellationToken))
-            .Where(q => q.SubjectId.HasValue && subjectIds.Contains(q.SubjectId.Value) && q.IsActive)
+            .Where(q => q.SubjectId.HasValue && allSubjectIds.Contains(q.SubjectId.Value) && q.IsActive)
             .ToDictionary(q => q.SubjectId!.Value);
 
-        // 5. Fetch User's Attempts (Progress & Difficulty)
+        // 6. Fetch User's Attempts (Quest Progress)
         var attempts = (await _attemptRepository.FindAsync(
-            a => a.AuthUserId == request.AuthUserId,
-            cancellationToken)).ToList();
+            a => a.AuthUserId == request.AuthUserId, cancellationToken))
+            .GroupBy(a => a.QuestId)
+            .ToDictionary(g => g.Key, g => g.First());
 
-        // Map QuestId -> Attempt
-        var attemptMap = attempts.GroupBy(a => a.QuestId).ToDictionary(g => g.Key, g => g.First());
+        // 7. Get (or stub) Learning Path metadata
+        var learningPath = await _learningPathRepository.GetLatestByUserAsync(request.AuthUserId, cancellationToken);
+        var learningPathId = learningPath?.Id ?? Guid.NewGuid(); // Stable ID or virtual one
 
-        // 6. Build Chapters dynamically based on Semester
-        // Group by Semester (from Subject)
-        var semesterGroups = studentSubjects
-            .Where(ss => subjects.ContainsKey(ss.SubjectId))
-            .GroupBy(ss => subjects[ss.SubjectId].Semester ?? 0) // Default to Semester 0 if null
+        // 8. Build Chapters dynamically based on Semester
+        var semesterGroups = subjects.Values
+            .GroupBy(s => s.Semester ?? 0) // Default to Semester 0 for unassigned
             .OrderBy(g => g.Key)
             .ToList();
 
@@ -100,47 +124,53 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         foreach (var group in semesterGroups)
         {
             var semester = group.Key;
-            var chapterId = Guid.NewGuid(); // Virtual ID for UI stability
+            var chapterId = Guid.NewGuid();
 
             var chapterDto = new QuestChapterDto
             {
                 Id = chapterId,
                 Title = semester == 0 ? "Electives / Unassigned" : $"Semester {semester}",
                 Sequence = semester,
-                Status = "NotStarted" // Calculated below
+                Status = "NotStarted" // Will verify below
             };
 
-            foreach (var ss in group)
+            foreach (var subject in group)
             {
-                if (!subjects.TryGetValue(ss.SubjectId, out var subject)) continue;
-
                 // Is there a quest for this subject?
                 if (masterQuests.TryGetValue(subject.Id, out var masterQuest))
                 {
                     totalQuestsCount++;
-                    var attempt = attemptMap.GetValueOrDefault(masterQuest.Id);
+
+                    // Check for existing attempt (User progress on this quest)
+                    var attempt = attempts.GetValueOrDefault(masterQuest.Id);
+
+                    // Check for academic record (User grade for this subject)
+                    var studentRecord = studentRecords.GetValueOrDefault(subject.Id);
 
                     var questDto = new QuestSummaryDto
                     {
                         Id = masterQuest.Id,
-                        Title = masterQuest.Title, // e.g., "PRO192: Java Programming"
+                        Title = masterQuest.Title,
                         SubjectId = subject.Id,
 
-                        // Status logic: Check Attempt first, then fallback to NotStarted
-                        Status = attempt?.Status.ToString() ?? "NotStarted",
+                        // Status logic: Attempt > StudentRecord > NotStarted
+                        Status = attempt?.Status.ToString() ??
+                                 (studentRecord?.Status == SubjectEnrollmentStatus.Passed ? "Completed" : "NotStarted"),
 
-                        // Difficulty logic: Check Attempt first (Runtime Personalization), then Master Quest default
+                        // Difficulty logic:
+                        // 1. If Attempt exists, use its assigned difficulty (Lock-in)
+                        // 2. If Master Quest has default from sync, use it
+                        // 3. Fallback to Standard
                         ExpectedDifficulty = attempt?.AssignedDifficulty ?? masterQuest.ExpectedDifficulty ?? "Standard",
                         DifficultyReason = attempt?.Notes ?? masterQuest.DifficultyReason,
 
-                        // Recommendation logic
-                        IsRecommended = masterQuest.IsRecommended, // This might need per-user calculation if stored on Master
+                        IsRecommended = masterQuest.IsRecommended,
                         RecommendationReason = masterQuest.RecommendationReason,
 
-                        SubjectGrade = ss.Grade,
-                        SubjectStatus = ss.Status.ToString(),
+                        SubjectGrade = studentRecord?.Grade,
+                        SubjectStatus = studentRecord?.Status.ToString() ?? "NotStarted",
 
-                        LearningPathId = learningPath.Id,
+                        LearningPathId = learningPathId,
                         ChapterId = chapterId
                     };
 
@@ -159,7 +189,11 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     chapterDto.Status = "InProgress";
             }
 
-            chapterDtos.Add(chapterDto);
+            // Only add chapters that actually have quests
+            if (chapterDto.Quests.Any())
+            {
+                chapterDtos.Add(chapterDto);
+            }
         }
 
         var completionPercentage = totalQuestsCount > 0
@@ -168,9 +202,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
         return new LearningPathDto
         {
-            Id = learningPath.Id,
-            Name = learningPath.Name,
-            Description = learningPath.Description,
+            Id = learningPathId,
+            Name = learningPath?.Name ?? "My Academic Journey",
+            Description = learningPath?.Description ?? $"Personalized curriculum for {userProfile.Username}.",
             Chapters = chapterDtos,
             CompletionPercentage = completionPercentage
         };
