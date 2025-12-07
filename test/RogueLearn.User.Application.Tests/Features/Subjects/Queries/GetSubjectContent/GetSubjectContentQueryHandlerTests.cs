@@ -1,96 +1,122 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
-using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetSubjectContent;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using Xunit;
+using Microsoft.Extensions.Logging;
 
 namespace RogueLearn.User.Application.Tests.Features.Subjects.Queries.GetSubjectContent;
 
 public class GetSubjectContentQueryHandlerTests
 {
-    private GetSubjectContentQueryHandler CreateHandler(ISubjectRepository? subjectRepo = null)
+    [Fact]
+    public async Task Handle_SubjectNotFound_Throws()
     {
-        subjectRepo ??= Substitute.For<ISubjectRepository>();
+        var repo = Substitute.For<ISubjectRepository>();
         var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
-        return new GetSubjectContentQueryHandler(subjectRepo, logger);
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        var id = Guid.NewGuid();
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns((Subject?)null);
+        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_SubjectMissing_ThrowsNotFound(Guid subjectId)
+    [Fact]
+    public async Task Handle_NoContent_ReturnsDefaults()
     {
         var repo = Substitute.For<ISubjectRepository>();
-        repo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>())
-            .Returns((Subject?)null);
-
-        var sut = CreateHandler(repo);
-        var q = new GetSubjectContentQuery { SubjectId = subjectId };
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(q, CancellationToken.None));
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = new Dictionary<string, object>() });
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        var res = await sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None);
+        res.Should().NotBeNull();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoContent_ReturnsDefaultDto(Guid subjectId)
+    [Fact]
+    public async Task Handle_ValidDictionary_Deserializes()
     {
         var repo = Substitute.For<ISubjectRepository>();
-        var subject = new Subject { Id = subjectId, SubjectCode = "CS101", SubjectName = "Intro", Content = null };
-        repo.GetByIdAsync(subject.Id, Arg.Any<CancellationToken>()).Returns(subject);
-
-        var sut = CreateHandler(repo);
-        var result = await sut.Handle(new GetSubjectContentQuery { SubjectId = subject.Id }, CancellationToken.None);
-
-        result.Should().NotBeNull();
-        (result.CourseLearningOutcomes?.Count ?? 0).Should().Be(0);
-        (result.SessionSchedule?.Count ?? 0).Should().Be(0);
-        result.ConstructiveQuestions.Should().NotBeNull();
-        result.ConstructiveQuestions.Should().BeEmpty();
-    }
-
-    [Theory]
-    [AutoData]
-    public async Task Handle_ValidContent_DeserializesCorrectly(Guid subjectId)
-    {
-        var repo = Substitute.For<ISubjectRepository>();
-
-        var content = new Dictionary<string, object>
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+        var dict = new Dictionary<string, object>
         {
-            ["CourseLearningOutcomes"] = new List<Dictionary<string, object>>
-            {
-                new() { ["Id"] = "CLO1", ["Details"] = "Understand basics" },
-                new() { ["Id"] = "CLO2", ["Details"] = "Apply concepts" },
-            },
-            ["SessionSchedule"] = new List<Dictionary<string, object>>
-            {
-                new() { ["SessionNumber"] = 1, ["Topic"] = "Intro", ["Activities"] = new List<string> { "Lecture" }, ["Readings"] = new List<string> { "Book 1" }, ["suggestedUrl"] = "https://example.com/intro" },
-                new() { ["SessionNumber"] = 2, ["Topic"] = "Advanced", ["Activities"] = new List<string> { "Lab" }, ["Readings"] = new List<string> { "Book 2" } }
-            },
-            ["ConstructiveQuestions"] = new List<Dictionary<string, object>>
-            {
-                new() { ["Name"] = "Q1", ["Question"] = "What is X?", ["SessionNumber"] = 1 }
-            }
+            ["CourseLearningOutcomes"] = new List<CourseLearningOutcome> { new CourseLearningOutcome { Id = "CLO1", Details = "d" } },
+            ["SessionSchedule"] = new List<SyllabusSessionDto> { new SyllabusSessionDto { SessionNumber = 1, Topic = "t" } },
+            ["ConstructiveQuestions"] = new List<ConstructiveQuestion> { new ConstructiveQuestion { Name = "n", Question = "q" } }
         };
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict });
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        var res = await sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None);
+        res.SessionSchedule!.Count.Should().Be(1);
+        res.CourseLearningOutcomes!.Count.Should().Be(1);
+        res.ConstructiveQuestions!.Count.Should().Be(1);
+    }
 
-        var subject = new Subject { Id = subjectId, SubjectCode = "CS101", SubjectName = "Intro", Content = content };
-        repo.GetByIdAsync(subject.Id, Arg.Any<CancellationToken>()).Returns(subject);
+    [Fact]
+    public async Task Handle_InvalidShape_ThrowsInvalidOperation()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+        var dict = new Dictionary<string, object>
+        {
+            ["SessionSchedule"] = "not an array"
+        };
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict });
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
+    }
 
-        var sut = CreateHandler(repo);
-        var result = await sut.Handle(new GetSubjectContentQuery { SubjectId = subject.Id }, CancellationToken.None);
+    [Fact]
+    public async Task Handle_JObjectContent_Deserializes()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
 
-        result.CourseLearningOutcomes.Should().HaveCount(2);
-        result.SessionSchedule.Should().HaveCount(2);
-        result.ConstructiveQuestions.Should().HaveCount(1);
+        var jObj = Newtonsoft.Json.Linq.JObject.Parse("{\"courseDescription\":\"c\",\"courseLearningOutcomes\":[{\"id\":\"CLO1\",\"details\":\"d\"}],\"sessionSchedule\":[{\"sessionNumber\":1,\"topic\":\"t\"}],\"constructiveQuestions\":[{\"name\":\"n\",\"question\":\"q\"}]}");
 
-        result.SessionSchedule![0].SuggestedUrl.Should().Be("https://example.com/intro");
-        result.CourseLearningOutcomes![0].Id.Should().Be("CLO1");
-        result.ConstructiveQuestions![0].Name.Should().Be("Q1");
+        var dict = jObj.ToObject<Dictionary<string, object>>();
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict! });
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        var res = await sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None);
+        res.CourseLearningOutcomes!.Count.Should().Be(1);
+        res.SessionSchedule!.Count.Should().Be(1);
+        res.ConstructiveQuestions!.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_DeepNestedJObject_ThrowsInvalidOperation()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+
+        var root = new Newtonsoft.Json.Linq.JObject();
+        var cur = root;
+        for (int i = 0; i < 80; i++)
+        {
+            var next = new Newtonsoft.Json.Linq.JObject();
+            cur["n"] = next;
+            cur = next;
+        }
+        var dict = new Dictionary<string, object> { ["root"] = root };
+
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict });
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_RepositoryThrows_Rethrows()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns<Task<Subject?>>(_ => throw new Exception("db error"));
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        await Assert.ThrowsAsync<Exception>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
     }
 }

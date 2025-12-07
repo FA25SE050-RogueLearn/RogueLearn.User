@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.QuestProgress.Queries.GetUserProgressForQuest;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.QuestProgress.Queries.GetUs
 
 public class GetUserProgressForQuestQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoAttempt_ReturnsNotStarted(GetUserProgressForQuestQuery query)
+    [Fact]
+    public async Task Handle_NoAttempt_ReturnsNotStarted()
     {
+        var query = new GetUserProgressForQuestQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid() };
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var sut = new GetUserProgressForQuestQueryHandler(attemptRepo, stepRepo);
@@ -31,10 +30,10 @@ public class GetUserProgressForQuestQueryHandlerTests
         result.StepStatuses.Should().BeEmpty();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_WithAttempt_ReturnsStatuses(GetUserProgressForQuestQuery query)
+    [Fact]
+    public async Task Handle_WithAttempt_ReturnsStatuses()
     {
+        var query = new GetUserProgressForQuestQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid() };
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var sut = new GetUserProgressForQuestQueryHandler(attemptRepo, stepRepo);

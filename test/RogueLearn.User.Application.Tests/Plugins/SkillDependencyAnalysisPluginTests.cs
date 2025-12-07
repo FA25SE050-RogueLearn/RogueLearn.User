@@ -45,4 +45,14 @@ public class SkillDependencyAnalysisPluginTests
         var cleaned = (string)m!.Invoke(null, new object[] { raw })!;
         cleaned.Should().Be("[ { \"skillName\": \"X\", \"prerequisiteSkillName\": \"Y\", \"reasoning\": \"z\" } ]");
     }
+
+    [Fact]
+    public void Defaults_Are_Set_Correctly()
+    {
+        var m = new SkillDependencyAnalysis();
+        m.SkillName.Should().BeEmpty();
+        m.PrerequisiteSkillName.Should().BeEmpty();
+        m.RelationshipType.Should().Be("Prerequisite");
+        m.Reasoning.Should().BeEmpty();
+    }
 }

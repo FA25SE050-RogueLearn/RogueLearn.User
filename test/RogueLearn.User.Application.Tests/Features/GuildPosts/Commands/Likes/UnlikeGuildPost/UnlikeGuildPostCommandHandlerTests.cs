@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.Likes.UnlikeGuildPost;
@@ -12,10 +11,10 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Commands.Likes.U
 
 public class UnlikeGuildPostCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotMember_Throws(UnlikeGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_NotMember_Throws()
     {
+        var cmd = new UnlikeGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var likeRepo = Substitute.For<IGuildPostLikeRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
@@ -25,10 +24,10 @@ public class UnlikeGuildPostCommandHandlerTests
         await Assert.ThrowsAsync<UnauthorizedException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoExisting_Returns(UnlikeGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_NoExisting_Returns()
     {
+        var cmd = new UnlikeGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var likeRepo = Substitute.For<IGuildPostLikeRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
@@ -43,10 +42,10 @@ public class UnlikeGuildPostCommandHandlerTests
         await likeRepo.DidNotReceive().DeleteAsync(Arg.Any<System.Guid>(), Arg.Any<CancellationToken>());
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Locked_Throws(UnlikeGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_Locked_Throws()
     {
+        var cmd = new UnlikeGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var likeRepo = Substitute.For<IGuildPostLikeRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
@@ -57,10 +56,10 @@ public class UnlikeGuildPostCommandHandlerTests
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_RemovesLikeAndDecrements(UnlikeGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_Success_RemovesLikeAndDecrements()
     {
+        var cmd = new UnlikeGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var likeRepo = Substitute.For<IGuildPostLikeRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();

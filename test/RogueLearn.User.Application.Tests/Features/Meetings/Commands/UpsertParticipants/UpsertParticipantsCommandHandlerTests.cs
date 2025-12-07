@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
@@ -16,22 +15,20 @@ namespace RogueLearn.User.Application.Tests.Features.Meetings.Commands.UpsertPar
 
 public class UpsertParticipantsCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_MissingIdentity_Throws(UpsertParticipantsCommand cmd)
+    [Fact]
+    public async Task Handle_MissingIdentity_Throws()
     {
         var repo = Substitute.For<IMeetingParticipantRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new UpsertParticipantsCommandHandler(repo, mapper);
 
         var participants = new List<MeetingParticipantDto> { new() { DisplayName = "" } };
-        cmd = new UpsertParticipantsCommand(Guid.NewGuid(), participants);
+        var cmd = new UpsertParticipantsCommand(Guid.NewGuid(), participants);
         await Assert.ThrowsAsync<UnprocessableEntityException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_AddsAndUpdates(UpsertParticipantsCommand cmd)
+    [Fact]
+    public async Task Handle_AddsAndUpdates()
     {
         var repo = Substitute.For<IMeetingParticipantRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
@@ -40,7 +37,7 @@ public class UpsertParticipantsCommandHandlerTests
         var p1 = new MeetingParticipantDto { UserId = Guid.NewGuid(), RoleInMeeting = "Attendee" };
         var p2 = new MeetingParticipantDto { ParticipantId = Guid.NewGuid(), DisplayName = "Someone", RoleInMeeting = "Host" };
         var list = new List<MeetingParticipantDto> { p1, p2 };
-        cmd = new UpsertParticipantsCommand(Guid.NewGuid(), list);
+        var cmd = new UpsertParticipantsCommand(Guid.NewGuid(), list);
 
         var e1 = new MeetingParticipant { ParticipantId = Guid.NewGuid(), UserId = p1.UserId, RoleInMeeting = p1.RoleInMeeting };
         var e2 = new MeetingParticipant { ParticipantId = p2.ParticipantId, DisplayName = p2.DisplayName, RoleInMeeting = p2.RoleInMeeting };

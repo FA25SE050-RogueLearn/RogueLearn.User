@@ -30,7 +30,7 @@ public record CreateGuildPostRequest
     public IReadOnlyList<GuildPostImageUpload>? Images { get; init; }
 }
 
-public record CreateGuildPostResponse
+public class CreateGuildPostResponse
 {
     public Guid PostId { get; init; }
 }

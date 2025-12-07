@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.ClassSpecialization.Command
 
 public class AddSpecializationSubjectCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ClassMissing_Throws(AddSpecializationSubjectCommand cmd)
+    [Fact]
+    public async Task Handle_ClassMissing_Throws()
     {
+        var cmd = new AddSpecializationSubjectCommand { ClassId = System.Guid.NewGuid(), SubjectId = System.Guid.NewGuid(), Semester = 1, PlaceholderSubjectCode = "CODE" };
         var repo = Substitute.For<IClassSpecializationSubjectRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
@@ -30,10 +29,10 @@ public class AddSpecializationSubjectCommandHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_SubjectMissing_Throws(AddSpecializationSubjectCommand cmd)
+    [Fact]
+    public async Task Handle_SubjectMissing_Throws()
     {
+        var cmd = new AddSpecializationSubjectCommand { ClassId = System.Guid.NewGuid(), SubjectId = System.Guid.NewGuid(), Semester = 1, PlaceholderSubjectCode = "CODE" };
         var repo = Substitute.For<IClassSpecializationSubjectRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
@@ -46,10 +45,10 @@ public class AddSpecializationSubjectCommandHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Duplicate_Throws(AddSpecializationSubjectCommand cmd)
+    [Fact]
+    public async Task Handle_Duplicate_Throws()
     {
+        var cmd = new AddSpecializationSubjectCommand { ClassId = System.Guid.NewGuid(), SubjectId = System.Guid.NewGuid(), Semester = 1, PlaceholderSubjectCode = "CODE" };
         var repo = Substitute.For<IClassSpecializationSubjectRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
@@ -63,10 +62,10 @@ public class AddSpecializationSubjectCommandHandlerTests
         await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsDto(AddSpecializationSubjectCommand cmd)
+    [Fact]
+    public async Task Handle_Success_ReturnsDto()
     {
+        var cmd = new AddSpecializationSubjectCommand { ClassId = System.Guid.NewGuid(), SubjectId = System.Guid.NewGuid(), Semester = 1, PlaceholderSubjectCode = "CODE" };
         var repo = Substitute.For<IClassSpecializationSubjectRepository>();
         var classRepo = Substitute.For<IClassRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();

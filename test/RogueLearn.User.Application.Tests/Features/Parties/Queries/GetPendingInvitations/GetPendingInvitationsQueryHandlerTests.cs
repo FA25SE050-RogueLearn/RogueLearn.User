@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.DTOs;
@@ -16,10 +15,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Queries.GetPendingI
 
 public class GetPendingInvitationsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMapped(GetPendingInvitationsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMapped()
     {
+        var query = new GetPendingInvitationsQuery(System.Guid.NewGuid());
         var invRepo = Substitute.For<IPartyInvitationRepository>();
         var partyRepo = Substitute.For<IPartyRepository>();
         var profileRepo = Substitute.For<IUserProfileRepository>();

@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyJoinRequests;
@@ -15,15 +14,14 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Queries.GetMyJoinReq
 
 public class GetMyJoinRequestsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_PendingOnly_Filters(GetMyJoinRequestsQuery query)
+    [Fact]
+    public async Task Handle_PendingOnly_Filters()
     {
         var joinRepo = Substitute.For<IGuildJoinRequestRepository>();
         var profileRepo = Substitute.For<IUserProfileRepository>();
         var sut = new GetMyJoinRequestsQueryHandler(joinRepo, profileRepo);
 
-        query = new GetMyJoinRequestsQuery(query.AuthUserId, true);
+        var query = new GetMyJoinRequestsQuery(System.Guid.NewGuid(), true);
         var list = new List<GuildJoinRequest> {
             new() { Id = System.Guid.NewGuid(), GuildId = System.Guid.NewGuid(), RequesterId = query.AuthUserId, Status = GuildJoinRequestStatus.Pending },
             new() { Id = System.Guid.NewGuid(), GuildId = System.Guid.NewGuid(), RequesterId = query.AuthUserId, Status = GuildJoinRequestStatus.Accepted }

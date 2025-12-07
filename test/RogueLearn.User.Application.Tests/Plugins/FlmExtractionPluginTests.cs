@@ -1,4 +1,5 @@
 using System.Threading;
+using System.Reflection;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -31,5 +32,15 @@ public class FlmExtractionPluginTests
 
         var result = await sut.ExtractSyllabusJsonAsync("text", CancellationToken.None);
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CleanToJson_StripsFencesAndExtractsObject()
+    {
+        var raw = "```json\n{ \"syllabusId\": 1, \"subjectCode\": \"X\" }\n```";
+        var m = typeof(FlmExtractionPlugin).GetMethod("CleanToJson", BindingFlags.NonPublic | BindingFlags.Static);
+        var cleaned = (string)m!.Invoke(null, new object[] { raw })!;
+        cleaned.Should().StartWith("{").And.EndWith("}");
+        cleaned.Should().Contain("syllabusId");
     }
 }

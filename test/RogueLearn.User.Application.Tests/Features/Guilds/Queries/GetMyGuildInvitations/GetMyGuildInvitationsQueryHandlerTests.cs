@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyGuildInvitations;
@@ -15,16 +14,15 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Queries.GetMyGuildIn
 
 public class GetMyGuildInvitationsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMappedAndFilters(GetMyGuildInvitationsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMappedAndFilters()
     {
         var invRepo = Substitute.For<IGuildInvitationRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
         var profileRepo = Substitute.For<IUserProfileRepository>();
         var sut = new GetMyGuildInvitationsQueryHandler(invRepo, guildRepo, profileRepo);
 
-        query = new GetMyGuildInvitationsQuery(query.AuthUserId, true);
+        var query = new GetMyGuildInvitationsQuery(System.Guid.NewGuid(), true);
         var invs = new List<GuildInvitation> {
             new() { Id = System.Guid.NewGuid(), GuildId = System.Guid.NewGuid(), InviteeId = query.AuthUserId, Status = InvitationStatus.Pending },
             new() { Id = System.Guid.NewGuid(), GuildId = System.Guid.NewGuid(), InviteeId = query.AuthUserId, Status = InvitationStatus.Accepted }

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,14 +14,14 @@ namespace RogueLearn.User.Application.Tests.Features.Achievements.Queries.GetUse
 
 public class GetUserAchievementsByAuthIdQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_SkipsMissingAchievements(GetUserAchievementsByAuthIdQuery query)
+    [Fact]
+    public async Task Handle_SkipsMissingAchievements()
     {
         var uaRepo = Substitute.For<IUserAchievementRepository>();
         var achRepo = Substitute.For<IAchievementRepository>();
         var logger = Substitute.For<ILogger<GetUserAchievementsByAuthIdQueryHandler>>();
 
+        var query = new GetUserAchievementsByAuthIdQuery { AuthUserId = Guid.NewGuid() };
         var ua1 = new UserAchievement { AchievementId = Guid.NewGuid(), AuthUserId = query.AuthUserId, EarnedAt = DateTimeOffset.UtcNow };
         var ua2 = new UserAchievement { AchievementId = Guid.NewGuid(), AuthUserId = query.AuthUserId, EarnedAt = DateTimeOffset.UtcNow };
         uaRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserAchievement, bool>>>(), Arg.Any<CancellationToken>())

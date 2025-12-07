@@ -13,18 +13,18 @@ public record GuildPostCommentDto
     public DateTimeOffset UpdatedAt { get; init; }
 }
 
-public record CreateGuildPostCommentRequest
+public class CreateGuildPostCommentRequest
 {
     public string Content { get; init; } = string.Empty;
     public Guid? ParentCommentId { get; init; }
 }
 
-public record CreateGuildPostCommentResponse
+public class CreateGuildPostCommentResponse
 {
     public Guid CommentId { get; init; }
 }
 
-public record EditGuildPostCommentRequest
+public class EditGuildPostCommentRequest
 {
     public string Content { get; init; } = string.Empty;
 }

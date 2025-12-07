@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -15,14 +14,14 @@ namespace RogueLearn.User.Application.Tests.Features.Achievements.Commands.Updat
 
 public class UpdateAchievementCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(UpdateAchievementCommand command)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var validator = new UpdateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<UpdateAchievementCommandHandler>>();
+        var command = new UpdateAchievementCommand { Id = Guid.NewGuid() };
 
         repo.GetByIdAsync(command.Id, Arg.Any<CancellationToken>()).Returns((Achievement?)null);
 
@@ -39,14 +38,14 @@ public class UpdateAchievementCommandHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(command, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_KeyConflictOnChange_Throws(UpdateAchievementCommand command)
+    [Fact]
+    public async Task Handle_KeyConflictOnChange_Throws()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var validator = new UpdateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<UpdateAchievementCommandHandler>>();
+        var command = new UpdateAchievementCommand { Id = Guid.NewGuid(), Key = "old-key" };
 
         var existing = new Achievement { Id = command.Id, Key = "old-key", Name = "n" };
         repo.GetByIdAsync(command.Id, Arg.Any<CancellationToken>()).Returns(existing);
@@ -65,14 +64,14 @@ public class UpdateAchievementCommandHandlerTests
         await Assert.ThrowsAsync<ConflictException>(() => sut.Handle(command, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_InvalidRuleConfigArray_Throws(UpdateAchievementCommand command)
+    [Fact]
+    public async Task Handle_InvalidRuleConfigArray_Throws()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var validator = new UpdateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<UpdateAchievementCommandHandler>>();
+        var command = new UpdateAchievementCommand { Id = Guid.NewGuid(), Key = Guid.NewGuid().ToString() };
 
         var existing = new Achievement { Id = command.Id, Key = command.Key, Name = "n" };
         repo.GetByIdAsync(command.Id, Arg.Any<CancellationToken>()).Returns(existing);
@@ -91,14 +90,14 @@ public class UpdateAchievementCommandHandlerTests
         await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.ValidationException>(() => sut.Handle(command, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsResponse(UpdateAchievementCommand command)
+    [Fact]
+    public async Task Handle_Success_ReturnsResponse()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var validator = new UpdateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<UpdateAchievementCommandHandler>>();
+        var command = new UpdateAchievementCommand { Id = Guid.NewGuid(), Key = Guid.NewGuid().ToString() };
 
         var existing = new Achievement { Id = command.Id, Key = command.Key, Name = "n" };
         var updated = new Achievement { Id = command.Id, Key = command.Key, Name = command.Name };
@@ -123,14 +122,14 @@ public class UpdateAchievementCommandHandlerTests
         await repo.Received(1).UpdateAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>());
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_RuleConfigNull_SetsNullAndPersists(UpdateAchievementCommand command)
+    [Fact]
+    public async Task Handle_RuleConfigNull_SetsNullAndPersists()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var validator = new UpdateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<UpdateAchievementCommandHandler>>();
+        var command = new UpdateAchievementCommand { Id = Guid.NewGuid(), Key = Guid.NewGuid().ToString() };
 
         var existing = new Achievement { Id = command.Id, Key = command.Key, Name = "n" };
         var updated = new Achievement { Id = command.Id, Key = command.Key, Name = command.Name, Version = 1 };

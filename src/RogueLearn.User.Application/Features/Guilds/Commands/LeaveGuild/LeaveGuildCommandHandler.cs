@@ -13,15 +13,6 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
     private readonly IRoleRepository _roleRepository;
     private readonly IGuildNotificationService? _notificationService;
 
-    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository)
-    {
-        _memberRepository = memberRepository;
-        _guildRepository = guildRepository;
-        _userRoleRepository = null!;
-        _roleRepository = null!;
-        _notificationService = null;
-    }
-
     public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository, IGuildNotificationService notificationService)
     {
         _memberRepository = memberRepository;

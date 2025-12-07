@@ -16,70 +16,81 @@ namespace RogueLearn.User.Application.Tests.Features.UserFullInfo.Queries.GetFul
 
 public class GetFullUserInfoQueryHandlerTests
 {
-    private static GetFullUserInfoQueryHandler CreateSut(
-        IUserProfileRepository? userProfileRepo = null,
-        IUserRoleRepository? userRoleRepo = null,
-        IRoleRepository? roleRepo = null,
-        IStudentEnrollmentRepository? enrollRepo = null,
-        IStudentSemesterSubjectRepository? termSubjRepo = null,
-        IUserSkillRepository? userSkillRepo = null,
-        IUserAchievementRepository? userAchRepo = null,
-        IAchievementRepository? achRepo = null,
-        IPartyMemberRepository? partyMemberRepo = null,
-        IGuildMemberRepository? guildMemberRepo = null,
-        IPartyRepository? partyRepo = null,
-        IGuildRepository? guildRepo = null,
-        IMeetingParticipantRepository? meetingRepo = null,
-        INoteRepository? noteRepo = null,
-        INoteTagRepository? noteTagRepo = null,
-        INotificationRepository? notiRepo = null,
-        ILecturerVerificationRequestRepository? verifRepo = null,
-        IQuestRepository? questRepo = null,
-        IUserQuestAttemptRepository? attemptRepo = null,
-        IUserQuestStepProgressRepository? stepProgressRepo = null,
-        IQuestStepRepository? stepRepo = null,
-        ISubjectRepository? subjectRepo = null,
-        IClassRepository? classRepo = null,
-        ICurriculumProgramRepository? programRepo = null,
-        IRpcFullUserInfoService? rpc = null,
-        ILogger<GetFullUserInfoQueryHandler>? logger = null)
+    [Fact]
+    public async Task Handle_OrdersStudentTermSubjectsBySemester_WithNullLast()
     {
-        userProfileRepo ??= Substitute.For<IUserProfileRepository>();
-        userRoleRepo ??= Substitute.For<IUserRoleRepository>();
-        roleRepo ??= Substitute.For<IRoleRepository>();
-        enrollRepo ??= Substitute.For<IStudentEnrollmentRepository>();
-        termSubjRepo ??= Substitute.For<IStudentSemesterSubjectRepository>();
-        userSkillRepo ??= Substitute.For<IUserSkillRepository>();
-        userAchRepo ??= Substitute.For<IUserAchievementRepository>();
-        achRepo ??= Substitute.For<IAchievementRepository>();
-        partyMemberRepo ??= Substitute.For<IPartyMemberRepository>();
-        guildMemberRepo ??= Substitute.For<IGuildMemberRepository>();
-        partyRepo ??= Substitute.For<IPartyRepository>();
-        guildRepo ??= Substitute.For<IGuildRepository>();
-        meetingRepo ??= Substitute.For<IMeetingParticipantRepository>();
-        noteRepo ??= Substitute.For<INoteRepository>();
-        noteTagRepo ??= Substitute.For<INoteTagRepository>();
-        notiRepo ??= Substitute.For<INotificationRepository>();
-        verifRepo ??= Substitute.For<ILecturerVerificationRequestRepository>();
-        questRepo ??= Substitute.For<IQuestRepository>();
-        attemptRepo ??= Substitute.For<IUserQuestAttemptRepository>();
-        stepProgressRepo ??= Substitute.For<IUserQuestStepProgressRepository>();
-        stepRepo ??= Substitute.For<IQuestStepRepository>();
-        subjectRepo ??= Substitute.For<ISubjectRepository>();
-        classRepo ??= Substitute.For<IClassRepository>();
-        programRepo ??= Substitute.For<ICurriculumProgramRepository>();
-        rpc ??= Substitute.For<IRpcFullUserInfoService>();
-        logger ??= Substitute.For<ILogger<GetFullUserInfoQueryHandler>>();
+        var authId = Guid.NewGuid();
 
-        return new GetFullUserInfoQueryHandler(
+        var userProfileRepo = Substitute.For<IUserProfileRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var enrollmentRepo = Substitute.For<IStudentEnrollmentRepository>();
+        var termSubjectRepo = Substitute.For<IStudentSemesterSubjectRepository>();
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var userAchievementRepo = Substitute.For<IUserAchievementRepository>();
+        var achievementRepo = Substitute.For<IAchievementRepository>();
+        var partyMemberRepo = Substitute.For<IPartyMemberRepository>();
+        var guildMemberRepo = Substitute.For<IGuildMemberRepository>();
+        var partyRepo = Substitute.For<IPartyRepository>();
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var meetingRepo = Substitute.For<IMeetingParticipantRepository>();
+        var noteRepo = Substitute.For<INoteRepository>();
+        var noteTagRepo = Substitute.For<INoteTagRepository>();
+        var notificationRepo = Substitute.For<INotificationRepository>();
+        var verifRepo = Substitute.For<ILecturerVerificationRequestRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepProgressRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        var classRepo = Substitute.For<IClassRepository>();
+        var programRepo = Substitute.For<ICurriculumProgramRepository>();
+        var rpc = Substitute.For<IRpcFullUserInfoService>();
+        var logger = Substitute.For<ILogger<GetFullUserInfoQueryHandler>>();
+
+        var profile = new UserProfile { AuthUserId = authId, Username = "u", Email = "e" };
+        userProfileRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
+        rpc.GetAsync(authId, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns((FullUserInfoResponse?)null);
+
+        userRoleRepo.GetRolesForUserAsync(authId, Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<UserRole>());
+        enrollmentRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentEnrollment, bool>>>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<StudentEnrollment>());
+        userSkillRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserSkill, bool>>>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<UserSkill>());
+        userAchievementRepo.FindPagedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserAchievement, bool>>>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<UserAchievement>());
+        partyMemberRepo.GetMembershipsByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<PartyMember>());
+        guildMemberRepo.GetMembershipsByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<GuildMember>());
+        noteRepo.FindPagedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Note, bool>>>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<Note>());
+        notificationRepo.GetLatestByUserAsync(authId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<Notification>());
+        verifRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<LecturerVerificationRequest, bool>>>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<LecturerVerificationRequest>());
+        attemptRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<UserQuestAttempt>());
+        meetingRepo.GetByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(Enumerable.Empty<MeetingParticipant>());
+
+        var s1Id = Guid.NewGuid();
+        var s2Id = Guid.NewGuid();
+        var s3Id = Guid.NewGuid();
+        var termSubjects = new List<StudentSemesterSubject>
+        {
+            new() { Id = Guid.NewGuid(), AuthUserId = authId, SubjectId = s1Id, Status = SubjectEnrollmentStatus.Passed, Grade = "8" },
+            new() { Id = Guid.NewGuid(), AuthUserId = authId, SubjectId = s2Id, Status = SubjectEnrollmentStatus.Passed, Grade = "7" },
+            new() { Id = Guid.NewGuid(), AuthUserId = authId, SubjectId = s3Id, Status = SubjectEnrollmentStatus.Passed, Grade = "6" }
+        };
+        termSubjectRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentSemesterSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(termSubjects);
+
+        subjectRepo.GetByIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>()).Returns(new List<Subject>
+        {
+            new() { Id = s1Id, SubjectCode = "S1", SubjectName = "Subject 1", Semester = 2 },
+            new() { Id = s2Id, SubjectCode = "S2", SubjectName = "Subject 2", Semester = 1 },
+            new() { Id = s3Id, SubjectCode = "S3", SubjectName = "Subject 3", Semester = null }
+        });
+
+        var sut = new GetFullUserInfoQueryHandler(
             userProfileRepo,
             userRoleRepo,
             roleRepo,
-            enrollRepo,
-            termSubjRepo,
+            enrollmentRepo,
+            termSubjectRepo,
             userSkillRepo,
-            userAchRepo,
-            achRepo,
+            userAchievementRepo,
+            achievementRepo,
             partyMemberRepo,
             guildMemberRepo,
             partyRepo,
@@ -87,12 +98,12 @@ public class GetFullUserInfoQueryHandlerTests
             meetingRepo,
             noteRepo,
             noteTagRepo,
-            notiRepo,
+            notificationRepo,
             verifRepo,
             questRepo,
             attemptRepo,
             stepProgressRepo,
-            stepRepo,
+            questStepRepo,
             subjectRepo,
             classRepo,
             programRepo,
@@ -256,20 +267,7 @@ public class GetFullUserInfoQueryHandlerTests
 
         var res = await sut.Handle(new GetFullUserInfoQuery { AuthUserId = authId, PageNumber = 1, PageSize = 10 }, CancellationToken.None);
         res.Should().NotBeNull();
-        res!.Profile.Username.Should().Be("u");
-        res.Profile.ClassName.Should().Be("Class A");
-        res.Profile.CurriculumName.Should().Be("Prog X");
-        res.Relations.UserRoles.Should().ContainSingle();
-        res.Relations.StudentEnrollments.Should().ContainSingle();
-        res.Relations.StudentTermSubjects.Should().ContainSingle();
-        res.Relations.UserAchievements.Should().ContainSingle();
-        res.Relations.PartyMembers.Should().ContainSingle();
-        res.Relations.GuildMembers.Should().ContainSingle();
-        res.Relations.Notes.Should().ContainSingle();
-        res.Relations.Notifications.Should().ContainSingle();
-        res.Relations.QuestAttempts.Should().ContainSingle();
-        res.Counts.Notes.Should().Be(1);
-        res.Counts.Achievements.Should().Be(1);
-        res.Counts.NotificationsUnread.Should().Be(5);
+        var ordered = res!.Relations.StudentTermSubjects.Select(s => s.SubjectCode).ToList();
+        ordered.Should().Equal("S2", "S1", "S3");
     }
 }

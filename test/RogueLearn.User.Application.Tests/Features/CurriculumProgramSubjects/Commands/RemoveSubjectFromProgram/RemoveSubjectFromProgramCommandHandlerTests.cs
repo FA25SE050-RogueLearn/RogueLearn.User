@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using RogueLearn.User.Application.Features.CurriculumProgramSubjects.Commands.RemoveSubjectFromProgram;
@@ -20,9 +19,8 @@ public class RemoveSubjectFromProgramCommandHandlerTests
         return new RemoveSubjectFromProgramCommandHandler(mappingRepo, logger);
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_MappingMissing_IsIdempotent(Guid programId, Guid subjectId)
+    [Fact]
+    public async Task Handle_MappingMissing_IsIdempotent()
     {
         var mappingRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
         mappingRepo.FirstOrDefaultAsync(
@@ -31,17 +29,18 @@ public class RemoveSubjectFromProgramCommandHandlerTests
             .Returns((CurriculumProgramSubject?)null);
 
         var sut = CreateHandler(mappingRepo);
-        var cmd = new RemoveSubjectFromProgramCommand { ProgramId = programId, SubjectId = subjectId };
+        var cmd = new RemoveSubjectFromProgramCommand { ProgramId = Guid.NewGuid(), SubjectId = Guid.NewGuid() };
         await sut.Handle(cmd, CancellationToken.None);
 
         await mappingRepo.DidNotReceive().DeleteAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_MappingExists_Deletes(Guid programId, Guid subjectId)
+    [Fact]
+    public async Task Handle_MappingExists_Deletes()
     {
         var mappingRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
+        var programId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
         var mapping = new CurriculumProgramSubject { ProgramId = programId, SubjectId = subjectId, Id = Guid.NewGuid() };
         mappingRepo.FirstOrDefaultAsync(
                 Arg.Any<System.Linq.Expressions.Expression<Func<CurriculumProgramSubject, bool>>>(),

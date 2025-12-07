@@ -12,22 +12,6 @@ public class TransferGuildLeadershipCommandHandler : IRequestHandler<TransferGui
     private readonly IRoleRepository _roleRepository;
     private readonly IGuildNotificationService? _notificationService;
 
-    public TransferGuildLeadershipCommandHandler(IGuildMemberRepository memberRepository)
-    {
-        _memberRepository = memberRepository;
-        _userRoleRepository = null!;
-        _roleRepository = null!;
-        _notificationService = null;
-    }
-
-    public TransferGuildLeadershipCommandHandler(IGuildMemberRepository memberRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository)
-    {
-        _memberRepository = memberRepository;
-        _userRoleRepository = userRoleRepository;
-        _roleRepository = roleRepository;
-        _notificationService = null;
-    }
-
     public TransferGuildLeadershipCommandHandler(IGuildMemberRepository memberRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository, IGuildNotificationService notificationService)
     {
         _memberRepository = memberRepository;

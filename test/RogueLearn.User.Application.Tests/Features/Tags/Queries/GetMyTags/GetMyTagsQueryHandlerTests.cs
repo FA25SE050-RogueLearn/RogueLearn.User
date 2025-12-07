@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -16,14 +15,14 @@ namespace RogueLearn.User.Application.Tests.Features.Tags.Queries.GetMyTags;
 
 public class GetMyTagsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsFiltered(Guid authUserId)
+    [Fact]
+    public async Task Handle_ReturnsFiltered()
     {
         var repo = Substitute.For<ITagRepository>();
         var logger = Substitute.For<ILogger<GetMyTagsQueryHandler>>();
         var sut = new GetMyTagsQueryHandler(repo, logger);
 
+        var authUserId = Guid.NewGuid();
         var tags = new List<Tag>
         {
             new() { Id = Guid.NewGuid(), AuthUserId = authUserId, Name = "Alpha" },

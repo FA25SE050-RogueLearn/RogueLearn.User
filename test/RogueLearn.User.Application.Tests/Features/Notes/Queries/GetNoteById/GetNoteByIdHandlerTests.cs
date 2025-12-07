@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.Notes.Queries.GetNoteById;
 
 public class GetNoteByIdHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_ReturnsNull(Guid noteId)
+    [Fact]
+    public async Task Handle_NotFound_ReturnsNull()
     {
+        var noteId = Guid.NewGuid();
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
@@ -30,10 +29,10 @@ public class GetNoteByIdHandlerTests
         result.Should().BeNull();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Found_ReturnsDto(Guid noteId)
+    [Fact]
+    public async Task Handle_Found_ReturnsDto()
     {
+        var noteId = Guid.NewGuid();
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();

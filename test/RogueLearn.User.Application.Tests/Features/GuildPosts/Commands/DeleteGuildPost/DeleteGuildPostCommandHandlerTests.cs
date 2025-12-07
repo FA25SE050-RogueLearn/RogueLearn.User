@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.GuildPosts.Commands.DeleteGuildPost;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Commands.DeleteG
 
 public class DeleteGuildPostCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_WrongAuthor_Throws(DeleteGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_WrongAuthor_Throws()
     {
+        var cmd = new DeleteGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new DeleteGuildPostCommandHandler(postRepo, storage);
@@ -28,10 +27,10 @@ public class DeleteGuildPostCommandHandlerTests
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Locked_Throws(DeleteGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_Locked_Throws()
     {
+        var cmd = new DeleteGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new DeleteGuildPostCommandHandler(postRepo, storage);
@@ -41,10 +40,10 @@ public class DeleteGuildPostCommandHandlerTests
         await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_WithImages_DeletesAndCallsRepo(DeleteGuildPostCommand cmd)
+    [Fact]
+    public async Task Handle_WithImages_DeletesAndCallsRepo()
     {
+        var cmd = new DeleteGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var storage = Substitute.For<IGuildPostImageStorage>();
         var sut = new DeleteGuildPostCommandHandler(postRepo, storage);

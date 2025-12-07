@@ -19,4 +19,28 @@ public class FullUserInfoSocialResponseTests
         res.Relations.UserRoles.Count.Should().Be(1);
         res.Counts.Should().NotBeNull();
     }
+
+    [Fact]
+    public void AuthSection_SetsFields()
+    {
+        var query = new AuthSection
+        {
+            Id = Guid.NewGuid(),
+            Email = "email@example.com",
+            CreatedAt = DateTimeOffset.UtcNow,
+            EmailVerified = true,
+            LastSignInAt = DateTimeOffset.UtcNow,
+            UserMetadata = new Dictionary<string, object>
+            {
+                ["FullName"] = "Full Name",
+                ["AvatarUrl"] = "avatar.jpg",
+            },
+        };
+        query.Id.Should().Be(query.Id);
+        query.Email.Should().Be(query.Email);
+        query.CreatedAt.Should().Be(query.CreatedAt);
+        query.EmailVerified.Should().Be(query.EmailVerified);
+        query.LastSignInAt.Should().Be(query.LastSignInAt);
+        query.UserMetadata.Should().BeEquivalentTo(query.UserMetadata);
+    }
 }

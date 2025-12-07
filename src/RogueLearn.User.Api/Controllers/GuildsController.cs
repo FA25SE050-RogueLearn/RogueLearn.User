@@ -54,8 +54,14 @@ public class GuildsController : ControllerBase
     public async Task<IActionResult> CreateGuild([FromBody] CreateGuildCommand command, CancellationToken cancellationToken = default)
     {
         var authUserId = User.GetAuthUserId();
-        var req = command with { CreatorAuthUserId = authUserId };
-        var result = await _mediator.Send(req, cancellationToken);
+        var result = await _mediator.Send(new CreateGuildCommand
+        {
+            CreatorAuthUserId = authUserId,
+            Name = command.Name,
+            Description = command.Description,
+            Privacy = command.Privacy,
+            MaxMembers = command.MaxMembers
+        }, cancellationToken);
         return CreatedAtAction(nameof(GetGuildById), new { guildId = result.GuildId }, result);
     }
 

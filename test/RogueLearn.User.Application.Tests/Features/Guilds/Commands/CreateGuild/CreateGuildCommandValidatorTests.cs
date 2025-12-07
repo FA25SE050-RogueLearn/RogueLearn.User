@@ -118,7 +118,14 @@ public class CreateGuildCommandValidatorTests
         var okRes = await validator.ValidateAsync(ok, CancellationToken.None);
         okRes.IsValid.Should().BeTrue();
 
-        var bad = ok with { MaxMembers = 101 };
+        var bad = new CreateGuildCommand
+        {
+            CreatorAuthUserId = System.Guid.NewGuid(),
+            Name = "Guild",
+            Description = "Desc",
+            Privacy = "invite_only",
+            MaxMembers = 101
+        };
         var badRes = await validator.ValidateAsync(bad, CancellationToken.None);
         badRes.IsValid.Should().BeFalse();
     }

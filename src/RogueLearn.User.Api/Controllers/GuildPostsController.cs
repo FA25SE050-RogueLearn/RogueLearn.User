@@ -90,7 +90,12 @@ public class GuildPostsController : ControllerBase
     public async Task<IActionResult> CreateGuildPost([FromRoute] Guid guildId, [FromBody] CreateGuildPostRequest request, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-        var result = await _mediator.Send(new CreateGuildPostCommand(guildId, authUserId, request), cancellationToken);
+        var result = await _mediator.Send(new CreateGuildPostCommand
+        {
+            GuildId = guildId,
+            AuthorAuthUserId = authUserId,
+            Request = request
+        }, cancellationToken);
         return CreatedAtAction(nameof(GetGuildPostById), new { guildId, postId = result.PostId }, result);
     }
 
@@ -115,7 +120,12 @@ public class GuildPostsController : ControllerBase
             Attachments = null,
             Images = list
         };
-        var result = await _mediator.Send(new CreateGuildPostCommand(guildId, authUserId, req), cancellationToken);
+        var result = await _mediator.Send(new CreateGuildPostCommand
+        {
+            GuildId = guildId,
+            AuthorAuthUserId = authUserId,
+            Request = req
+        }, cancellationToken);
         return CreatedAtAction(nameof(GetGuildPostById), new { guildId, postId = result.PostId }, result);
     }
 
@@ -131,7 +141,13 @@ public class GuildPostsController : ControllerBase
             await file.CopyToAsync(ms, cancellationToken);
             list.Add(new GuildPostImageUpload(ms.ToArray(), file.ContentType, file.FileName));
         }
-        var result = await _mediator.Send(new UploadGuildPostImagesCommand(guildId, postId, authUserId, list), cancellationToken);
+        var result = await _mediator.Send(new UploadGuildPostImagesCommand
+        {
+            GuildId = guildId,
+            PostId = postId,
+            AuthUserId = authUserId,
+            Images = list
+        }, cancellationToken);
         return Created($"/api/guilds/{guildId}/posts/{postId}", result);
     }
 
@@ -194,7 +210,13 @@ public class GuildPostsController : ControllerBase
     public async Task<IActionResult> CreateGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromBody] CreateGuildPostCommentRequest request, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-        var result = await _mediator.Send(new CreateGuildPostCommentCommand(guildId, postId, authUserId, request), cancellationToken);
+        var result = await _mediator.Send(new CreateGuildPostCommentCommand
+        {
+            GuildId = guildId,
+            PostId = postId,
+            AuthorId = authUserId,
+            Request = request
+        }, cancellationToken);
         return Created($"/api/guilds/{guildId}/posts/{postId}/comments/{result.CommentId}", result);
     }
 
@@ -206,7 +228,14 @@ public class GuildPostsController : ControllerBase
     public async Task<IActionResult> EditGuildPostComment([FromRoute] Guid guildId, [FromRoute] Guid postId, [FromRoute] Guid commentId, [FromBody] EditGuildPostCommentRequest request, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-        await _mediator.Send(new EditGuildPostCommentCommand(guildId, postId, commentId, authUserId, request), cancellationToken);
+        await _mediator.Send(new EditGuildPostCommentCommand
+        {
+            GuildId = guildId,
+            PostId = postId,
+            CommentId = commentId,
+            AuthorId = authUserId,
+            Request = request
+        }, cancellationToken);
         return NoContent();
     }
 

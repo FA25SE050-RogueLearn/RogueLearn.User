@@ -10,12 +10,6 @@ public class LecturerNotificationService : ILecturerNotificationService
     private readonly INotificationRepository _notificationRepository;
     private readonly IUserProfileRepository? _userProfileRepository;
 
-    public LecturerNotificationService(INotificationRepository notificationRepository)
-    {
-        _notificationRepository = notificationRepository;
-        _userProfileRepository = null;
-    }
-
     public LecturerNotificationService(INotificationRepository notificationRepository, IUserProfileRepository userProfileRepository)
     {
         _notificationRepository = notificationRepository;
