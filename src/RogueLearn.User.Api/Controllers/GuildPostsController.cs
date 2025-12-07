@@ -291,7 +291,7 @@ public class GuildPostsController : ControllerBase
     /// Pin a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/pin")]
-    [GuildMasterOrOfficerOnly("guildId")]
+    [GuildMasterOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -305,7 +305,7 @@ public class GuildPostsController : ControllerBase
     /// Unpin a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unpin")]
-    [GuildMasterOrOfficerOnly("guildId")]
+    [GuildMasterOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -319,7 +319,7 @@ public class GuildPostsController : ControllerBase
     /// Lock a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/lock")]
-    [GuildMasterOrOfficerOnly("guildId")]
+    [GuildMasterOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -333,7 +333,7 @@ public class GuildPostsController : ControllerBase
     /// Unlock a guild post.
     /// </summary>
     [HttpPost("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unlock")]
-    [GuildMasterOrOfficerOnly("guildId")]
+    [GuildMasterOnly("guildId")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
