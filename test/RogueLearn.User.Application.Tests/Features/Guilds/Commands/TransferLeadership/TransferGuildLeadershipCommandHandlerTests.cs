@@ -80,6 +80,40 @@ public class TransferGuildLeadershipCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RemovesGuildMasterRolesFromOldMasters()
+    {
+        var repo = Substitute.For<IGuildMemberRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var notification = Substitute.For<IGuildNotificationService>();
+        var sut = new TransferGuildLeadershipCommandHandler(repo, userRoleRepo, roleRepo, notification);
+
+        var guildId = Guid.NewGuid();
+        var newMasterUserId = Guid.NewGuid();
+
+        var currentMaster = new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Role = GuildRole.GuildMaster, Status = MemberStatus.Active };
+        var otherMaster = new GuildMember { GuildId = guildId, AuthUserId = Guid.NewGuid(), Role = GuildRole.GuildMaster, Status = MemberStatus.Active };
+        var target = new GuildMember { GuildId = guildId, AuthUserId = newMasterUserId, Role = GuildRole.Member, Status = MemberStatus.Active };
+
+        repo.GetMembersByGuildAsync(guildId, Arg.Any<CancellationToken>()).Returns(new[] { currentMaster, otherMaster, target });
+
+        var gmRole = new Role { Id = Guid.NewGuid(), Name = "Guild Master" };
+        roleRepo.GetByNameAsync("Guild Master", Arg.Any<CancellationToken>()).Returns(gmRole);
+
+        var cmUserRole = new RogueLearn.User.Domain.Entities.UserRole { Id = Guid.NewGuid(), AuthUserId = currentMaster.AuthUserId, RoleId = gmRole.Id };
+        var omUserRole = new RogueLearn.User.Domain.Entities.UserRole { Id = Guid.NewGuid(), AuthUserId = otherMaster.AuthUserId, RoleId = gmRole.Id };
+        userRoleRepo.GetRolesForUserAsync(currentMaster.AuthUserId, Arg.Any<CancellationToken>()).Returns(new[] { cmUserRole });
+        userRoleRepo.GetRolesForUserAsync(otherMaster.AuthUserId, Arg.Any<CancellationToken>()).Returns(new[] { omUserRole });
+        userRoleRepo.GetRolesForUserAsync(newMasterUserId, Arg.Any<CancellationToken>()).Returns(Array.Empty<RogueLearn.User.Domain.Entities.UserRole>());
+
+        await sut.Handle(new TransferGuildLeadershipCommand(guildId, newMasterUserId), CancellationToken.None);
+
+        await userRoleRepo.Received(1).DeleteAsync(cmUserRole.Id, Arg.Any<CancellationToken>());
+        await userRoleRepo.Received(1).DeleteAsync(omUserRole.Id, Arg.Any<CancellationToken>());
+        await userRoleRepo.Received(1).AddAsync(Arg.Is<RogueLearn.User.Domain.Entities.UserRole>(ur => ur.AuthUserId == newMasterUserId && ur.RoleId == gmRole.Id), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void Command_CarriesValues()
     {
         var guildId = Guid.NewGuid();

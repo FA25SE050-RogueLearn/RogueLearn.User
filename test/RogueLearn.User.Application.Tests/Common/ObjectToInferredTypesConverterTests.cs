@@ -50,4 +50,13 @@ public class ObjectToInferredTypesConverterTests
         json.Should().Contain("\"a\":1");
         json.Should().Contain("\"b\":\"x\"");
     }
+
+    [Fact]
+    public void InvalidObjectToken_ThrowsJsonException()
+    {
+        var options = CreateOptions();
+        var badJson = "{ 123 }"; // non-PropertyName inside object
+        Action act = () => JsonSerializer.Deserialize<object>(badJson, options);
+        act.Should().Throw<JsonException>();
+    }
 }

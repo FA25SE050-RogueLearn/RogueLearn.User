@@ -23,7 +23,7 @@ public class GetAllRolesQueryHandlerTests
 
         var roles = new List<Role> { new Role { Id = System.Guid.NewGuid(), Name = "r1" } };
         roleRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(roles);
-        mapper.Map<List<RoleDto>>(roles).Returns(new List<RoleDto> { new RoleDto { Id = roles[0].Id, Name = roles[0].Name } });
+        mapper.Map<List<RoleDto>>(roles).Returns(new List<RoleDto> { new RoleDto { Id = roles[0].Id, Name = roles[0].Name, CreatedAt = roles[0].CreatedAt, Description = roles[0].Description } });
 
         var sut = new GetAllRolesQueryHandler(roleRepo, mapper, logger);
         var res = await sut.Handle(query, CancellationToken.None);

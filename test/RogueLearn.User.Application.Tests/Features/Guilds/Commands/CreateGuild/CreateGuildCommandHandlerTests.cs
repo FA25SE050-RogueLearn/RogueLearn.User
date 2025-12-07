@@ -83,4 +83,62 @@ public class CreateGuildCommandHandlerTests
         };
         await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Handle_UserAlreadyInGuild_Throws()
+    {
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var sut = new CreateGuildCommandHandler(guildRepo, memberRepo, userRoleRepo, roleRepo);
+
+        var creatorId = Guid.NewGuid();
+        memberRepo.GetMembershipsByUserAsync(creatorId, Arg.Any<CancellationToken>())
+            .Returns(new List<GuildMember> { new() { GuildId = Guid.NewGuid(), AuthUserId = creatorId, Status = MemberStatus.Active } });
+
+        var cmd = new CreateGuildCommand { Name = "G", Description = "D", MaxMembers = 20, Privacy = "public", CreatorAuthUserId = creatorId };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(act);
+    }
+
+    [Fact]
+    public async Task Handle_MaxMembersExceedsRoleLimit_Throws()
+    {
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var sut = new CreateGuildCommandHandler(guildRepo, memberRepo, userRoleRepo, roleRepo);
+
+        var creatorId = Guid.NewGuid();
+        memberRepo.GetMembershipsByUserAsync(creatorId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember>());
+        var verifiedRole = new Role { Id = Guid.NewGuid(), Name = "Verified Lecturer" };
+        roleRepo.GetByNameAsync("Verified Lecturer", Arg.Any<CancellationToken>()).Returns(verifiedRole);
+        userRoleRepo.GetRolesForUserAsync(creatorId, Arg.Any<CancellationToken>()).Returns(Array.Empty<UserRole>());
+
+        var cmd = new CreateGuildCommand { Name = "G", Description = "D", MaxMembers = 51, Privacy = "private", CreatorAuthUserId = creatorId };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(act);
+    }
+
+    [Fact]
+    public async Task Handle_MaxMembersNotGreaterThanCurrentCount_Throws()
+    {
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var memberRepo = Substitute.For<IGuildMemberRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var sut = new CreateGuildCommandHandler(guildRepo, memberRepo, userRoleRepo, roleRepo);
+
+        var creatorId = Guid.NewGuid();
+        memberRepo.GetMembershipsByUserAsync(creatorId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember>());
+        var verifiedRole = new Role { Id = Guid.NewGuid(), Name = "Verified Lecturer" };
+        roleRepo.GetByNameAsync("Verified Lecturer", Arg.Any<CancellationToken>()).Returns(verifiedRole);
+        userRoleRepo.GetRolesForUserAsync(creatorId, Arg.Any<CancellationToken>()).Returns(new List<UserRole> { new() { RoleId = verifiedRole.Id } });
+
+        var cmd = new CreateGuildCommand { Name = "G", Description = "D", MaxMembers = 1, Privacy = "public", CreatorAuthUserId = creatorId };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(act);
+    }
 }

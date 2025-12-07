@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -20,5 +21,15 @@ public class FapExtractionPluginTests
 
         var result = await sut.ExtractFapRecordJsonAsync("transcript", CancellationToken.None);
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CleanToJson_StripsFencesAndExtractsObject()
+    {
+        var raw = "```\n{ \"gpa\": 8.1, \"subjects\": [] }\n```";
+        var m = typeof(FapExtractionPlugin).GetMethod("CleanToJson", BindingFlags.NonPublic | BindingFlags.Static);
+        var cleaned = (string)m!.Invoke(null, new object[] { raw })!;
+        cleaned.Should().StartWith("{").And.EndWith("}");
+        cleaned.Should().Contain("\"gpa\"");
     }
 }

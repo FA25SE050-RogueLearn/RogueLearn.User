@@ -34,4 +34,19 @@ public class GetMyPendingInvitationsQueryHandlerTests
         result.First().PartyName.Should().Be("P");
         result.First().InviteeName.Should().Be("u");
     }
+
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmpty()
+    {
+        var query = new GetMyPendingInvitationsQuery(System.Guid.NewGuid());
+        var invRepo = Substitute.For<IPartyInvitationRepository>();
+        var partyRepo = Substitute.For<IPartyRepository>();
+        var profileRepo = Substitute.For<IUserProfileRepository>();
+        var sut = new GetMyPendingInvitationsQueryHandler(invRepo, partyRepo, profileRepo);
+
+        invRepo.GetPendingInvitationsByInviteeAsync(query.AuthUserId, Arg.Any<CancellationToken>()).Returns(new List<PartyInvitation>());
+
+        var result = await sut.Handle(query, CancellationToken.None);
+        result.Should().BeEmpty();
+    }
 }

@@ -59,4 +59,65 @@ public class QuestStepGenerationServiceTests
             assertion.Which.GetType().Should().Be(expectedType);
         }
     }
+
+    [Fact]
+    public async Task GenerateQuestStepsAsync_Retries_On_Http503()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
+        var sut = new QuestStepGenerationService(mediator, logger);
+        mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw new HttpRequestException("Service Unavailable", null, System.Net.HttpStatusCode.ServiceUnavailable));
+        var act = () => sut.GenerateQuestStepsAsync(Guid.NewGuid(), Guid.NewGuid(), context: null!);
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task GenerateQuestStepsAsync_Retries_On_Http5xx()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
+        var sut = new QuestStepGenerationService(mediator, logger);
+        mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw new HttpRequestException("Internal Server Error", null, System.Net.HttpStatusCode.InternalServerError));
+        var act = () => sut.GenerateQuestStepsAsync(Guid.NewGuid(), Guid.NewGuid(), context: null!);
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task GenerateQuestStepsAsync_Retries_On_InvalidOperation503()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
+        var sut = new QuestStepGenerationService(mediator, logger);
+        mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw new InvalidOperationException("503 Service Unavailable"));
+        var act = () => sut.GenerateQuestStepsAsync(Guid.NewGuid(), Guid.NewGuid(), context: null!);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task GenerateQuestStepsAsync_Retries_On_Timeout()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
+        var sut = new QuestStepGenerationService(mediator, logger);
+        mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw new OperationCanceledException());
+        var act = () => sut.GenerateQuestStepsAsync(Guid.NewGuid(), Guid.NewGuid(), context: null!);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task GenerateQuestStepsAsync_BadRequest_Does_Not_Retry_Throws()
+    {
+        var mediator = Substitute.For<IMediator>();
+        var logger = Substitute.For<ILogger<QuestStepGenerationService>>();
+        var sut = new QuestStepGenerationService(mediator, logger);
+        mediator.Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<GeneratedQuestStepDto>>>(_ => throw new HttpRequestException("Bad Request", null, System.Net.HttpStatusCode.BadRequest));
+        var act = () => sut.GenerateQuestStepsAsync(Guid.NewGuid(), Guid.NewGuid(), context: null!);
+        await act.Should().ThrowAsync<HttpRequestException>();
+        _ = mediator.Received(1).Send(Arg.Any<GenerateQuestStepsCommand>(), Arg.Any<CancellationToken>());
+    }
 }

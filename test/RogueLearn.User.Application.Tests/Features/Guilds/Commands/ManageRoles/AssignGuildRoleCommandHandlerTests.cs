@@ -39,4 +39,30 @@ public class AssignGuildRoleCommandHandlerTests
         await sut.Handle(cmd, CancellationToken.None);
         await repo.Received(1).UpdateAsync(Arg.Is<RogueLearn.User.Domain.Entities.GuildMember>(m => m.Role == GuildRole.Officer), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_NotFoundMember_Throws()
+    {
+        var repo = Substitute.For<IGuildMemberRepository>();
+        var sut = new AssignGuildRoleCommandHandler(repo);
+        var guildId = System.Guid.NewGuid();
+        var memberId = System.Guid.NewGuid();
+        var actorId = System.Guid.NewGuid();
+        var cmd = new AssignGuildRoleCommand(guildId, memberId, GuildRole.Officer, actorId, true);
+        repo.GetMemberAsync(guildId, memberId, Arg.Any<CancellationToken>()).Returns((RogueLearn.User.Domain.Entities.GuildMember?)null);
+        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_AssignGuildMaster_ThrowsUnprocessable()
+    {
+        var repo = Substitute.For<IGuildMemberRepository>();
+        var sut = new AssignGuildRoleCommandHandler(repo);
+        var guildId = System.Guid.NewGuid();
+        var memberId = System.Guid.NewGuid();
+        var actorId = System.Guid.NewGuid();
+        var cmd = new AssignGuildRoleCommand(guildId, memberId, GuildRole.GuildMaster, actorId, true);
+        repo.GetMemberAsync(guildId, memberId, Arg.Any<CancellationToken>()).Returns(new RogueLearn.User.Domain.Entities.GuildMember { GuildId = guildId, AuthUserId = memberId, Role = GuildRole.Member });
+        await Assert.ThrowsAsync<UnprocessableEntityException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
 }

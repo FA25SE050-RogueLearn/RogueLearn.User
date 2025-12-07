@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -20,5 +21,15 @@ public class TagSuggestionPluginTests
 
         var json = await sut.GenerateTagSuggestionsJsonAsync("Some text", 10, CancellationToken.None);
         json.Should().Contain("\"tags\":");
+    }
+
+    [Fact]
+    public void CleanToJson_StripsFencesAndExtractsObject()
+    {
+        var raw = "```\n{ \"tags\": [] }\n```";
+        var m = typeof(TagSuggestionPlugin).GetMethod("CleanToJson", BindingFlags.NonPublic | BindingFlags.Static);
+        var cleaned = (string)m!.Invoke(null, new object[] { raw })!;
+        cleaned.Should().StartWith("{").And.EndWith("}");
+        cleaned.Should().Contain("tags");
     }
 }

@@ -17,6 +17,7 @@ public class ExceptionsTests
     [Fact]
     public void ConflictException_Constructors_Work()
     {
+        new ConflictException().Message.Should().NotBeNull();
         new ConflictException("m").Message.Should().Be("m");
         var inner = new Exception("i");
         new ConflictException("m", inner).InnerException.Should().Be(inner);

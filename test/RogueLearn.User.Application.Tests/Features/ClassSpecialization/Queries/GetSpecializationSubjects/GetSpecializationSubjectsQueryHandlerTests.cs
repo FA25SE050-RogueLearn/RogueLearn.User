@@ -28,4 +28,20 @@ public class GetSpecializationSubjectsQueryHandlerTests
         result.Count.Should().Be(1);
         result[0].Semester.Should().Be(1);
     }
+
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmptyList()
+    {
+        var repo = Substitute.For<IClassSpecializationSubjectRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var sut = new GetSpecializationSubjectsQueryHandler(repo, mapper);
+
+        var query = new GetSpecializationSubjectsQuery { ClassId = System.Guid.NewGuid() };
+        repo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<System.Func<ClassSpecializationSubject, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ClassSpecializationSubject>());
+        mapper.Map<List<SpecializationSubjectDto>>(Arg.Any<List<ClassSpecializationSubject>>()).Returns(new List<SpecializationSubjectDto>());
+
+        var result = await sut.Handle(query, CancellationToken.None);
+        result.Should().BeEmpty();
+    }
 }

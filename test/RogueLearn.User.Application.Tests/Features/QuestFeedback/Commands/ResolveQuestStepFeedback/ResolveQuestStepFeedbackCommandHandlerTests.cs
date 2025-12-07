@@ -39,4 +39,21 @@ public class ResolveQuestStepFeedbackCommandHandlerTests
         await sut.Handle(cmd, CancellationToken.None);
         await repo.Received(1).UpdateAsync(Arg.Is<UserQuestStepFeedback>(f => f.IsResolved == cmd.IsResolved && f.AdminNotes == cmd.AdminNotes), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_Success_UpdatesFeedback()
+    {
+        var repo = Substitute.For<IUserQuestStepFeedbackRepository>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<ResolveQuestStepFeedbackCommandHandler>>();
+
+        var feedbackId = Guid.NewGuid();
+        var feedback = new UserQuestStepFeedback { Id = feedbackId, IsResolved = false, AdminNotes = null };
+        repo.GetByIdAsync(feedbackId, Arg.Any<CancellationToken>()).Returns(feedback);
+
+        var cmd = new ResolveQuestStepFeedbackCommand { FeedbackId = feedbackId, IsResolved = true, AdminNotes = "notes" };
+        var sut = new ResolveQuestStepFeedbackCommandHandler(repo, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        await repo.Received(1).UpdateAsync(Arg.Is<UserQuestStepFeedback>(f => f.IsResolved == true && f.AdminNotes == "notes"), Arg.Any<CancellationToken>());
+    }
 }

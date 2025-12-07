@@ -34,7 +34,7 @@ public class CreateRoleCommandHandlerTests
         repo.GetByNameAsync(cmd.Name, Arg.Any<CancellationToken>()).Returns((Role?)null);
         var created = new Role { Id = System.Guid.NewGuid(), Name = cmd.Name, Description = cmd.Description };
         repo.AddAsync(Arg.Any<Role>(), Arg.Any<CancellationToken>()).Returns(created);
-        mapper.Map<CreateRoleResponse>(created).Returns(new CreateRoleResponse { Id = created.Id, Name = created.Name });
+        mapper.Map<CreateRoleResponse>(created).Returns(new CreateRoleResponse { Id = created.Id, Name = created.Name, CreatedAt = created.CreatedAt, Description = created.Description });
 
         var resp = await sut.Handle(cmd, CancellationToken.None);
         Assert.Equal(created.Id, resp.Id);

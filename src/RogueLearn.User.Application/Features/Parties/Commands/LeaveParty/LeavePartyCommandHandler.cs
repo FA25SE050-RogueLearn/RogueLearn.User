@@ -11,14 +11,6 @@ public class LeavePartyCommandHandler : IRequestHandler<LeavePartyCommand, Unit>
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IRoleRepository _roleRepository;
 
-    public LeavePartyCommandHandler(IPartyMemberRepository memberRepository, IPartyRepository partyRepository)
-    {
-        _memberRepository = memberRepository;
-        _partyRepository = partyRepository;
-        _userRoleRepository = null!;
-        _roleRepository = null!;
-    }
-
     public LeavePartyCommandHandler(IPartyMemberRepository memberRepository, IPartyRepository partyRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository)
     {
         _memberRepository = memberRepository;

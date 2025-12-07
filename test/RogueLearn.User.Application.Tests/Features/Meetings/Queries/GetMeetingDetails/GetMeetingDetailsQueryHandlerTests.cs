@@ -39,4 +39,20 @@ public class GetMeetingDetailsQueryHandlerTests
         result.Participants.Should().HaveCount(1);
         result.SummaryText.Should().Be("S");
     }
+
+    [Fact]
+    public async Task Handle_NotFound_ThrowsKeyNotFound()
+    {
+        var meetingRepo = Substitute.For<IMeetingRepository>();
+        var participantRepo = Substitute.For<IMeetingParticipantRepository>();
+        var summaryRepo = Substitute.For<IMeetingSummaryRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var sut = new GetMeetingDetailsQueryHandler(meetingRepo, participantRepo, summaryRepo, mapper);
+
+        var query = new GetMeetingDetailsQuery(Guid.NewGuid());
+        meetingRepo.GetByIdAsync(query.MeetingId, Arg.Any<CancellationToken>()).Returns((Meeting?)null);
+
+        var act = () => sut.Handle(query, CancellationToken.None);
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
 }

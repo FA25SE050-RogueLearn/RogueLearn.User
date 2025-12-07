@@ -70,4 +70,32 @@ public class GetSubjectSkillMappingsQueryHandlerTests
         var b = res.First(r => r.SkillId == skillB);
         b.Prerequisites.Should().ContainSingle(p => p.PrerequisiteSkillId == skillA && p.PrerequisiteSkillName == "A");
     }
+
+    [Fact]
+    public async Task Handle_MappingsWithoutDependencies_PrerequisitesEmpty()
+    {
+        var repo = Substitute.For<ISubjectSkillMappingRepository>();
+        var skillRepo = Substitute.For<ISkillRepository>();
+        var depRepo = Substitute.For<ISkillDependencyRepository>();
+        var sut = new GetSubjectSkillMappingsQueryHandler(repo, skillRepo, depRepo);
+
+        var subjectId = Guid.NewGuid();
+        var skillA = Guid.NewGuid();
+
+        repo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<SubjectSkillMapping, bool>>>(), Arg.Any<CancellationToken>()).Returns(new List<SubjectSkillMapping>
+        {
+            new() { Id = Guid.NewGuid(), SubjectId = subjectId, SkillId = skillA, RelevanceWeight = 1.0m, CreatedAt = DateTimeOffset.UtcNow }
+        });
+
+        skillRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Skill>
+        {
+            new() { Id = skillA, Name = "A" }
+        });
+
+        depRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<SkillDependency>());
+
+        var res = await sut.Handle(new GetSubjectSkillMappingsQuery { SubjectId = subjectId }, CancellationToken.None);
+        res.Should().HaveCount(1);
+        res[0].Prerequisites.Should().BeEmpty();
+    }
 }

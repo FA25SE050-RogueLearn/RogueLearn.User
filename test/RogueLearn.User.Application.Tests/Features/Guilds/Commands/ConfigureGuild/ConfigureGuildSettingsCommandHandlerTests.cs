@@ -81,4 +81,44 @@ public class ConfigureGuildSettingsCommandHandlerTests
         await sut.Handle(cmd, CancellationToken.None);
         await guildRepo.Received(1).UpdateAsync(Arg.Is<Guild>(g => g.MaxMembers == 20 && g.IsPublic == true), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_MaxMembersExceedsRoleLimit_Throws()
+    {
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var sut = new ConfigureGuildSettingsCommandHandler(guildRepo, roleRepo, userRoleRepo);
+
+        var guildId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        guildRepo.GetByIdAsync(guildId, Arg.Any<CancellationToken>()).Returns(new Guild { Id = guildId, CurrentMemberCount = 10 });
+
+        var verifiedRole = new Role { Id = Guid.NewGuid(), Name = "Verified Lecturer" };
+        roleRepo.GetByNameAsync("Verified Lecturer", Arg.Any<CancellationToken>()).Returns(verifiedRole);
+        userRoleRepo.GetRolesForUserAsync(actorId, Arg.Any<CancellationToken>()).Returns(Array.Empty<UserRole>());
+
+        var cmd = new ConfigureGuildSettingsCommand(guildId, actorId, "G", "D", "private", 51);
+
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(act);
+    }
+
+    [Fact]
+    public async Task Handle_MaxMembersNotGreaterThanCurrent_Throws()
+    {
+        var guildRepo = Substitute.For<IGuildRepository>();
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var userRoleRepo = Substitute.For<IUserRoleRepository>();
+        var sut = new ConfigureGuildSettingsCommandHandler(guildRepo, roleRepo, userRoleRepo);
+
+        var guildId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        guildRepo.GetByIdAsync(guildId, Arg.Any<CancellationToken>()).Returns(new Guild { Id = guildId, CurrentMemberCount = 20 });
+
+        var cmd = new ConfigureGuildSettingsCommand(guildId, actorId, "G", "D", "public", 20);
+
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(act);
+    }
 }

@@ -36,4 +36,21 @@ public class GetSkillTreeQueryHandlerTests
         result.Dependencies.Should().HaveCount(1);
         result.Dependencies[0].SkillId.Should().Be(skill.Id);
     }
+
+    [Fact]
+    public async Task Handle_EmptyRepositories_ReturnsEmptyTree()
+    {
+        var skillRepo = Substitute.For<ISkillRepository>();
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var depRepo = Substitute.For<ISkillDependencyRepository>();
+        var sut = new GetSkillTreeQueryHandler(skillRepo, userSkillRepo, depRepo);
+
+        skillRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Skill>());
+        userSkillRepo.GetSkillsByAuthIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new List<UserSkill>());
+        depRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<SkillDependency>());
+
+        var result = await sut.Handle(new GetSkillTreeQuery { AuthUserId = System.Guid.NewGuid() }, CancellationToken.None);
+        result.Nodes.Should().BeEmpty();
+        result.Dependencies.Should().BeEmpty();
+    }
 }

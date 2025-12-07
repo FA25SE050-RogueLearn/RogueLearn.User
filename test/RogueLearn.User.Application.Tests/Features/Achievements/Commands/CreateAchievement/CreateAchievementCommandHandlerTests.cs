@@ -1,9 +1,11 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using AutoMapper;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using FluentValidation;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Achievements.Commands.CreateAchievement;
 using RogueLearn.User.Domain.Entities;
@@ -18,7 +20,7 @@ public class CreateAchievementCommandHandlerTests
     public async Task Handle_KeyExists_ThrowsConflict()
     {
         var repo = Substitute.For<IAchievementRepository>();
-        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var mapper = Substitute.For<IMapper>();
         var validator = new CreateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
 
@@ -42,10 +44,10 @@ public class CreateAchievementCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_InvalidRuleConfigArray_ThrowsValidation()
+    public async Task Handle_InvalidRuleConfig_ThrowsValidation()
     {
         var repo = Substitute.For<IAchievementRepository>();
-        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var mapper = Substitute.For<IMapper>();
         var validator = new CreateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
 
@@ -61,20 +63,23 @@ public class CreateAchievementCommandHandlerTests
             RuleType = null,
             Category = null,
             IconUrl = null,
-            RuleConfig = "[]"
+            RuleConfig = "{invalid-json}"
         };
 
         var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
-        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.ValidationException>(() => sut.Handle(command, CancellationToken.None));
+        await Assert.ThrowsAsync<FluentValidation.ValidationException>(() => sut.Handle(command, CancellationToken.None));
     }
 
     [Fact]
     public async Task Handle_Success_ReturnsResponse()
     {
         var repo = Substitute.For<IAchievementRepository>();
-        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var mapper = Substitute.For<IMapper>();
         var validator = new CreateAchievementCommandValidator();
         var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
+
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
 
         var command = new CreateAchievementCommand
         {
@@ -85,19 +90,39 @@ public class CreateAchievementCommandHandlerTests
             RuleType = null,
             Category = null,
             IconUrl = null,
-            RuleConfig = "{}"
+            RuleConfig = "{\"points\":10}"
         };
 
-        var created = new Achievement { Id = Guid.NewGuid(), Key = command.Key, Name = command.Name };
-        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-        repo.AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>()).Returns(created);
-        mapper.Map<CreateAchievementResponse>(created).Returns(new CreateAchievementResponse { Id = created.Id, Key = created.Key, Name = created.Name });
+        repo.AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>()).Returns(ci => (Achievement)ci[0]!);
+
+        mapper.Map<CreateAchievementResponse>(Arg.Any<Achievement>()).Returns(ci =>
+        {
+            var a = (Achievement)ci[0]!;
+            return new CreateAchievementResponse { Id = a.Id, Key = a.Key, Name = a.Name };
+        });
 
         var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
         var resp = await sut.Handle(command, CancellationToken.None);
-        resp.Id.Should().Be(created.Id);
-        resp.Key.Should().Be(created.Key);
+
+        resp.Key.Should().Be("key");
+        resp.Name.Should().Be("name");
         await repo.Received(1).AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_InvalidRuleConfigJson_ThrowsValidation()
+    {
+        var repo = Substitute.For<IAchievementRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var validator = new CreateAchievementCommandValidator();
+        var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
+
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
+        var cmd = new CreateAchievementCommand { Key = "k", Name = "n", Description = "d", SourceService = "svc", RuleConfig = "{invalid" };
+
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await Assert.ThrowsAsync<FluentValidation.ValidationException>(act);
     }
 }

@@ -26,7 +26,7 @@ public class GetMyNotesHandlerTests
         var authUserId = Guid.NewGuid();
         var notes = new List<Note> { new() { Id = Guid.NewGuid(), AuthUserId = authUserId, Title = "T", Content = new object() } };
         noteRepo.GetByUserAsync(authUserId, Arg.Any<CancellationToken>()).Returns(notes);
-        mapper.Map<List<NoteDto>>(Arg.Any<List<Note>>()).Returns(new List<NoteDto> { new() { Id = notes[0].Id, AuthUserId = authUserId, Title = "T" } });
+        mapper.Map<List<NoteDto>>(Arg.Any<List<Note>>()).Returns(new List<NoteDto> { new() { Id = notes[0].Id, AuthUserId = authUserId, Title = "T", Content = notes[0].Content, CreatedAt = notes[0].CreatedAt, IsPublic = notes[0].IsPublic, TagIds = new List<Guid>(), UpdatedAt = notes[0].UpdatedAt } });
 
         tagRepo.GetTagIdsForNoteAsync(notes[0].Id, Arg.Any<CancellationToken>()).Returns(new[] { Guid.NewGuid() });
 

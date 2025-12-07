@@ -68,4 +68,39 @@ public class CommitNoteTagSelectionsCommandHandlerTests
         resp.CreatedTags.Any(ct => ct.Id == createdTag.Id).Should().BeTrue();
         await noteTagRepo.Received().AddAsync(noteId, createdTag.Id, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_Removes_Extras_Not_In_Selection()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<ITagRepository>();
+        var noteTagRepo = Substitute.For<INoteTagRepository>();
+        var sut = new CommitNoteTagSelectionsCommandHandler(noteRepo, tagRepo, noteTagRepo);
+
+        var noteId = Guid.NewGuid();
+        var authUserId = Guid.NewGuid();
+        var note = new Note { Id = noteId, AuthUserId = authUserId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(note);
+
+        var keptTag = new Tag { Id = Guid.NewGuid(), AuthUserId = authUserId, Name = "keep" };
+        var extraTagId = Guid.NewGuid();
+        tagRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+               .Returns(new[] { keptTag });
+
+        // Current has an extra tag not in desired
+        noteTagRepo.GetTagIdsForNoteAsync(noteId, Arg.Any<CancellationToken>()).Returns(new List<Guid> { keptTag.Id, extraTagId });
+
+        var cmd = new CommitNoteTagSelectionsCommand
+        {
+            NoteId = noteId,
+            AuthUserId = authUserId,
+            SelectedTagIds = new List<Guid> { keptTag.Id },
+            NewTagNames = new List<string>()
+        };
+
+        var resp = await sut.Handle(cmd, CancellationToken.None);
+
+        resp.AddedTagIds.Should().Contain(keptTag.Id);
+        await noteTagRepo.Received().RemoveAsync(noteId, extraTagId, Arg.Any<CancellationToken>());
+    }
 }

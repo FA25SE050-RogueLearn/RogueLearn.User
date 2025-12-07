@@ -1,8 +1,9 @@
 using System.Threading;
 using System.Threading.Tasks;
+using FluentAssertions;
 using NSubstitute;
+using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Parties.Commands.RemoveMember;
-using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -13,31 +14,61 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Commands.RemoveMemb
 public class RemovePartyMemberCommandHandlerTests
 {
     [Fact]
-    public async Task Handle_CannotRemoveLeader()
+    public async Task Handle_Leader_ThrowsBadRequest()
     {
-        var cmd = new RemovePartyMemberCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), "reason");
         var repo = Substitute.For<IPartyMemberRepository>();
-        var notification = Substitute.For<IPartyNotificationService>();
-        var sut = new RemovePartyMemberCommandHandler(repo, notification);
+        var notify = Substitute.For<RogueLearn.User.Application.Interfaces.IPartyNotificationService>();
+        var sut = new RemovePartyMemberCommandHandler(repo, notify);
 
-        var member = new PartyMember { Id = cmd.MemberId, PartyId = cmd.PartyId, Role = PartyRole.Leader };
-        repo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
+        var partyId = System.Guid.NewGuid();
+        var memberId = System.Guid.NewGuid();
+        repo.GetByIdAsync(memberId, Arg.Any<CancellationToken>()).Returns(new PartyMember { Id = memberId, PartyId = partyId, Role = PartyRole.Leader });
 
+        var cmd = new RemovePartyMemberCommand(partyId, memberId, "cleanup");
+        await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_Success_DeletesAndNotifies()
+    {
+        var repo = Substitute.For<IPartyMemberRepository>();
+        var notify = Substitute.For<RogueLearn.User.Application.Interfaces.IPartyNotificationService>();
+        var sut = new RemovePartyMemberCommandHandler(repo, notify);
+
+        var partyId = System.Guid.NewGuid();
+        var memberId = System.Guid.NewGuid();
+        var authUserId = System.Guid.NewGuid();
+        repo.GetByIdAsync(memberId, Arg.Any<CancellationToken>()).Returns(new PartyMember { Id = memberId, PartyId = partyId, Role = PartyRole.Member, AuthUserId = authUserId });
+
+        var cmd = new RemovePartyMemberCommand(partyId, memberId, "rule violation");
+        await sut.Handle(cmd, CancellationToken.None);
+        await repo.Received(1).DeleteAsync(memberId, Arg.Any<CancellationToken>());
+        await notify.Received(1).SendMemberRemovedNotificationAsync(partyId, authUserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WrongParty_ThrowsBadRequest()
+    {
+        var repo = Substitute.For<IPartyMemberRepository>();
+        var notify = Substitute.For<RogueLearn.User.Application.Interfaces.IPartyNotificationService>();
+        var sut = new RemovePartyMemberCommandHandler(repo, notify);
+
+        var partyId = System.Guid.NewGuid();
+        var memberId = System.Guid.NewGuid();
+        repo.GetByIdAsync(memberId, Arg.Any<CancellationToken>()).Returns(new PartyMember { Id = memberId, PartyId = System.Guid.NewGuid(), Role = PartyRole.Member });
+
+        var cmd = new RemovePartyMemberCommand(partyId, memberId, "cleanup");
         await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
     [Fact]
-    public async Task Handle_Success_Deletes()
+    public void Record_Creates_With_Values()
     {
-        var cmd = new RemovePartyMemberCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), null);
-        var repo = Substitute.For<IPartyMemberRepository>();
-        var notification = Substitute.For<IPartyNotificationService>();
-        var sut = new RemovePartyMemberCommandHandler(repo, notification);
-
-        var member = new PartyMember { Id = cmd.MemberId, PartyId = cmd.PartyId, Role = PartyRole.Member };
-        repo.GetByIdAsync(cmd.MemberId, Arg.Any<CancellationToken>()).Returns(member);
-
-        await sut.Handle(cmd, CancellationToken.None);
-        await repo.Received(1).DeleteAsync(member.Id, Arg.Any<CancellationToken>());
+        var partyId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+        var cmd = new RemovePartyMemberCommand(partyId, memberId, "reason");
+        cmd.PartyId.Should().Be(partyId);
+        cmd.MemberId.Should().Be(memberId);
+        cmd.Reason.Should().Be("reason");
     }
 }

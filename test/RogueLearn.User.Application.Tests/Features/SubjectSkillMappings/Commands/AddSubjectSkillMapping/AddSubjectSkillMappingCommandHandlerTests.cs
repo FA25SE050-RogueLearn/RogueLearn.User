@@ -83,4 +83,35 @@ public class AddSubjectSkillMappingCommandHandlerTests
         resp.SkillId.Should().Be(cmd.SkillId);
         resp.RelevanceWeight.Should().Be(cmd.RelevanceWeight);
     }
+
+    [Fact]
+    public async Task Handle_SubjectMissing_ThrowsNotFound()
+    {
+        var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        var skillRepo = Substitute.For<ISkillRepository>();
+        var logger = Substitute.For<ILogger<AddSubjectSkillMappingCommandHandler>>();
+
+        var cmd = new AddSubjectSkillMappingCommand { SubjectId = Guid.NewGuid(), SkillId = Guid.NewGuid(), RelevanceWeight = 0.5m };
+        subjectRepo.ExistsAsync(cmd.SubjectId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var sut = new AddSubjectSkillMappingCommandHandler(mappingRepo, subjectRepo, skillRepo, logger);
+        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_SkillMissing_ThrowsNotFound()
+    {
+        var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        var skillRepo = Substitute.For<ISkillRepository>();
+        var logger = Substitute.For<ILogger<AddSubjectSkillMappingCommandHandler>>();
+
+        var cmd = new AddSubjectSkillMappingCommand { SubjectId = Guid.NewGuid(), SkillId = Guid.NewGuid(), RelevanceWeight = 0.5m };
+        subjectRepo.ExistsAsync(cmd.SubjectId, Arg.Any<CancellationToken>()).Returns(true);
+        skillRepo.ExistsAsync(cmd.SkillId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var sut = new AddSubjectSkillMappingCommandHandler(mappingRepo, subjectRepo, skillRepo, logger);
+        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+    }
 }

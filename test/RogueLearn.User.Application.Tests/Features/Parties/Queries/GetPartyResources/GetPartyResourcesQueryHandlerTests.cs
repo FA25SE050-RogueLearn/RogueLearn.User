@@ -28,4 +28,16 @@ public class GetPartyResourcesQueryHandlerTests
         result.Count.Should().Be(1);
         result.First().Title.Should().Be("T");
     }
+
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmpty()
+    {
+        var query = new GetPartyResourcesQuery(System.Guid.NewGuid());
+        var repo = Substitute.For<IPartyStashItemRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var sut = new GetPartyResourcesQueryHandler(repo, mapper);
+        repo.GetResourcesByPartyAsync(query.PartyId, Arg.Any<CancellationToken>()).Returns(new List<PartyStashItem>());
+        var result = await sut.Handle(query, CancellationToken.None);
+        result.Count.Should().Be(0);
+    }
 }

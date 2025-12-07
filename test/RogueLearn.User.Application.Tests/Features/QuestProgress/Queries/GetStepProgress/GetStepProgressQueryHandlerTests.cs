@@ -75,4 +75,137 @@ public class GetStepProgressQueryHandlerTests
         result.CompletedActivitiesCount.Should().Be(2);
         result.ProgressPercentage.Should().Be(50);
     }
+
+    [Fact]
+    public async Task Handle_ContentAsJObject_ComputesActivityCount()
+    {
+        var query = new GetStepProgressQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<ILogger<GetStepProgressQueryHandler>>();
+        var sut = new GetStepProgressQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
+
+        var activitiesJson = "{\"activities\":[{\"activityId\":\"" + Guid.NewGuid() + "\"},{\"activityId\":\"" + Guid.NewGuid() + "\"},{\"activityId\":\"" + Guid.NewGuid() + "\"}]}";
+        var jObj = Newtonsoft.Json.Linq.JObject.Parse(activitiesJson);
+        var questStep = new QuestStep { Id = query.StepId, QuestId = query.QuestId, Title = "Step", Content = jObj };
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = query.AuthUserId, QuestId = query.QuestId };
+
+        questStepRepo.GetByIdAsync(query.StepId, Arg.Any<CancellationToken>()).Returns(questStep);
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        stepRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null);
+
+        var result = await sut.Handle(query, CancellationToken.None);
+        result!.TotalActivitiesCount.Should().Be(3);
+        result.CompletedActivitiesCount.Should().Be(0);
+        result.ProgressPercentage.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_StepNotFound_Throws()
+    {
+        var query = new GetStepProgressQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<ILogger<GetStepProgressQueryHandler>>();
+        var sut = new GetStepProgressQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
+
+        questStepRepo.GetByIdAsync(query.StepId, Arg.Any<CancellationToken>()).Returns((QuestStep?)null);
+
+        var act = () => sut.Handle(query, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_AttemptNotFound_Throws()
+    {
+        var query = new GetStepProgressQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<ILogger<GetStepProgressQueryHandler>>();
+        var sut = new GetStepProgressQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
+
+        var questStep = new QuestStep { Id = query.StepId, QuestId = query.QuestId, Title = "Step", Content = BuildContentWithActivities(1) };
+        questStepRepo.GetByIdAsync(query.StepId, Arg.Any<CancellationToken>()).Returns(questStep);
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestAttempt?)null);
+
+        var act = () => sut.Handle(query, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_NullContent_ReturnsZeroTotals()
+    {
+        var query = new GetStepProgressQuery { AuthUserId = Guid.NewGuid(), QuestId = Guid.NewGuid(), StepId = Guid.NewGuid() };
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<ILogger<GetStepProgressQueryHandler>>();
+        var sut = new GetStepProgressQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
+
+        var questStep = new QuestStep { Id = query.StepId, QuestId = query.QuestId, Title = "Step", Content = null };
+        questStepRepo.GetByIdAsync(query.StepId, Arg.Any<CancellationToken>()).Returns(questStep);
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = query.AuthUserId, QuestId = query.QuestId };
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        stepRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null);
+
+        var result = await sut.Handle(query, CancellationToken.None);
+        result!.TotalActivitiesCount.Should().Be(0);
+        result.CompletedActivitiesCount.Should().Be(0);
+        result.ProgressPercentage.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_JObjectContentWithoutActivities_ReturnsZeroTotal()
+    {
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<ILogger<GetStepProgressQueryHandler>>();
+
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+
+        var questStep = new QuestStep { Id = stepId, QuestId = questId, Title = "T", Content = new Newtonsoft.Json.Linq.JObject() };
+        questStepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(questStep);
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+        stepRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null);
+
+        var sut = new GetStepProgressQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
+        var res = await sut.Handle(new GetStepProgressQuery { AuthUserId = authId, QuestId = questId, StepId = stepId }, CancellationToken.None);
+        res.TotalActivitiesCount.Should().Be(0);
+    }
+
+    private class JObject
+    {
+        public override string ToString() => "{not-json}";
+    }
+
+    [Fact]
+    public async Task Handle_JObjectParseException_ReturnsZeroTotal()
+    {
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var stepRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var questStepRepo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<ILogger<GetStepProgressQueryHandler>>();
+
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+
+        var badContent = new JObject();
+        var questStep = new QuestStep { Id = stepId, QuestId = questId, Title = "T", Content = badContent };
+        questStepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(questStep);
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+        stepRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null);
+
+        var sut = new GetStepProgressQueryHandler(attemptRepo, stepRepo, questStepRepo, logger);
+        var res = await sut.Handle(new GetStepProgressQuery { AuthUserId = authId, QuestId = questId, StepId = stepId }, CancellationToken.None);
+        res.TotalActivitiesCount.Should().Be(0);
+    }
 }

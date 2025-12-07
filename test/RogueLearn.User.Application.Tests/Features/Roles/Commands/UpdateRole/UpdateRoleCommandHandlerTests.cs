@@ -49,4 +49,24 @@ public class UpdateRoleCommandHandlerTests
         res.Name.Should().Be(updated.Name);
         await roleRepo.Received(1).UpdateAsync(Arg.Any<Role>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_Noop_UpdateStillMaps()
+    {
+        var roleRepo = Substitute.For<IRoleRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var logger = Substitute.For<ILogger<UpdateRoleCommandHandler>>();
+
+        var roleId = Guid.NewGuid();
+        var cmd = new UpdateRoleCommand { Id = roleId, Name = "same", Description = "same" };
+        var role = new Role { Id = roleId, Name = "same", Description = "same" };
+        roleRepo.GetByIdAsync(roleId, Arg.Any<CancellationToken>()).Returns(role);
+        roleRepo.UpdateAsync(Arg.Any<Role>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Role>());
+        mapper.Map<UpdateRoleResponse>(Arg.Any<Role>()).Returns(new UpdateRoleResponse { Id = role.Id, Name = role.Name, Description = role.Description });
+
+        var sut = new UpdateRoleCommandHandler(roleRepo, mapper, logger);
+        var res = await sut.Handle(cmd, CancellationToken.None);
+        res.Id.Should().Be(role.Id);
+        res.Name.Should().Be("same");
+    }
 }

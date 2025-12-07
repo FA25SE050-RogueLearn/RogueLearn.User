@@ -46,4 +46,58 @@ public class AdminListLecturerVerificationRequestsQueryHandlerTests
         resp.Items[0].StaffId.Should().NotBeNullOrEmpty();
         resp.Items[0].Email.Should().NotBeNullOrEmpty();
     }
+
+    [Fact]
+    public async Task Handle_FiltersByUserId()
+    {
+        var repo = Substitute.For<ILecturerVerificationRequestRepository>();
+        var sut = new AdminListLecturerVerificationRequestsQueryHandler(repo);
+
+        var userId = System.Guid.NewGuid();
+        var query = new AdminListLecturerVerificationRequestsQuery { UserId = userId, Status = null, Page = 1, Size = 10 };
+
+        var list = new List<LecturerVerificationRequest>
+        {
+            new() { Id = System.Guid.NewGuid(), AuthUserId = userId, Status = VerificationStatus.Pending },
+            new() { Id = System.Guid.NewGuid(), AuthUserId = System.Guid.NewGuid(), Status = VerificationStatus.Pending }
+        };
+        repo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(list);
+
+        var resp = await sut.Handle(query, CancellationToken.None);
+        resp.Items.All(i => i.UserId == userId).Should().BeTrue();
+        resp.Total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_DefaultsPageAndSizeWhenNonPositive()
+    {
+        var repo = Substitute.For<ILecturerVerificationRequestRepository>();
+        var sut = new AdminListLecturerVerificationRequestsQueryHandler(repo);
+
+        var query = new AdminListLecturerVerificationRequestsQuery { Status = null, Page = 0, Size = 0 };
+        repo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<LecturerVerificationRequest>());
+
+        var resp = await sut.Handle(query, CancellationToken.None);
+        resp.Page.Should().Be(1);
+        resp.Size.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task Handle_ParsesApprovedStatus()
+    {
+        var repo = Substitute.For<ILecturerVerificationRequestRepository>();
+        var sut = new AdminListLecturerVerificationRequestsQueryHandler(repo);
+
+        var query = new AdminListLecturerVerificationRequestsQuery { Status = "Approved", Page = 1, Size = 10 };
+        var list = new List<LecturerVerificationRequest>
+        {
+            new() { Id = System.Guid.NewGuid(), AuthUserId = System.Guid.NewGuid(), Status = VerificationStatus.Approved },
+            new() { Id = System.Guid.NewGuid(), AuthUserId = System.Guid.NewGuid(), Status = VerificationStatus.Pending }
+        };
+        repo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(list);
+
+        var resp = await sut.Handle(query, CancellationToken.None);
+        resp.Items.All(i => i.Status == "approved").Should().BeTrue();
+        resp.Total.Should().Be(1);
+    }
 }

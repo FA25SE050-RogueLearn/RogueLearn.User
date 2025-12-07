@@ -39,4 +39,16 @@ public class GetPartyResourceByIdQueryHandlerTests
         var res = await sut.Handle(query, CancellationToken.None);
         res!.Title.Should().Be("T");
     }
+
+    [Fact]
+    public async Task Handle_NotFound_ReturnsNull()
+    {
+        var query = new GetPartyResourceByIdQuery(System.Guid.NewGuid(), System.Guid.NewGuid());
+        var repo = Substitute.For<IPartyStashItemRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var sut = new GetPartyResourceByIdQueryHandler(repo, mapper);
+        repo.GetByIdAsync(query.StashItemId, Arg.Any<CancellationToken>()).Returns((PartyStashItem?)null);
+        var res = await sut.Handle(query, CancellationToken.None);
+        res.Should().BeNull();
+    }
 }

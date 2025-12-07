@@ -35,4 +35,5 @@ public class SyllabusSessionDtoConverterTests
         var json = JsonSerializer.Serialize(dto);
         json.Should().Contain("\"suggestedUrl\":\"http://x\"");
     }
+
 }

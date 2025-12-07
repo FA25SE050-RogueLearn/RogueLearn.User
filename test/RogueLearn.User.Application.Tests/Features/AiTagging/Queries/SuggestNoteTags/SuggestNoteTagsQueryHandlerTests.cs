@@ -112,4 +112,34 @@ public class SuggestNoteTagsQueryHandlerTests
         await sut.Handle(q, CancellationToken.None);
         await service.Received(1).SuggestAsync(authUserId, json, 4, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_ContentString_IsJsonObject_ReturnsRawString()
+    {
+        var authUserId = Guid.NewGuid();
+        var noteId = Guid.NewGuid();
+        var service = Substitute.For<ITaggingSuggestionService>();
+        var noteRepo = Substitute.For<INoteRepository>();
+        var jsonObj = "{\"a\":1}";
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(new Note { Id = noteId, AuthUserId = authUserId, Content = jsonObj });
+        var sut = new SuggestNoteTagsQueryHandler(service, noteRepo);
+        var q = new SuggestNoteTagsQuery { AuthUserId = authUserId, RawText = null, NoteId = noteId, MaxTags = 5 };
+        await sut.Handle(q, CancellationToken.None);
+        await service.Received(1).SuggestAsync(authUserId, jsonObj, 5, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ContentJsonElement_Object_ReturnsCompactJson()
+    {
+        var authUserId = Guid.NewGuid();
+        var noteId = Guid.NewGuid();
+        var service = Substitute.For<ITaggingSuggestionService>();
+        var noteRepo = Substitute.For<INoteRepository>();
+        var el = JsonSerializer.Deserialize<JsonElement>("{\"a\":1}");
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(new Note { Id = noteId, AuthUserId = authUserId, Content = el });
+        var sut = new SuggestNoteTagsQueryHandler(service, noteRepo);
+        var q = new SuggestNoteTagsQuery { AuthUserId = authUserId, RawText = null, NoteId = noteId, MaxTags = 4 };
+        await sut.Handle(q, CancellationToken.None);
+        await service.Received(1).SuggestAsync(authUserId, "{\"a\":1}", 4, Arg.Any<CancellationToken>());
+    }
 }
