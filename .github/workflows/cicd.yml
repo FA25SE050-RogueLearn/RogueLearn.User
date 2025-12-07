@@ -10,6 +10,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test-and-coverage:
+    name: Test and Coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore MySolution.sln
+
+      - name: Build
+        run: dotnet build MySolution.sln --configuration Release --no-restore
+
+      - name: Test with Coverage
+        run: dotnet test MySolution.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Add dotnet tools to PATH
+        run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Generate Coverage Report
+        run: reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage" -reporttypes:"MarkdownSummary;Html"
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
+
+      - name: Link HTML Coverage Artifact in Summary
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          API_URL="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts"
+          curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" > artifacts.json
+          ARTIFACT_ID=$(python3 -c "import json; d=json.load(open('artifacts.json')); print(next((str(a['id']) for a in d.get('artifacts',[]) if a.get('name')=='coverage-report'), '')))")
+          if [ -n "$ARTIFACT_ID" ]; then
+            LINK="$SERVER_URL/$REPO/actions/artifacts/$ARTIFACT_ID"
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📈 Coverage HTML Report (Artifact)" >> $GITHUB_STEP_SUMMARY
+            echo "Download and open 'coverage/index.html' from the artifact:" >> $GITHUB_STEP_SUMMARY
+            echo "$LINK" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Coverage artifact link not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Append Coverage Summary to Action Summary
+        run: |
+          if [ -f coverage/Summary.md ]; then
+            cat coverage/Summary.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Coverage summary not found" >> $GITHUB_STEP_SUMMARY
+          fi
   docker:
     name: Build and Push
     runs-on: ubuntu-latest
