@@ -49,6 +49,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
         {
             _logger.LogInformation("Starting curriculum import from text");
 
+            // 1. Extract clean text from HTML
             var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.RawText);
             if (string.IsNullOrWhiteSpace(cleanText))
             {
@@ -56,6 +57,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 throw new Exceptions.BadRequestException("Failed to extract meaningful text from the provided HTML.");
             }
 
+            // 2. Use AI to extract structured JSON
             var extractedJson = await _curriculumPlugin.ExtractCurriculumJsonAsync(cleanText, cancellationToken);
             if (string.IsNullOrEmpty(extractedJson))
             {
@@ -63,6 +65,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 throw new Exceptions.BadRequestException("Failed to extract curriculum data from the provided text");
             }
 
+            // 3. Deserialize JSON
             CurriculumImportData? curriculumData;
             try
             {
@@ -84,6 +87,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 throw new Exceptions.BadRequestException("No curriculum data was extracted");
             }
 
+            // 4. Validate Data
             var validationResult = await _validator.ValidateAsync(curriculumData, cancellationToken);
             if (!validationResult.IsValid)
             {
@@ -92,6 +96,7 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
 
             var response = new ImportCurriculumResponse { IsSuccess = true };
 
+            // 5. Get or Create Curriculum Program
             var program = await _curriculumProgramRepository.FirstOrDefaultAsync(p => p.ProgramCode == curriculumData.Program.ProgramCode, cancellationToken);
             if (program == null)
             {
@@ -107,59 +112,70 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                 program = await _curriculumProgramRepository.AddAsync(program, cancellationToken);
                 _logger.LogInformation("Created new curriculum program with ID {ProgramId}", program.Id);
             }
+            else
+            {
+                // Optional: Update existing program details
+                program.ProgramName = curriculumData.Program.ProgramName;
+                program.Description = curriculumData.Program.Description;
+                program.TotalCredits = curriculumData.Program.TotalCredits;
+                await _curriculumProgramRepository.UpdateAsync(program, cancellationToken);
+            }
             response.CurriculumProgramId = program.Id;
 
-            var subjectEntities = new List<Subject>();
-
-            // Construct an effective date from the version info to use for UpdatedAt
+            // 6. Process Subjects (Create or Update)
+            var processedSubjects = new List<Subject>();
             DateTimeOffset effectiveDate = new DateTimeOffset(curriculumData.Version.EffectiveYear, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
             foreach (var subjectData in curriculumData.Subjects.Where(s => s.IsPlaceholder == false))
             {
-                var subject = new Subject
-                {
-                    SubjectCode = subjectData.SubjectCode,
-                    SubjectName = subjectData.SubjectName,
-                    Credits = subjectData.Credits,
-                    Description = subjectData.Description,
-                    Semester = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode)?.TermNumber ?? 0,
-                    Content = null,
-                    // MODIFIED: Set UpdatedAt to the effective date of the curriculum import.
-                    UpdatedAt = effectiveDate
-                };
-                subjectEntities.Add(subject);
-            }
+                // Check if subject exists by code
+                var existingSubject = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectData.SubjectCode, cancellationToken);
 
-            var createdSubjects = new List<Subject>();
-            foreach (var subjectEntity in subjectEntities)
-            {
-                // MODIFIED: Lookup is now only by SubjectCode.
-                var existing = await _subjectRepository.FirstOrDefaultAsync(s => s.SubjectCode == subjectEntity.SubjectCode, cancellationToken);
-                if (existing != null)
+                if (existingSubject != null)
                 {
-                    existing.SubjectName = subjectEntity.SubjectName;
-                    existing.Credits = subjectEntity.Credits;
-                    existing.Description = subjectEntity.Description;
-                    existing.Semester = subjectEntity.Semester;
-                    existing.UpdatedAt = subjectEntity.UpdatedAt;
-                    var updated = await _subjectRepository.UpdateAsync(existing, cancellationToken);
-                    createdSubjects.Add(updated);
+                    // Update existing subject
+                    existingSubject.SubjectName = subjectData.SubjectName;
+                    existingSubject.Credits = subjectData.Credits;
+                    existingSubject.Description = subjectData.Description;
+
+                    // Update semester from structure if available
+                    var structureInfo = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode);
+                    if (structureInfo != null)
+                    {
+                        existingSubject.Semester = structureInfo.TermNumber;
+                    }
+
+                    existingSubject.UpdatedAt = effectiveDate;
+
+                    var updated = await _subjectRepository.UpdateAsync(existingSubject, cancellationToken);
+                    processedSubjects.Add(updated);
                 }
                 else
                 {
-                    var created = await _subjectRepository.AddAsync(subjectEntity, cancellationToken);
-                    createdSubjects.Add(created);
+                    // Create new subject
+                    var newSubject = new Subject
+                    {
+                        SubjectCode = subjectData.SubjectCode,
+                        SubjectName = subjectData.SubjectName,
+                        Credits = subjectData.Credits,
+                        Description = subjectData.Description,
+                        Semester = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subjectData.SubjectCode)?.TermNumber ?? 0,
+                        Content = null, // Content populated via separate syllabus import
+                        UpdatedAt = effectiveDate
+                    };
+                    var created = await _subjectRepository.AddAsync(newSubject, cancellationToken);
+                    processedSubjects.Add(created);
                 }
             }
-            var subjectMapByCode = createdSubjects.ToDictionary(s => s.SubjectCode, s => s);
 
-            foreach (var createdSubject in createdSubjects)
+            // 7. Handle Prerequisites (Second pass after all subjects exist)
+            var subjectMapByCode = processedSubjects.ToDictionary(s => s.SubjectCode, s => s);
+            foreach (var subject in processedSubjects)
             {
-                var structureData = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == createdSubject.SubjectCode);
+                var structureData = curriculumData.Structure.FirstOrDefault(s => s.SubjectCode == subject.SubjectCode);
                 if (structureData?.PrerequisiteSubjectCodes?.Any() == true)
                 {
                     var prereqIds = new List<Guid>();
-
                     foreach (var prereqCode in structureData.PrerequisiteSubjectCodes)
                     {
                         if (subjectMapByCode.TryGetValue(prereqCode, out var prereqSubject))
@@ -167,16 +183,27 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                             prereqIds.Add(prereqSubject.Id);
                         }
                     }
-                    createdSubject.PrerequisiteSubjectIds = prereqIds.ToArray();
-                    await _subjectRepository.UpdateAsync(createdSubject, cancellationToken);
+
+                    // Only update if changes found to avoid unnecessary DB writes
+                    if (subject.PrerequisiteSubjectIds == null || !subject.PrerequisiteSubjectIds.SequenceEqual(prereqIds))
+                    {
+                        subject.PrerequisiteSubjectIds = prereqIds.ToArray();
+                        await _subjectRepository.UpdateAsync(subject, cancellationToken);
+                    }
                 }
             }
-            response.SubjectIds.AddRange(createdSubjects.Select(s => s.Id));
 
+            response.SubjectIds.AddRange(processedSubjects.Select(s => s.Id));
 
-            foreach (var subject in createdSubjects)
+            // 8. Link Subjects to Program (CurriculumProgramSubject)
+            int linksCreated = 0;
+            foreach (var subject in processedSubjects)
             {
-                var mappingExists = await _programSubjectRepository.AnyAsync(ps => ps.ProgramId == program.Id && ps.SubjectId == subject.Id, cancellationToken);
+                // Idempotency check: does the link already exist?
+                var mappingExists = await _programSubjectRepository.AnyAsync(
+                    ps => ps.ProgramId == program.Id && ps.SubjectId == subject.Id,
+                    cancellationToken);
+
                 if (!mappingExists)
                 {
                     var programSubject = new CurriculumProgramSubject
@@ -185,12 +212,14 @@ namespace RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportC
                         SubjectId = subject.Id
                     };
                     await _programSubjectRepository.AddAsync(programSubject, cancellationToken);
+                    linksCreated++;
                 }
             }
-            _logger.LogInformation("Created {Count} program-subject mappings.", createdSubjects.Count);
 
+            _logger.LogInformation("Processed {SubjectCount} subjects. Created {LinkCount} new program-subject links.",
+                processedSubjects.Count, linksCreated);
 
-            response.Message = "Curriculum imported successfully";
+            response.Message = $"Curriculum imported successfully. {processedSubjects.Count} subjects processed, {linksCreated} linked to program.";
             return response;
         }
     }

@@ -46,14 +46,11 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                 a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
                 cancellationToken);
 
-            // ⭐ FIX: If attempt doesn't exist yet (Not Started), return empty progress instead of throwing exception
+            // If attempt doesn't exist yet (Not Started), return empty progress
             if (attempt == null)
             {
                 _logger.LogInformation("ℹ️ No attempt found for Quest:{QuestId} - returning empty activity list", request.QuestId);
-
-                // Parse activities but mark all as incomplete
                 var allActivities = ExtractAndMapActivities(questStep.Content, Array.Empty<Guid>());
-
                 return new CompletedActivitiesDto
                 {
                     StepId = request.StepId,
@@ -63,7 +60,7 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                 };
             }
 
-            // 3. Get step progress - if null, return empty progress (user just started this step)
+            // 3. Get step progress
             var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
                 sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
                 cancellationToken);
@@ -71,19 +68,14 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
             if (stepProgress is null)
             {
                 _logger.LogInformation("ℹ️ No progress yet for Step:{StepId} - user just started this step", request.StepId);
-
-                // Return empty progress with all activities marked as incomplete
                 var allActivities = ExtractAndMapActivities(questStep.Content, Array.Empty<Guid>());
-
-                var emptyResult = new CompletedActivitiesDto
+                return new CompletedActivitiesDto
                 {
                     StepId = request.StepId,
                     Activities = allActivities,
                     CompletedCount = 0,
                     TotalCount = allActivities.Count
                 };
-
-                return emptyResult;
             }
 
             // 4. Parse activities from content and map with completion status
@@ -97,8 +89,7 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                 TotalCount = activities.Count
             };
 
-            _logger.LogInformation("✅ Completed activities: {Completed}/{Total}",
-                result.CompletedCount, result.TotalCount);
+            _logger.LogInformation("✅ Completed activities: {Completed}/{Total}", result.CompletedCount, result.TotalCount);
 
             return result;
         }
@@ -107,6 +98,42 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
             _logger.LogError(ex, "❌ Error fetching completed activities for Step:{StepId}", request.StepId);
             throw;
         }
+    }
+
+    private static string ExtractJsonString(object? content)
+    {
+        if (content is null) return "{}";
+        if (content is string s) return s;
+        if (content is JsonElement je) return je.GetRawText();
+
+        // Handle Newtonsoft JTypes (used by Supabase client)
+        var typeName = content.GetType().Name;
+        if (typeName == "JObject" || typeName == "JArray" || typeName == "JToken")
+            return content.ToString()!;
+
+        // Fallback for POCOs
+        return JsonSerializer.Serialize(content);
+    }
+
+    private static JsonElement? TryGetActivitiesElement(JsonDocument doc)
+    {
+        var root = doc.RootElement;
+
+        if (root.ValueKind == JsonValueKind.Array)
+            return root;
+
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in root.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, "activities", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.Array)
+                        return prop.Value;
+                }
+            }
+        }
+        return null;
     }
 
     private List<ActivityProgressDto> ExtractAndMapActivities(object? content, Guid[] completedIds)
@@ -118,46 +145,31 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
 
         try
         {
-            // Handle JObject
-            if (content.GetType().Name == "JObject")
-            {
-                var jObjectJson = content.ToString();
-                using (var doc = JsonDocument.Parse(jObjectJson!))
-                {
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("activities", out var activitiesElement) &&
-                        activitiesElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var activityElement in activitiesElement.EnumerateArray())
-                        {
-                            var activity = ParseActivityElement(activityElement);
-                            if (activity != null)
-                            {
-                                activity.IsCompleted = completedSet.Contains(activity.ActivityId);
-                                activities.Add(activity);
-                            }
-                        }
-                    }
-                }
-                return activities;
-            }
+            // Robust extraction of JSON string from unknown object type
+            var jsonString = ExtractJsonString(content);
 
-            // Handle Dictionary
-            if (content is Dictionary<string, object> contentDict &&
-                contentDict.TryGetValue("activities", out var activitiesObj) &&
-                activitiesObj is List<object> activitiesList)
+            if (string.IsNullOrWhiteSpace(jsonString)) return activities;
+
+            using (var doc = JsonDocument.Parse(jsonString))
             {
-                foreach (var activityObj in activitiesList)
+                var activitiesElement = TryGetActivitiesElement(doc);
+
+                if (activitiesElement.HasValue)
                 {
-                    if (activityObj is Dictionary<string, object> activityDict)
+                    foreach (var activityElement in activitiesElement.Value.EnumerateArray())
                     {
-                        var activity = ParseActivityDict(activityDict);
+                        var activity = ParseActivityElement(activityElement);
                         if (activity != null)
                         {
                             activity.IsCompleted = completedSet.Contains(activity.ActivityId);
                             activities.Add(activity);
                         }
                     }
+                }
+                else
+                {
+                    _logger.LogWarning("No 'activities' element found in content: {JsonPreview}",
+                        jsonString.Length > 100 ? jsonString[..100] : jsonString);
                 }
             }
         }
@@ -171,6 +183,8 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
 
     private ActivityProgressDto? ParseActivityElement(JsonElement activityElement)
     {
+        if (activityElement.ValueKind != JsonValueKind.Object) return null;
+
         if (!activityElement.TryGetProperty("activityId", out var idElement) ||
             !Guid.TryParse(idElement.GetString(), out var activityId))
         {
@@ -208,52 +222,6 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                     ? topicEl.GetString() : "Knowledge Check",
                 "Coding" => payloadElement.TryGetProperty("topic", out var codingTopicEl)
                     ? codingTopicEl.GetString() : "Coding Challenge",
-                _ => "Activity"
-            };
-        }
-
-        return activity;
-    }
-
-    private ActivityProgressDto? ParseActivityDict(Dictionary<string, object> activityDict)
-    {
-        if (!activityDict.TryGetValue("activityId", out var idObj) ||
-            !Guid.TryParse(idObj.ToString(), out var activityId))
-        {
-            return null;
-        }
-
-        var activity = new ActivityProgressDto { ActivityId = activityId };
-
-        if (activityDict.TryGetValue("type", out var typeObj))
-        {
-            activity.ActivityType = typeObj.ToString() ?? "Unknown";
-        }
-
-        if (activityDict.TryGetValue("payload", out var payloadObj) &&
-            payloadObj is Dictionary<string, object> payload)
-        {
-            if (payload.TryGetValue("experiencePoints", out var xpObj) &&
-                int.TryParse(xpObj.ToString(), out var xp))
-            {
-                activity.ExperiencePoints = xp;
-            }
-
-            if (payload.TryGetValue("skillId", out var skillIdObj) &&
-                Guid.TryParse(skillIdObj.ToString(), out var skillId))
-            {
-                activity.SkillId = skillId;
-            }
-
-            activity.Title = activity.ActivityType switch
-            {
-                "Reading" => payload.TryGetValue("articleTitle", out var titleObj)
-                    ? titleObj.ToString() : "Reading Activity",
-                "Quiz" => "Quiz",
-                "KnowledgeCheck" => payload.TryGetValue("topic", out var topicObj)
-                    ? topicObj.ToString() : "Knowledge Check",
-                "Coding" => payload.TryGetValue("topic", out var codingTopicObj)
-                    ? codingTopicObj.ToString() : "Coding Challenge",
                 _ => "Activity"
             };
         }

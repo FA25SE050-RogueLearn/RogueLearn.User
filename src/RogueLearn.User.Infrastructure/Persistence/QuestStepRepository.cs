@@ -17,7 +17,7 @@ public class QuestStepRepository : GenericRepository<QuestStep>, IQuestStepRepos
     {
     }
 
-    public async Task<IEnumerable<QuestStep>> FindByQuestIdAsync(Guid questId,
+    public async Task<IEnumerable<QuestStep>> GetByQuestIdAsync(Guid questId,
         CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
