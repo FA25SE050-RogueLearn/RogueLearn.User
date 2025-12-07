@@ -33,13 +33,14 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly ILogger<GenerateQuestStepsCommandHandler> _logger;
     private readonly IQuestGenerationPlugin _questGenerationPlugin;
     private readonly IMapper _mapper;
-    private readonly IUserProfileRepository _userProfileRepository;
-    private readonly IClassRepository _classRepository;
     private readonly ISkillRepository _skillRepository;
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly QuestStepsPromptBuilder _promptBuilder;
     private readonly IUserSkillRepository _userSkillRepository;
     private readonly ITopicGrouperService _topicGrouperService;
+
+    // Removed IClassRepository and IUserProfileRepository since admins don't need a class context
+    // The "Master Template" is class-agnostic or uses the subject's default context
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
@@ -48,8 +49,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         ILogger<GenerateQuestStepsCommandHandler> logger,
         IQuestGenerationPlugin questGenerationPlugin,
         IMapper mapper,
-        IUserProfileRepository userProfileRepository,
-        IClassRepository classRepository,
         ISkillRepository skillRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         QuestStepsPromptBuilder promptBuilder,
@@ -62,8 +61,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         _logger = logger;
         _questGenerationPlugin = questGenerationPlugin;
         _mapper = mapper;
-        _userProfileRepository = userProfileRepository;
-        _classRepository = classRepository;
         _skillRepository = skillRepository;
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _promptBuilder = promptBuilder;
@@ -73,20 +70,16 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
     public async Task<List<GeneratedQuestStepDto>> Handle(GenerateQuestStepsCommand request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Admin {AdminId} started generating steps for Quest {QuestId}", request.AdminId, request.QuestId);
+
         // ========== 1. PRE-CONDITION CHECKS ==========
         var questHasSteps = await _questStepRepository.QuestContainsSteps(request.QuestId, cancellationToken);
         if (questHasSteps)
         {
             _logger.LogWarning("Quest {QuestId} already has steps. Proceeding (might create duplicates if not cleared).", request.QuestId);
+            // In a real admin tool, we might want to clear existing steps here or throw.
+            // For now, logging warning.
         }
-
-        var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken)
-            ?? throw new NotFoundException("User Profile not found.");
-
-        if (!userProfile.ClassId.HasValue) throw new BadRequestException("Please choose a Class first");
-
-        var userClass = await _classRepository.GetByIdAsync(userProfile.ClassId.Value, cancellationToken)
-            ?? throw new BadRequestException("Class not found");
 
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
             ?? throw new NotFoundException("Quest", request.QuestId);
@@ -133,7 +126,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             {
                 UpdateHangfireJobProgress(request.HangfireJobId, processedModules, modules.Count, $"Generating Module {module.ModuleNumber}: {module.Title}...");
 
-                var prompt = _promptBuilder.BuildMasterPrompt(module, relevantSkills, subject.SubjectName, subject.Description ?? "", userClass);
+                // Pass null for userClass since this is Master Template generation
+                var prompt = _promptBuilder.BuildMasterPrompt(module, relevantSkills, subject.SubjectName, subject.Description ?? "", userClass: null);
                 var generatedJson = await _questGenerationPlugin.GenerateFromPromptAsync(prompt, cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(generatedJson)) continue;
@@ -160,23 +154,18 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                             {
                                 foreach (var activity in activitiesList)
                                 {
-                                    // Ensure valid GUID
                                     activity["activityId"] = Guid.NewGuid().ToString();
-
-                                    // Ensure XP exists, if not, patch it with default
                                     PatchActivityExperience(activity);
                                 }
                             }
 
-                            // Recalculate total from the list now that we've patched it
                             int xp = activitiesList?.Sum(a =>
                                 a.TryGetValue("payload", out var pl) &&
                                 pl is Dictionary<string, object> payload &&
                                 payload.TryGetValue("experiencePoints", out var pts) &&
                                 int.TryParse(pts.ToString(), out var val) ? val : 0) ?? 0;
 
-                            // Fallback total if list sum failed or was 0
-                            if (xp == 0) xp = 200; // Minimum step value
+                            if (xp == 0) xp = 200;
 
                             string dbVariant = variantKey switch
                             {
@@ -222,12 +211,10 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     {
         if (!activity.ContainsKey("payload") || activity["payload"] is not Dictionary<string, object> payload)
         {
-            // Create payload if missing
             payload = new Dictionary<string, object>();
             activity["payload"] = payload;
         }
 
-        // Check if experiencePoints exists
         if (!payload.ContainsKey("experiencePoints"))
         {
             var type = activity.ContainsKey("type") ? activity["type"]?.ToString() : "Unknown";
@@ -240,8 +227,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             };
 
             payload["experiencePoints"] = defaultXp;
-            // Also log/print that we patched it?
-            // Console.WriteLine($"Patched XP for {type}: {defaultXp}");
         }
     }
 
