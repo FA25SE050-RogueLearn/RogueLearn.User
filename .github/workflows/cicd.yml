@@ -56,9 +56,10 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          sudo apt-get update -y && sudo apt-get install -y jq
           API_URL="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts"
           curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" > artifacts.json
-          ARTIFACT_ID=$(python3 -c "import json; d=json.load(open('artifacts.json')); print(next((str(a['id']) for a in d.get('artifacts',[]) if a.get('name')=='application-coverage-report'), '')))")
+          ARTIFACT_ID=$(jq -r '.artifacts[] | select(.name=="application-coverage-report") | .id' artifacts.json | head -n 1)
           if [ -n "$ARTIFACT_ID" ]; then
             LINK="$SERVER_URL/$REPO/actions/artifacts/$ARTIFACT_ID"
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -127,9 +128,10 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          sudo apt-get update -y && sudo apt-get install -y jq
           API_URL="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts"
           curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" > artifacts.json
-          ARTIFACT_ID=$(python3 -c "import json; d=json.load(open('artifacts.json')); print(next((str(a['id']) for a in d.get('artifacts',[]) if a.get('name')=='api-coverage-report'), '')))")
+          ARTIFACT_ID=$(jq -r '.artifacts[] | select(.name=="api-coverage-report") | .id' artifacts.json | head -n 1)
           if [ -n "$ARTIFACT_ID" ]; then
             LINK="$SERVER_URL/$REPO/actions/artifacts/$ARTIFACT_ID"
             echo "" >> $GITHUB_STEP_SUMMARY
