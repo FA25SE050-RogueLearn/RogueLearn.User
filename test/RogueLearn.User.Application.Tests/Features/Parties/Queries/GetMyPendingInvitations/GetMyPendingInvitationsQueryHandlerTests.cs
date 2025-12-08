@@ -49,4 +49,28 @@ public class GetMyPendingInvitationsQueryHandlerTests
         var result = await sut.Handle(query, CancellationToken.None);
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Handle_ParsesJoinLinkAndSessionId_FromMessageJson()
+    {
+        var query = new GetMyPendingInvitationsQuery(System.Guid.NewGuid());
+        var invRepo = Substitute.For<IPartyInvitationRepository>();
+        var partyRepo = Substitute.For<IPartyRepository>();
+        var profileRepo = Substitute.For<IUserProfileRepository>();
+        var sut = new GetMyPendingInvitationsQueryHandler(invRepo, partyRepo, profileRepo);
+
+        var link = "https://game.example/join/abc";
+        var session = System.Guid.NewGuid();
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { message = "m", joinLink = link, gameSessionId = session });
+
+        var invs = new List<PartyInvitation> { new() { Id = System.Guid.NewGuid(), PartyId = System.Guid.NewGuid(), InviteeId = query.AuthUserId, InviterId = System.Guid.NewGuid(), Status = InvitationStatus.Pending, Message = payload } };
+        invRepo.GetPendingInvitationsByInviteeAsync(query.AuthUserId, Arg.Any<CancellationToken>()).Returns(invs);
+        partyRepo.GetByIdsAsync(Arg.Any<IEnumerable<System.Guid>>(), Arg.Any<CancellationToken>()).Returns(new List<Party> { new() { Id = invs[0].PartyId, Name = "P" } });
+        profileRepo.GetByAuthIdAsync(query.AuthUserId, Arg.Any<CancellationToken>()).Returns(new UserProfile { Username = "u" });
+
+        var result = await sut.Handle(query, CancellationToken.None);
+        result.Count.Should().Be(1);
+        result.First().JoinLink.Should().Be(link);
+        result.First().GameSessionId.Should().Be(session);
+    }
 }

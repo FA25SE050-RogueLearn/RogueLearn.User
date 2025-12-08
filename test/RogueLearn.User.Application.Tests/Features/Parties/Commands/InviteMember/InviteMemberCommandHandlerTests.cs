@@ -178,4 +178,78 @@ public class InviteMemberCommandHandlerTests
         var actUnknown = () => sut.Handle(cmdUnknown, CancellationToken.None);
         await actUnknown.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.BadRequestException>().WithMessage("No user found with email 'x@y.z'.");
     }
+
+    [Fact]
+    public async Task Handle_UpdateExistingInvitation_SerializesUnityMetadata()
+    {
+        var invitationRepo = Substitute.For<IPartyInvitationRepository>();
+        var notification = Substitute.For<RogueLearn.User.Application.Interfaces.IPartyNotificationService>();
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        var partyId = Guid.NewGuid();
+        var inviter = Guid.NewGuid();
+        var invitee = Guid.NewGuid();
+
+        var existing = new PartyInvitation { PartyId = partyId, InviteeId = invitee, Status = InvitationStatus.Declined, ExpiresAt = DateTimeOffset.UtcNow.AddDays(1) };
+        invitationRepo.GetByPartyAndInviteeAsync(partyId, invitee, Arg.Any<CancellationToken>()).Returns(existing);
+
+        var sut = new InviteMemberCommandHandler(invitationRepo, notification, userRepo);
+        var newExpiry = DateTimeOffset.UtcNow.AddDays(2);
+        var joinLink = "https://game.example/join/xyz";
+        var sessionId = Guid.NewGuid();
+        var cmd = new InviteMemberCommand(partyId, inviter, new[] { new InviteTarget(invitee, null) }, "updated", newExpiry, joinLink, sessionId);
+
+        PartyInvitation? updated = null;
+        invitationRepo.UpdateAsync(Arg.Do<PartyInvitation>(i => updated = i), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<PartyInvitation>());
+
+        await sut.Handle(cmd, CancellationToken.None);
+
+        updated.Should().NotBeNull();
+        var doc = System.Text.Json.JsonDocument.Parse(updated!.Message!);
+        var root = doc.RootElement;
+        root.GetProperty("message").GetString().Should().Be("updated");
+        root.GetProperty("joinLink").GetString().Should().Be(joinLink);
+        root.GetProperty("gameSessionId").GetString().Should().Be(sessionId.ToString());
+        updated.Status.Should().Be(InvitationStatus.Pending);
+        updated.InviterId.Should().Be(inviter);
+        updated.RespondedAt.Should().BeNull();
+        updated.ExpiresAt.Should().Be(newExpiry);
+        await notification.Received(1).SendInvitationNotificationAsync(Arg.Any<PartyInvitation>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_CreateNewInvitation_SerializesUnityMetadata()
+    {
+        var invitationRepo = Substitute.For<IPartyInvitationRepository>();
+        var notification = Substitute.For<RogueLearn.User.Application.Interfaces.IPartyNotificationService>();
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        var partyId = Guid.NewGuid();
+        var inviter = Guid.NewGuid();
+        var invitee = Guid.NewGuid();
+
+        invitationRepo.GetByPartyAndInviteeAsync(partyId, invitee, Arg.Any<CancellationToken>()).Returns((PartyInvitation?)null);
+
+        var sut = new InviteMemberCommandHandler(invitationRepo, notification, userRepo);
+        var expiry = DateTimeOffset.UtcNow.AddHours(6);
+        var joinLink = "https://game.example/join/abc";
+        var sessionId = Guid.NewGuid();
+        var cmd = new InviteMemberCommand(partyId, inviter, new[] { new InviteTarget(invitee, null) }, "msg", expiry, joinLink, sessionId);
+
+        PartyInvitation? added = null;
+        invitationRepo.AddAsync(Arg.Do<PartyInvitation>(i => added = i), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<PartyInvitation>());
+
+        await sut.Handle(cmd, CancellationToken.None);
+
+        added.Should().NotBeNull();
+        var doc2 = System.Text.Json.JsonDocument.Parse(added!.Message!);
+        var root2 = doc2.RootElement;
+        root2.GetProperty("message").GetString().Should().Be("msg");
+        root2.GetProperty("joinLink").GetString().Should().Be(joinLink);
+        root2.GetProperty("gameSessionId").GetString().Should().Be(sessionId.ToString());
+        added.PartyId.Should().Be(partyId);
+        added.InviterId.Should().Be(inviter);
+        added.InviteeId.Should().Be(invitee);
+        added.Status.Should().Be(InvitationStatus.Pending);
+        added.ExpiresAt.Should().Be(expiry);
+        await notification.Received(1).SendInvitationNotificationAsync(Arg.Any<PartyInvitation>(), Arg.Any<CancellationToken>());
+    }
 }
