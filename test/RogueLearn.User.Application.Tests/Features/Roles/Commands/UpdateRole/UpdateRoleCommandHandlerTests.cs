@@ -41,7 +41,7 @@ public class UpdateRoleCommandHandlerTests
         var updated = new Role { Id = roleId, Name = cmd.Name, Description = cmd.Description };
         roleRepo.GetByIdAsync(roleId, Arg.Any<CancellationToken>()).Returns(role);
         roleRepo.UpdateAsync(Arg.Any<Role>(), Arg.Any<CancellationToken>()).Returns(updated);
-        mapper.Map<UpdateRoleResponse>(updated).Returns(new UpdateRoleResponse { Id = updated.Id, Name = updated.Name, Description = updated.Description });
+        mapper.Map<UpdateRoleResponse>(updated).Returns(new UpdateRoleResponse { Id = updated.Id, Name = updated.Name, Description = updated.Description, UpdatedAt = DateTime.UtcNow });
 
         var sut = new UpdateRoleCommandHandler(roleRepo, mapper, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);

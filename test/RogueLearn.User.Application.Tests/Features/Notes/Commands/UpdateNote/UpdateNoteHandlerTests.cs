@@ -1,144 +1,344 @@
 using FluentAssertions;
 using NSubstitute;
-using RogueLearn.User.Application.Exceptions;
+using AutoMapper;
 using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using AutoMapper;
-using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Tests.Features.Notes.Commands.UpdateNote;
 
 public class UpdateNoteHandlerTests
 {
     [Fact]
-    public async Task Handle_ThrowsNotFound()
+    public async Task Handle_ToAddLoop_AddsMissingTags_AndConvertsContent()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
-        noteRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Note?)null);
-        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
-        var act = () => sut.Handle(new UpdateNoteCommand { Id = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Title = "t" }, CancellationToken.None);
-        await act.Should().ThrowAsync<NotFoundException>();
-    }
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
 
-    [Fact]
-    public async Task Handle_ThrowsForbidden()
-    {
-        var noteRepo = Substitute.For<INoteRepository>();
-        var tagRepo = Substitute.For<INoteTagRepository>();
-        var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
-        var note = new Note { Id = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Title = "t" };
-        noteRepo.GetByIdAsync(note.Id, Arg.Any<CancellationToken>()).Returns(note);
-        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
-        var act = () => sut.Handle(new UpdateNoteCommand { Id = note.Id, AuthUserId = Guid.NewGuid(), Title = "t" }, CancellationToken.None);
-        await act.Should().ThrowAsync<ForbiddenException>();
-    }
-
-    [Fact]
-    public async Task Handle_UpdatesNoteAndRelationships()
-    {
-        var noteRepo = Substitute.For<INoteRepository>();
-        var tagRepo = Substitute.For<INoteTagRepository>();
-        var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
-
-        var authId = Guid.NewGuid();
-        var note = new Note { Id = Guid.NewGuid(), AuthUserId = authId, Title = "old", Content = new object() };
-        noteRepo.GetByIdAsync(note.Id, Arg.Any<CancellationToken>()).Returns(note);
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId, Title = "t", Content = null };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
         noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
-        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(ci => new UpdateNoteResponse { Id = ci.Arg<Note>().Id, Title = ci.Arg<Note>().Title });
 
-        tagRepo.GetTagIdsForNoteAsync(note.Id, Arg.Any<CancellationToken>()).Returns(new List<Guid> { Guid.NewGuid() });
+        tagRepo.GetTagIdsForNoteAsync(noteId, Arg.Any<CancellationToken>()).Returns(new[] { Guid.NewGuid() });
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var element = JsonSerializer.Deserialize<JsonElement>("7");
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "updated", Content = element, TagIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() } };
+
         var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
-        var res = await sut.Handle(new UpdateNoteCommand { Id = note.Id, AuthUserId = authId, Title = "new", Content = "text", TagIds = new List<Guid>() }, CancellationToken.None);
-        res.Title.Should().Be("new");
-        await tagRepo.ReceivedWithAnyArgs(1).RemoveAsync(default, default, default);
-    }
+        var res = await sut.Handle(cmd, CancellationToken.None);
 
-    private class SelfRef
-    {
-        public SelfRef Self => this;
+        res.Id.Should().Be(noteId);
+        await tagRepo.ReceivedWithAnyArgs(2).AddAsync(default!, default!, default);
+        existing.Content.Should().BeEquivalentTo(new List<object> { 7 });
     }
 
     [Fact]
-    public async Task Handle_ContentNull_SetsNull()
+    public async Task Handle_StringJsonElement_ConvertsToListWithString()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
 
-        var authId = Guid.NewGuid();
-        var note = new Note { Id = Guid.NewGuid(), AuthUserId = authId, Title = "old" };
-        noteRepo.GetByIdAsync(note.Id, Arg.Any<CancellationToken>()).Returns(note);
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId, Title = "t", Content = null };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
         noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
-        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(ci => new UpdateNoteResponse { Id = ci.Arg<Note>().Id });
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
 
+        var element = JsonSerializer.Deserialize<JsonElement>("\"hello\"");
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "updated", Content = element, TagIds = new List<Guid>() };
         var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
-        var res = await sut.Handle(new UpdateNoteCommand { Id = note.Id, AuthUserId = authId, Title = "t", Content = null }, CancellationToken.None);
-        res.Id.Should().Be(note.Id);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeEquivalentTo(new List<object> { "hello" });
     }
 
     [Fact]
-    public async Task Handle_ContentListObject_Preserved()
+    public async Task Handle_BooleanTrue_ConvertsToListWithTrue()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
 
-        var authId = Guid.NewGuid();
-        var note = new Note { Id = Guid.NewGuid(), AuthUserId = authId, Title = "old" };
-        noteRepo.GetByIdAsync(note.Id, Arg.Any<CancellationToken>()).Returns(note);
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId, Title = "t", Content = null };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
         noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
-        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(ci => new UpdateNoteResponse { Id = ci.Arg<Note>().Id });
-        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
 
-        var lo = new List<object> { new Dictionary<string, object> { ["type"] = "paragraph" } };
-        var res = await sut.Handle(new UpdateNoteCommand { Id = note.Id, AuthUserId = authId, Title = "t", Content = lo }, CancellationToken.None);
-        res.Id.Should().Be(note.Id);
+        var element = JsonSerializer.Deserialize<JsonElement>("true");
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "updated", Content = element, TagIds = new List<Guid>() };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        var res = await sut.Handle(cmd, CancellationToken.None);
+
+        res.Id.Should().Be(noteId);
+        existing.Content.Should().BeEquivalentTo(new List<object> { true });
     }
 
     [Fact]
-    public async Task Handle_ContentJsonElement_Converted()
+    public async Task Handle_ObjectContent_WrappedAsList()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
 
-        var authId = Guid.NewGuid();
-        var note = new Note { Id = Guid.NewGuid(), AuthUserId = authId, Title = "old" };
-        noteRepo.GetByIdAsync(note.Id, Arg.Any<CancellationToken>()).Returns(note);
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId, Title = "t", Content = null };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
         noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
-        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(ci => new UpdateNoteResponse { Id = ci.Arg<Note>().Id });
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
 
-        var json = System.Text.Json.JsonSerializer.Serialize(new { type = "paragraph", content = new[] { new { type = "text", text = "hi" } } });
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "updated", Content = new Dictionary<string, object> { ["k"] = "v" }, TagIds = new List<Guid>() };
         var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
-        var res = await sut.Handle(new UpdateNoteCommand { Id = note.Id, AuthUserId = authId, Title = "t", Content = doc.RootElement }, CancellationToken.None);
-        res.Id.Should().Be(note.Id);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeEquivalentTo(new List<object> { new Dictionary<string, object> { ["k"] = "v" } });
     }
 
     [Fact]
-    public async Task Handle_ContentWhitespaceString_Null()
+    public async Task Handle_NoteNotFound_ThrowsNotFound()
     {
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<INoteTagRepository>();
         var mapper = Substitute.For<IMapper>();
-        var logger = Substitute.For<ILogger<UpdateNoteHandler>>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
 
-        var authId = Guid.NewGuid();
-        var note = new Note { Id = Guid.NewGuid(), AuthUserId = authId, Title = "old" };
-        noteRepo.GetByIdAsync(note.Id, Arg.Any<CancellationToken>()).Returns(note);
-        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
-        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(ci => new UpdateNoteResponse { Id = ci.Arg<Note>().Id });
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns((Note?)null);
+
         var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
-        var res = await sut.Handle(new UpdateNoteCommand { Id = note.Id, AuthUserId = authId, Title = "t", Content = "  " }, CancellationToken.None);
-        res.Id.Should().Be(note.Id);
+        var act = () => sut.Handle(new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t" }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_ForbiddenUser_ThrowsForbidden()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = Guid.NewGuid() };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        var act = () => sut.Handle(new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t" }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.ForbiddenException>();
+    }
+
+    [Fact]
+    public async Task Handle_ToRemoveLoop_RemovesObsoleteTags()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId, Title = "t", Content = null };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var existingTag = Guid.NewGuid();
+        tagRepo.GetTagIdsForNoteAsync(noteId, Arg.Any<CancellationToken>()).Returns(new[] { existingTag });
+
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "updated", Content = "[]", TagIds = new List<Guid> { } };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        await tagRepo.Received(1).RemoveAsync(noteId, existingTag, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_StringPlainText_WrapsAsParagraphBlock()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = "hello world", TagIds = new List<Guid>() };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeEquivalentTo(new List<object>
+        {
+            new Dictionary<string, object?>
+            {
+                ["type"] = "paragraph",
+                ["content"] = new List<object>
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["type"] = "text",
+                        ["text"] = "hello world"
+                    }
+                }
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Handle_StringJsonObject_WrappedAsList()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = "{\"a\":1}", TagIds = new List<Guid>() };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeEquivalentTo(new List<object> { new Dictionary<string, object> { ["a"] = 1 } });
+    }
+
+    [Fact]
+    public async Task Handle_EmptyStringContent_BecomesNull()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = "  ", TagIds = new List<Guid>() };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_NullContent_RemainsNull()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = null, TagIds = new List<Guid>() };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_FalseAndNullJsonKinds_ConvertProperly()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var falseEl = JsonSerializer.Deserialize<JsonElement>("false");
+        var cmdFalse = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = falseEl };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmdFalse, CancellationToken.None);
+        existing.Content.Should().BeEquivalentTo(new List<object> { false });
+
+        var nullEl = JsonSerializer.Deserialize<JsonElement>("null");
+        var cmdNull = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = nullEl };
+        await sut.Handle(cmdNull, CancellationToken.None);
+        existing.Content.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_TagIdsNull_DoesNotTouchTags()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = new List<object>(), TagIds = null };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        await tagRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default!, default);
+        await tagRepo.DidNotReceiveWithAnyArgs().RemoveAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task Handle_JsonElementUndefined_WrappedAsEmptyString()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateNoteHandler>>();
+
+        var noteId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var existing = new Note { Id = noteId, AuthUserId = userId };
+        noteRepo.GetByIdAsync(noteId, Arg.Any<CancellationToken>()).Returns(existing);
+        noteRepo.UpdateAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Note>());
+        mapper.Map<UpdateNoteResponse>(Arg.Any<Note>()).Returns(new UpdateNoteResponse { Id = noteId });
+
+        var element = default(JsonElement);
+        var cmd = new UpdateNoteCommand { Id = noteId, AuthUserId = userId, Title = "t", Content = element, TagIds = new List<Guid>() };
+        var sut = new UpdateNoteHandler(noteRepo, tagRepo, mapper, logger);
+        await sut.Handle(cmd, CancellationToken.None);
+
+        existing.Content.Should().BeEquivalentTo(new List<object> { string.Empty });
     }
 }

@@ -5,6 +5,9 @@ public record GuildPostCommentDto
     public Guid Id { get; init; }
     public Guid PostId { get; init; }
     public Guid AuthorId { get; init; }
+    public string? AuthorUsername { get; init; }
+    public string? AuthorEmail { get; init; }
+    public string? AuthorProfileImageUrl { get; init; }
     public string? Content { get; init; }
     public Guid? ParentCommentId { get; init; }
     public bool IsDeleted { get; init; }

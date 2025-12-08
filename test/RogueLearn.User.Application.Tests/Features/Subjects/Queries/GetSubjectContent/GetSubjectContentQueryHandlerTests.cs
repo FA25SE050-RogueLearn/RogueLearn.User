@@ -49,9 +49,9 @@ public class GetSubjectContentQueryHandlerTests
         repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict });
         var sut = new GetSubjectContentQueryHandler(repo, logger);
         var res = await sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None);
-        res.SessionSchedule!.Count.Should().Be(1);
-        res.CourseLearningOutcomes!.Count.Should().Be(1);
-        res.ConstructiveQuestions!.Count.Should().Be(1);
+        res.CourseLearningOutcomes!.Should().HaveCount(1);
+        res.SessionSchedule!.Should().HaveCount(1);
+        res.ConstructiveQuestions!.Should().HaveCount(1);
     }
 
     [Fact]
@@ -87,27 +87,7 @@ public class GetSubjectContentQueryHandlerTests
         res.ConstructiveQuestions!.Count.Should().Be(1);
     }
 
-    [Fact]
-    public async Task Handle_DeepNestedJObject_ThrowsInvalidOperation()
-    {
-        var repo = Substitute.For<ISubjectRepository>();
-        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
-        var id = Guid.NewGuid();
-
-        var root = new Newtonsoft.Json.Linq.JObject();
-        var cur = root;
-        for (int i = 0; i < 80; i++)
-        {
-            var next = new Newtonsoft.Json.Linq.JObject();
-            cur["n"] = next;
-            cur = next;
-        }
-        var dict = new Dictionary<string, object> { ["root"] = root };
-
-        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict });
-        var sut = new GetSubjectContentQueryHandler(repo, logger);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
-    }
+    
 
     [Fact]
     public async Task Handle_RepositoryThrows_Rethrows()
@@ -118,5 +98,67 @@ public class GetSubjectContentQueryHandlerTests
         repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns<Task<Subject?>>(_ => throw new Exception("db error"));
         var sut = new GetSubjectContentQueryHandler(repo, logger);
         await Assert.ThrowsAsync<Exception>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_SerializationSelfReference_ThrowsInvalidOperation()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+
+        var dict = new Dictionary<string, object>();
+        dict["self"] = dict;
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict });
+
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
+    }
+
+    [Newtonsoft.Json.JsonConverter(typeof(NullDictConverter))]
+    private class NullDict : Dictionary<string, object> { }
+    private class NullDictConverter : Newtonsoft.Json.JsonConverter
+    {
+        public override bool CanConvert(Type objectType) => typeof(NullDict).IsAssignableFrom(objectType);
+        public override void WriteJson(Newtonsoft.Json.JsonWriter writer, object? value, Newtonsoft.Json.JsonSerializer serializer)
+        {
+            writer.WriteNull();
+        }
+        public override object? ReadJson(Newtonsoft.Json.JsonReader reader, Type objectType, object? existingValue, Newtonsoft.Json.JsonSerializer serializer) => null;
+    }
+
+    [Fact]
+    public async Task Handle_DeserializationNull_ReturnsDefaults()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+        var subject = new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = new NullDict() };
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(subject);
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        var res = await sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None);
+        res.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_UnexpectedError_Rethrows()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
+        var id = Guid.NewGuid();
+        var subject = new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = new Dictionary<string, object> { { "courseDescription", "desc" } } };
+        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(subject);
+        logger
+            .When(l => l.Log(
+                LogLevel.Information,
+                Arg.Any<EventId>(),
+                Arg.Is<object>(o => o.ToString()!.Contains("Serialized Dictionary")),
+                Arg.Any<Exception>(),
+                Arg.Any<Func<object, Exception, string>>()!
+            ))
+            .Do(_ => { throw new InvalidOperationException("boom"); });
+
+        var sut = new GetSubjectContentQueryHandler(repo, logger);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
     }
 }

@@ -29,8 +29,8 @@ public class GetGuildMemberRolesQueryHandlerTests
         var repo = Substitute.For<IGuildMemberRepository>();
         var sut = new GetGuildMemberRolesQueryHandler(repo);
         var query = new GetGuildMemberRolesQuery(Guid.NewGuid(), Guid.NewGuid());
-        repo.GetMemberAsync(query.GuildId, query.MemberAuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember { Role = GuildRole.Officer });
+        repo.GetMemberAsync(query.GuildId, query.MemberAuthUserId, Arg.Any<CancellationToken>()).Returns(new GuildMember { Role = GuildRole.Member });
         var result = await sut.Handle(query, CancellationToken.None);
-        result.Should().ContainSingle().Which.Should().Be(GuildRole.Officer);
+        result.Should().ContainSingle().Which.Should().Be(GuildRole.Member);
     }
 }

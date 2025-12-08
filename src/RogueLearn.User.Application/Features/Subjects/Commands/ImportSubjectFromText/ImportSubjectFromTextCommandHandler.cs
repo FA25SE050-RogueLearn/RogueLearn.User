@@ -127,7 +127,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 var generatedQuestions = await _questionGenerationPlugin.GenerateQuestionsAsync(
                     syllabusData.Content.SessionSchedule, cancellationToken);
 
-                if (generatedQuestions.Any())
+                if (generatedQuestions?.Any() == true)
                 {
                     syllabusData.Content.ConstructiveQuestions = generatedQuestions;
                     _logger.LogInformation("✅ Generated {Count} constructive questions", generatedQuestions.Count);
