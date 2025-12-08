@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.GuildPosts.DTOs;
@@ -16,10 +15,10 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Queries.GetGuild
 
 public class GetGuildPostsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMapped(GetGuildPostsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMapped()
     {
+        var query = new GetGuildPostsQuery(System.Guid.NewGuid(), null, null, null, null, 1, 20);
         var repo = Substitute.For<IGuildPostRepository>();
         var sut = new GetGuildPostsQueryHandler(repo);
 

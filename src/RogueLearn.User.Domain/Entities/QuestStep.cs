@@ -13,10 +13,6 @@ public class QuestStep : BaseEntity
     [Column("quest_id")]
     public Guid QuestId { get; set; }
 
-    // REMOVED: The SkillId is no longer at the step level.
-    // It will be defined for each individual activity within the 'Content' JSON.
-    // public Guid SkillId { get; set; }
-
     [Column("step_number")]
     public int StepNumber { get; set; }
 
@@ -26,18 +22,10 @@ public class QuestStep : BaseEntity
     [Column("description")]
     public string Description { get; set; } = string.Empty;
 
-    // REMOVED: The StepType is no longer needed at this level.
-    // Each activity within the 'Content' will have its own type.
-    // [Column("step_type")]
-    // [JsonConverter(typeof(StringEnumConverter))]
-    // public StepType StepType { get; set; }
-
-    // MODIFIED: This is now a flexible object to store the new 'activities' array structure.
-    // It will be serialized to the JSONB 'content' column.
+    // MODIFIED: This stores the content for THIS specific variant.
     [Column("content")]
     public object? Content { get; set; }
 
-    // Stored as JSONB; represented as string
     [Column("validation_criteria")]
     public string? ValidationCriteria { get; set; }
 
@@ -46,6 +34,14 @@ public class QuestStep : BaseEntity
 
     [Column("is_optional")]
     public bool IsOptional { get; set; } = false;
+
+    // ADDED: The difficulty variant for this step (Supportive, Standard, Challenging)
+    [Column("difficulty_variant")]
+    public string DifficultyVariant { get; set; } = "Standard";
+
+    // ADDED: The logical module grouping (e.g., Module 1 has 3 variants)
+    [Column("module_number")]
+    public int ModuleNumber { get; set; } = 1;
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

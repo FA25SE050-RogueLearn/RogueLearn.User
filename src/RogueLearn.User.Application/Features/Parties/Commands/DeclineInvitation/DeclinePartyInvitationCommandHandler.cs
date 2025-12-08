@@ -10,12 +10,6 @@ public class DeclinePartyInvitationCommandHandler : IRequestHandler<DeclineParty
     private readonly IPartyInvitationRepository _invitationRepository;
     private readonly IPartyNotificationService? _notificationService;
 
-    public DeclinePartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository)
-    {
-        _invitationRepository = invitationRepository;
-        _notificationService = null;
-    }
-
     public DeclinePartyInvitationCommandHandler(IPartyInvitationRepository invitationRepository, IPartyNotificationService notificationService)
     {
         _invitationRepository = invitationRepository;

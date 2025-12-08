@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.CurriculumPrograms.Commands.CreateCurriculumProgram;
@@ -13,17 +12,18 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumPrograms.Commands
 
 public class CreateCurriculumProgramCommandHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ReturnsResponse(CreateCurriculumProgramCommand cmd)
+    [Fact]
+    public async Task Handle_Success_ReturnsResponse()
     {
         var repo = Substitute.For<ICurriculumProgramRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new CreateCurriculumProgramCommandHandler(repo, mapper);
-
-        cmd.ProgramName = "PN";
-        cmd.ProgramCode = "PC";
-        cmd.DegreeLevel = DegreeLevel.Bachelor;
+        var cmd = new CreateCurriculumProgramCommand
+        {
+            ProgramName = "PN",
+            ProgramCode = "PC",
+            DegreeLevel = DegreeLevel.Bachelor
+        };
         var created = new CurriculumProgram { Id = System.Guid.NewGuid(), ProgramName = cmd.ProgramName, ProgramCode = cmd.ProgramCode, DegreeLevel = cmd.DegreeLevel };
         repo.AddAsync(Arg.Any<CurriculumProgram>(), Arg.Any<CancellationToken>()).Returns(created);
         mapper.Map<CreateCurriculumProgramResponse>(created).Returns(new CreateCurriculumProgramResponse { Id = created.Id, ProgramName = created.ProgramName, ProgramCode = created.ProgramCode, DegreeLevel = created.DegreeLevel });

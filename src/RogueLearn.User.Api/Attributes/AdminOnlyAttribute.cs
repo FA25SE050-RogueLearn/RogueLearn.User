@@ -17,19 +17,6 @@ public class AdminOnlyAttribute : Attribute, IAsyncAuthorizationFilter
             context.Result = new UnauthorizedResult();
             return;
         }
-        // Prefer repository-based check (source of truth), but allow JWT claim short-circuit if it explicitly grants admin.
-        var rolesClaim = context.HttpContext.User.FindFirst("roles")?.Value;
-        if (!string.IsNullOrWhiteSpace(rolesClaim))
-        {
-            var hasAdminClaim = rolesClaim
-                .Split(',')
-                .Select(r => r.Trim())
-                .Any(r => string.Equals(r, "Game Master", StringComparison.OrdinalIgnoreCase));
-            if (hasAdminClaim)
-            {
-                return; // Authorized via claim
-            }
-        }
 
         // Repository lookup is authoritative and handles newly-assigned roles that aren't yet in JWT claims
         Guid authUserId;

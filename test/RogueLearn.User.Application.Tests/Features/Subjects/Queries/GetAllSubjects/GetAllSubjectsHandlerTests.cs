@@ -45,6 +45,32 @@ public class GetAllSubjectsHandlerTests
     }
 
     [Fact]
+    public async Task Handle_DtosContainDescriptionAndAudit()
+    {
+        var repo = Substitute.For<ISubjectRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<ILogger<GetAllSubjectsHandler>>();
+        var sut = new GetAllSubjectsHandler(repo, mapper, logger);
+
+        var subjects = new List<Subject>
+        {
+            new() { Id = Guid.NewGuid(), SubjectCode = "CS301", SubjectName = "Subj", Credits = 3, Description = "d", CreatedAt = DateTimeOffset.UtcNow.AddDays(-2), UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1) }
+        };
+        repo.GetPagedSubjectsAsync(null, 1, 1, Arg.Any<CancellationToken>()).Returns((subjects, 1));
+
+        var mapped = new List<SubjectDto>
+        {
+            new() { Id = subjects[0].Id, SubjectCode = subjects[0].SubjectCode, SubjectName = subjects[0].SubjectName, Credits = subjects[0].Credits, Description = subjects[0].Description, CreatedAt = subjects[0].CreatedAt, UpdatedAt = subjects[0].UpdatedAt }
+        };
+        mapper.Map<List<SubjectDto>>(subjects).Returns(mapped);
+
+        var res = await sut.Handle(new GetAllSubjectsQuery { Page = 1, PageSize = 1 }, CancellationToken.None);
+        res.Items[0].Description.Should().Be("d");
+        res.Items[0].CreatedAt.Should().Be(mapped[0].CreatedAt);
+        res.Items[0].UpdatedAt.Should().Be(mapped[0].UpdatedAt);
+    }
+
+    [Fact]
     public async Task Handle_Empty_ReturnsEmptyList()
     {
         var repo = Substitute.For<ISubjectRepository>();

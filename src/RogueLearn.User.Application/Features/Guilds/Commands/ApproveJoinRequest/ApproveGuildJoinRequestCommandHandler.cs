@@ -53,12 +53,6 @@ public class ApproveGuildJoinRequestCommandHandler : IRequestHandler<ApproveGuil
             throw new Exceptions.BadRequestException("Requester already belongs to a different guild.");
         }
 
-        var createdGuilds = await _guildRepository.GetGuildsByCreatorAsync(joinReq.RequesterId, cancellationToken);
-        if (createdGuilds.Any(g => g.Id != request.GuildId))
-        {
-            throw new Exceptions.BadRequestException("Requester is the creator of another guild and cannot join.");
-        }
-
         // Capacity check
         var activeCount = await _memberRepository.CountActiveMembersAsync(request.GuildId, cancellationToken);
         if (activeCount >= guild.MaxMembers)

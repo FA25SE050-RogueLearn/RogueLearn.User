@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -14,32 +13,32 @@ namespace RogueLearn.User.Application.Tests.Features.UserContext.Queries.GetUser
 
 public class GetUserContextByAuthIdQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsContext(GetUserContextByAuthIdQuery query)
+    [Fact]
+    public async Task Handle_ReturnsContext()
     {
         var service = Substitute.For<IUserContextService>();
         var logger = Substitute.For<ILogger<GetUserContextByAuthIdQueryHandler>>();
-        var expected = new UserContextDto { AuthUserId = query.AuthId, Username = "u" };
-        service.BuildForAuthUserAsync(query.AuthId, Arg.Any<CancellationToken>()).Returns(expected);
+        var authId = Guid.NewGuid();
+        var expected = new UserContextDto { AuthUserId = authId, Username = "u" };
+        service.BuildForAuthUserAsync(authId, Arg.Any<CancellationToken>()).Returns(expected);
 
         var sut = new GetUserContextByAuthIdQueryHandler(service, logger);
-        var res = await sut.Handle(query, CancellationToken.None);
+        var res = await sut.Handle(new GetUserContextByAuthIdQuery(authId), CancellationToken.None);
 
         res.Should().NotBeNull();
-        res!.AuthUserId.Should().Be(query.AuthId);
+        res!.AuthUserId.Should().Be(authId);
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_ReturnsNull(GetUserContextByAuthIdQuery query)
+    [Fact]
+    public async Task Handle_NotFound_ReturnsNull()
     {
         var service = Substitute.For<IUserContextService>();
         var logger = Substitute.For<ILogger<GetUserContextByAuthIdQueryHandler>>();
-        service.BuildForAuthUserAsync(query.AuthId, Arg.Any<CancellationToken>()).Returns((UserContextDto?)null);
+        var authId = Guid.NewGuid();
+        service.BuildForAuthUserAsync(authId, Arg.Any<CancellationToken>()).Returns((UserContextDto?)null);
 
         var sut = new GetUserContextByAuthIdQueryHandler(service, logger);
-        var res = await sut.Handle(query, CancellationToken.None);
+        var res = await sut.Handle(new GetUserContextByAuthIdQuery(authId), CancellationToken.None);
         res.Should().BeNull();
     }
 }

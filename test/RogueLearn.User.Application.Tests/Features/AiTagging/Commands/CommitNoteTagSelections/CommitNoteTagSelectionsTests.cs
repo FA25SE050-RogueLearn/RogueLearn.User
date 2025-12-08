@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.AiTagging.Commands.CommitNoteTagSelections;
@@ -15,10 +14,16 @@ namespace RogueLearn.User.Application.Tests.Features.AiTagging.Commands.CommitNo
 
 public class CommitNoteTagSelectionsTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NoteNotFoundOrForbidden_Throws(CommitNoteTagSelectionsCommand cmd)
+    [Fact]
+    public async Task Handle_NoteNotFoundOrForbidden_Throws()
     {
+        var cmd = new CommitNoteTagSelectionsCommand
+        {
+            AuthUserId = Guid.NewGuid(),
+            NoteId = Guid.NewGuid(),
+            SelectedTagIds = new List<Guid>(),
+            NewTagNames = new List<string>()
+        };
         var noteRepo = Substitute.For<INoteRepository>();
         var tagRepo = Substitute.For<ITagRepository>();
         var noteTagRepo = Substitute.For<INoteTagRepository>();

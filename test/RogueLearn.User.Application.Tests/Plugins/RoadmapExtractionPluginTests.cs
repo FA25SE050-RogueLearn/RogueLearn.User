@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -20,5 +21,15 @@ public class RoadmapExtractionPluginTests
 
         var result = await sut.ExtractClassRoadmapJsonAsync("roadmap text", CancellationToken.None);
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CleanToJson_StripsFencesAndExtractsObject()
+    {
+        var raw = "```\n{ \"class\": { \"name\": \"X\" }, \"nodes\": [] }\n```";
+        var m = typeof(RoadmapExtractionPlugin).GetMethod("CleanToJson", BindingFlags.NonPublic | BindingFlags.Static);
+        var cleaned = (string)m!.Invoke(null, new object[] { raw })!;
+        cleaned.Should().StartWith("{").And.EndWith("}");
+        cleaned.Should().Contain("\"class\"");
     }
 }

@@ -52,8 +52,13 @@ public class PartiesController : ControllerBase
     public async Task<ActionResult<CreatePartyResponse>> CreateParty([FromBody] CreatePartyCommand command, CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();
-        var request = command with { CreatorAuthUserId = authUserId };
-        var result = await _mediator.Send(request, cancellationToken);
+        var result = await _mediator.Send(new CreatePartyCommand
+        {
+            CreatorAuthUserId = authUserId,
+            Name = command.Name,
+            IsPublic = command.IsPublic,
+            MaxMembers = command.MaxMembers
+        }, cancellationToken);
         return CreatedAtAction(nameof(GetPartyById), new { partyId = result.PartyId }, result);
     }
 

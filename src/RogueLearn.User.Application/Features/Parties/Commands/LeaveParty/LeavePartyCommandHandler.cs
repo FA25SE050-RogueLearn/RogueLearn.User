@@ -8,11 +8,15 @@ public class LeavePartyCommandHandler : IRequestHandler<LeavePartyCommand, Unit>
 {
     private readonly IPartyMemberRepository _memberRepository;
     private readonly IPartyRepository _partyRepository;
+    private readonly IUserRoleRepository _userRoleRepository;
+    private readonly IRoleRepository _roleRepository;
 
-    public LeavePartyCommandHandler(IPartyMemberRepository memberRepository, IPartyRepository partyRepository)
+    public LeavePartyCommandHandler(IPartyMemberRepository memberRepository, IPartyRepository partyRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository)
     {
         _memberRepository = memberRepository;
         _partyRepository = partyRepository;
+        _userRoleRepository = userRoleRepository;
+        _roleRepository = roleRepository;
     }
 
     public async Task<Unit> Handle(LeavePartyCommand request, CancellationToken cancellationToken)
@@ -52,12 +56,48 @@ public class LeavePartyCommandHandler : IRequestHandler<LeavePartyCommand, Unit>
 
                 nextOwner.Role = PartyRole.Leader;
                 await _memberRepository.UpdateAsync(nextOwner, cancellationToken);
+
+                if (_userRoleRepository != null && _roleRepository != null)
+                {
+                    var partyLeaderRole = await _roleRepository.GetByNameAsync("Party Leader", cancellationToken)
+                        ?? throw new Exceptions.NotFoundException("Role", "Party Leader");
+
+                    var leavingUserRoles = await _userRoleRepository.GetRolesForUserAsync(member.AuthUserId, cancellationToken);
+                    foreach (var ur in leavingUserRoles.Where(r => r.RoleId == partyLeaderRole.Id))
+                    {
+                        await _userRoleRepository.DeleteAsync(ur.Id, cancellationToken);
+                    }
+
+                    var newLeaderRoles = await _userRoleRepository.GetRolesForUserAsync(nextOwner.AuthUserId, cancellationToken);
+                    if (!newLeaderRoles.Any(r => r.RoleId == partyLeaderRole.Id))
+                    {
+                        var userRole = new RogueLearn.User.Domain.Entities.UserRole
+                        {
+                            Id = Guid.NewGuid(),
+                            AuthUserId = nextOwner.AuthUserId,
+                            RoleId = partyLeaderRole.Id,
+                            AssignedAt = DateTimeOffset.UtcNow,
+                            AssignedBy = member.AuthUserId
+                        };
+                        await _userRoleRepository.AddAsync(userRole, cancellationToken);
+                    }
+                }
             }
             else
             {
                 // Sole member is the leader; delete leaving member then delete the party
                 await _memberRepository.DeleteAsync(member.Id, cancellationToken);
                 await _partyRepository.DeleteAsync(request.PartyId, cancellationToken);
+                if (_userRoleRepository != null && _roleRepository != null)
+                {
+                    var partyLeaderRole = await _roleRepository.GetByNameAsync("Party Leader", cancellationToken)
+                        ?? throw new Exceptions.NotFoundException("Role", "Party Leader");
+                    var leavingUserRoles = await _userRoleRepository.GetRolesForUserAsync(member.AuthUserId, cancellationToken);
+                    foreach (var ur in leavingUserRoles.Where(r => r.RoleId == partyLeaderRole.Id))
+                    {
+                        await _userRoleRepository.DeleteAsync(ur.Id, cancellationToken);
+                    }
+                }
                 return Unit.Value;
             }
         }

@@ -40,6 +40,11 @@ public class UserQuestAttempt : BaseEntity
     [Column("notes")]
     public string? Notes { get; set; }
 
+    // ADDED: The personalized difficulty assigned to this specific attempt.
+    // Used by the API to filter the Master Quest content at runtime.
+    [Column("assigned_difficulty")]
+    public string AssignedDifficulty { get; set; } = "Standard";
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

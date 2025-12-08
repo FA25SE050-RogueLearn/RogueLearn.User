@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Queries.GetGuild
 
 public class GetGuildPostCommentsQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_PostMissing_Throws(GetGuildPostCommentsQuery query)
+    [Fact]
+    public async Task Handle_PostMissing_Throws()
     {
+        var query = new GetGuildPostCommentsQuery(System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var commentRepo = Substitute.For<IGuildPostCommentRepository>();
         var sut = new GetGuildPostCommentsQueryHandler(postRepo, commentRepo);
@@ -26,10 +25,10 @@ public class GetGuildPostCommentsQueryHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(query, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMappedWithReplyCounts(GetGuildPostCommentsQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMappedWithReplyCounts()
     {
+        var query = new GetGuildPostCommentsQuery(System.Guid.NewGuid(), System.Guid.NewGuid());
         var postRepo = Substitute.For<IGuildPostRepository>();
         var commentRepo = Substitute.For<IGuildPostCommentRepository>();
         var sut = new GetGuildPostCommentsQueryHandler(postRepo, commentRepo);

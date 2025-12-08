@@ -19,7 +19,6 @@ public class AchievementDtoTests
             RuleType = "rt",
             RuleConfig = "{}",
             Category = "c",
-            Icon = "i",
             IconUrl = "url",
             Version = 1,
             IsActive = true,
@@ -34,7 +33,6 @@ public class AchievementDtoTests
         d.RuleType.Should().Be("rt");
         d.RuleConfig.Should().Be("{}");
         d.Category.Should().Be("c");
-        d.Icon.Should().Be("i");
         d.IconUrl.Should().Be("url");
         d.Version.Should().Be(1);
         d.IsActive.Should().BeTrue();

@@ -18,7 +18,7 @@ public interface IQuestStepRepository : IGenericRepository<QuestStep>
     /// <param name="questId">The ID of the quest.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of quest steps for the given quest.</returns>
-    Task<IEnumerable<QuestStep>> FindByQuestIdAsync(Guid questId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<QuestStep>> GetByQuestIdAsync(Guid questId, CancellationToken cancellationToken = default);
     Task<bool> QuestContainsSteps(Guid questId, CancellationToken cancellationToken = default);
     // MODIFICATION END
 }

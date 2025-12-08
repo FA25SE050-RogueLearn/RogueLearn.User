@@ -9,6 +9,7 @@ using RogueLearn.User.Application.Features.Notes.Commands.UpdateNote;
 using RogueLearn.User.Application.Features.Notes.Queries.GetMyNotes;
 using RogueLearn.User.Application.Features.Notes.Queries.GetNoteById;
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNoteFromUpload;
+using FluentValidation;
 using RogueLearn.User.Application.Features.AiTagging.Queries.SuggestNoteTags;
 using RogueLearn.User.Application.Features.AiTagging.Queries.SuggestNoteTagsFromUpload;
 using RogueLearn.User.Application.Features.AiTagging.Commands.CommitNoteTagSelections;
@@ -212,7 +213,7 @@ public class NotesController : ControllerBase
     public async Task<IActionResult> SuggestFromUpload(IFormFile file, [FromForm] int maxTags = 10, CancellationToken cancellationToken = default)
     {
         var authUserId = User.GetAuthUserId();
-    if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
+        if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
 
         var query = new SuggestNoteTagsFromUploadQuery
         {
@@ -266,8 +267,15 @@ public class NotesController : ControllerBase
         var authUserId = User.GetAuthUserId();
 
         request.AuthUserId = authUserId;
-        var result = await _mediator.Send(request, cancellationToken);
-        return CreatedAtAction(nameof(GetNoteById), new { id = result.NoteId }, result);
+        try
+        {
+            var result = await _mediator.Send(request, cancellationToken);
+            return CreatedAtAction(nameof(GetNoteById), new { id = result.NoteId }, result);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { error = new { Code = "ValidationError", Message = "Processing file failed; either the file was too large or the system couldn't read image content." }, detail = ex.Message });
+        }
     }
 
     /// <summary>
@@ -286,14 +294,14 @@ public class NotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<CreateNoteWithAiTagsResponse>> CreateWithAiTagsFromUpload(
         IFormFile file,
-        [FromForm] int maxTags = 10,
+        [FromForm] int maxTags = 5,
         [FromForm] bool applySuggestions = true,
         [FromForm] string? title = null,
         [FromForm] bool isPublic = false,
         CancellationToken cancellationToken = default)
     {
         var authUserId = User.GetAuthUserId();
-    if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
+        if (file is null || file.Length == 0) return BadRequest("No file uploaded.");
 
         var command = new CreateNoteWithAiTagsCommand
         {
@@ -308,7 +316,14 @@ public class NotesController : ControllerBase
             ApplySuggestions = applySuggestions
         };
 
-        var result = await _mediator.Send(command, cancellationToken);
-        return CreatedAtAction(nameof(GetNoteById), new { id = result.NoteId }, result);
+        try
+        {
+            var result = await _mediator.Send(command, cancellationToken);
+            return CreatedAtAction(nameof(GetNoteById), new { id = result.NoteId }, result);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { error = new { Code = "ValidationError", Message = "Processing file failed; either the file was too large or the system couldn't read image content." }, detail = ex.Message });
+        }
     }
 }

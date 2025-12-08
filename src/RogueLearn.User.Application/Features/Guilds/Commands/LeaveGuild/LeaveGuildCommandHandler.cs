@@ -9,12 +9,16 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
 {
     private readonly IGuildMemberRepository _memberRepository;
     private readonly IGuildRepository _guildRepository;
+    private readonly IUserRoleRepository _userRoleRepository;
+    private readonly IRoleRepository _roleRepository;
     private readonly IGuildNotificationService? _notificationService;
 
-    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IGuildNotificationService notificationService)
+    public LeaveGuildCommandHandler(IGuildMemberRepository memberRepository, IGuildRepository guildRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository, IGuildNotificationService notificationService)
     {
         _memberRepository = memberRepository;
         _guildRepository = guildRepository;
+        _userRoleRepository = userRoleRepository;
+        _roleRepository = roleRepository;
         _notificationService = notificationService;
     }
 
@@ -34,6 +38,17 @@ public class LeaveGuildCommandHandler : IRequestHandler<LeaveGuildCommand, Unit>
         }
 
         await _memberRepository.DeleteAsync(member.Id, cancellationToken);
+
+        if (member.Role == GuildRole.GuildMaster && _userRoleRepository != null && _roleRepository != null)
+        {
+            var guildMasterRole = await _roleRepository.GetByNameAsync("Guild Master", cancellationToken)
+                ?? throw new Exceptions.NotFoundException("Role", "Guild Master");
+            var leavingUserRoles = await _userRoleRepository.GetRolesForUserAsync(member.AuthUserId, cancellationToken);
+            foreach (var ur in leavingUserRoles.Where(r => r.RoleId == guildMasterRole.Id))
+            {
+                await _userRoleRepository.DeleteAsync(ur.Id, cancellationToken);
+            }
+        }
 
         // Decrement guild current member count after leaving
         var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)

@@ -114,12 +114,11 @@ message Achievement {
   string rule_type = 5;
   string rule_config = 6;
   string category = 7;
-  string icon = 8;
-  string icon_url = 9;
-  int32 version = 10;
-  bool is_active = 11;
-  string source_service = 12;
-  bool is_medal = 13;
+  string icon_url = 8;
+  int32 version = 9;
+  bool is_active = 10;
+  string source_service = 11;
+  bool is_medal = 12;
 }
 
 message AchievementList {
@@ -144,11 +143,10 @@ message CreateAchievementRequest {
   string rule_type = 4;
   string rule_config = 5;
   string category = 6;
-  string icon = 7;
-  string icon_url = 8;
-  int32 version = 9;
-  bool is_active = 10;
-  string source_service = 11;
+  string icon_url = 7;
+  int32 version = 8;
+  bool is_active = 9;
+  string source_service = 10;
 }
 
 message UpdateAchievementRequest {
@@ -159,11 +157,10 @@ message UpdateAchievementRequest {
   string rule_type = 5;
   string rule_config = 6;
   string category = 7;
-  string icon = 8;
-  string icon_url = 9;
-  int32 version = 10;
-  bool is_active = 11;
-  string source_service = 12;
+  string icon_url = 8;
+  int32 version = 9;
+  bool is_active = 10;
+  string source_service = 11;
 }
 
 message DeleteAchievementRequest { string id = 1; }

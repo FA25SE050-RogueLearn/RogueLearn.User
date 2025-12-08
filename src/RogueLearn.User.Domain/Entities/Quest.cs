@@ -46,6 +46,7 @@ public class Quest : BaseEntity
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
+    // ⭐ UPDATED: Made nullable to support System-created Master Quests
     [Column("created_by")]
     public Guid? CreatedBy { get; set; }
 

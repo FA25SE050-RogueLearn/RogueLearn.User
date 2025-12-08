@@ -38,4 +38,101 @@ public class CreateNoteHandlerTests
         res.Title.Should().Be("Title");
         await tagRepo.ReceivedWithAnyArgs(1).AddAsync(default, default, default);
     }
+
+    private class SelfRef
+    {
+        public SelfRef Self => this;
+    }
+
+    [Fact]
+    public async Task Handle_ContentNull_StoresNull()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<ILogger<CreateNoteHandler>>();
+        Note? captured = null;
+        noteRepo.AddAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => { captured = ci.Arg<Note>(); return captured!; });
+        mapper.Map<CreateNoteResponse>(Arg.Any<Note>()).Returns(ci => new CreateNoteResponse { Id = ci.Arg<Note>().Id });
+        var sut = new CreateNoteHandler(noteRepo, tagRepo, mapper, logger);
+
+        var cmd = new CreateNoteCommand { AuthUserId = Guid.NewGuid(), Title = "T", Content = null, IsPublic = false };
+        await sut.Handle(cmd, CancellationToken.None);
+        captured!.Content.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ContentListObject_Preserved()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<ILogger<CreateNoteHandler>>();
+        Note? captured = null;
+        noteRepo.AddAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => { captured = ci.Arg<Note>(); return captured!; });
+        mapper.Map<CreateNoteResponse>(Arg.Any<Note>()).Returns(ci => new CreateNoteResponse { Id = ci.Arg<Note>().Id });
+        var sut = new CreateNoteHandler(noteRepo, tagRepo, mapper, logger);
+
+        var lo = new List<object> { new Dictionary<string, object> { ["type"] = "paragraph" } };
+        var cmd = new CreateNoteCommand { AuthUserId = Guid.NewGuid(), Title = "T", Content = lo };
+        await sut.Handle(cmd, CancellationToken.None);
+        captured!.Content.Should().BeSameAs(lo);
+    }
+
+    [Fact]
+    public async Task Handle_ContentJsonElement_Converted()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<ILogger<CreateNoteHandler>>();
+        Note? captured = null;
+        noteRepo.AddAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => { captured = ci.Arg<Note>(); return captured!; });
+        mapper.Map<CreateNoteResponse>(Arg.Any<Note>()).Returns(ci => new CreateNoteResponse { Id = ci.Arg<Note>().Id });
+        var sut = new CreateNoteHandler(noteRepo, tagRepo, mapper, logger);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(new { type = "paragraph", content = new[] { new { type = "text", text = "hi" } } });
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var cmd = new CreateNoteCommand { AuthUserId = Guid.NewGuid(), Title = "T", Content = doc.RootElement };
+        await sut.Handle(cmd, CancellationToken.None);
+        captured!.Content.Should().BeAssignableTo<List<object>>();
+    }
+
+    [Fact]
+    public async Task Handle_ContentWhitespaceString_Null()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<ILogger<CreateNoteHandler>>();
+        Note? captured = null;
+        noteRepo.AddAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci => { captured = ci.Arg<Note>(); return captured!; });
+        mapper.Map<CreateNoteResponse>(Arg.Any<Note>()).Returns(ci => new CreateNoteResponse { Id = ci.Arg<Note>().Id });
+        var sut = new CreateNoteHandler(noteRepo, tagRepo, mapper, logger);
+
+        var cmd = new CreateNoteCommand { AuthUserId = Guid.NewGuid(), Title = "T", Content = "   " };
+        await sut.Handle(cmd, CancellationToken.None);
+        captured!.Content.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_StoredPreviewSerializationError_Caught()
+    {
+        var noteRepo = Substitute.For<INoteRepository>();
+        var tagRepo = Substitute.For<INoteTagRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var logger = Substitute.For<ILogger<CreateNoteHandler>>();
+        noteRepo.AddAsync(Arg.Any<Note>(), Arg.Any<CancellationToken>()).Returns(ci =>
+        {
+            var n = ci.Arg<Note>();
+            n.Content = new List<object> { new SelfRef() };
+            return n;
+        });
+        mapper.Map<CreateNoteResponse>(Arg.Any<Note>()).Returns(ci => new CreateNoteResponse { Id = ci.Arg<Note>().Id });
+        var sut = new CreateNoteHandler(noteRepo, tagRepo, mapper, logger);
+
+        var cmd = new CreateNoteCommand { AuthUserId = Guid.NewGuid(), Title = "T", Content = "plain" };
+        var res = await sut.Handle(cmd, CancellationToken.None);
+        res.Should().NotBeNull();
+    }
 }

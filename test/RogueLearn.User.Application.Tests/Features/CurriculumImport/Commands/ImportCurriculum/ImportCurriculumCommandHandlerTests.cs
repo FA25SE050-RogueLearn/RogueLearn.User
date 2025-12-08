@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -21,7 +20,7 @@ namespace RogueLearn.User.Application.Tests.Features.CurriculumImport.Commands.I
 
 public class ImportCurriculumCommandHandlerTests
 {
-    private static ImportCurriculumCommand CreateCmd() => new ImportCurriculumCommand { RawText = "<p>Program</p>" };
+    private static ImportCurriculumCommand CreateCmd() => new ImportCurriculumCommand { RawText = "<p>Program</p>", CreatedBy = Guid.NewGuid() };
 
     [Fact]
     public async Task Handle_CleaningFailed_Throws()

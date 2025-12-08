@@ -1,63 +1,81 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Skills.Queries.GetSkillDetail;
 using RogueLearn.User.Domain.Entities;
+using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-using Xunit;
+using Microsoft.Extensions.Logging;
 
 namespace RogueLearn.User.Application.Tests.Features.Skills.Queries.GetSkillDetail;
 
 public class GetSkillDetailQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_SkillMissing_ReturnsNull(GetSkillDetailQuery query)
+    [Fact]
+    public async Task Handle_SkillNotFound_ReturnsNull()
     {
         var skillRepo = Substitute.For<ISkillRepository>();
         var userSkillRepo = Substitute.For<IUserSkillRepository>();
         var depRepo = Substitute.For<ISkillDependencyRepository>();
-        var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var mapRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var logger = Substitute.For<ILogger<GetSkillDetailQueryHandler>>();
-        var sut = new GetSkillDetailQueryHandler(skillRepo, userSkillRepo, depRepo, mappingRepo, questRepo, subjectRepo, logger);
 
-        skillRepo.GetByIdAsync(query.SkillId, Arg.Any<CancellationToken>()).Returns((Skill?)null);
-        var result = await sut.Handle(query, CancellationToken.None);
-        result.Should().BeNull();
+        var sut = new GetSkillDetailQueryHandler(skillRepo, userSkillRepo, depRepo, mapRepo, questRepo, subjectRepo, logger);
+        var res = await sut.Handle(new GetSkillDetailQuery { AuthUserId = Guid.NewGuid(), SkillId = Guid.NewGuid() }, CancellationToken.None);
+        res.Should().BeNull();
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_MapsLearningPath(GetSkillDetailQuery query)
+    [Fact]
+    public async Task Handle_DependencyAndUnlocks_MapStatuses()
     {
         var skillRepo = Substitute.For<ISkillRepository>();
         var userSkillRepo = Substitute.For<IUserSkillRepository>();
         var depRepo = Substitute.For<ISkillDependencyRepository>();
-        var mappingRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var mapRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
         var logger = Substitute.For<ILogger<GetSkillDetailQueryHandler>>();
-        var sut = new GetSkillDetailQueryHandler(skillRepo, userSkillRepo, depRepo, mappingRepo, questRepo, subjectRepo, logger);
 
-        var skill = new Skill { Id = query.SkillId, Name = "Skill", Tier = RogueLearn.User.Domain.Enums.SkillTierLevel.Foundation };
-        skillRepo.GetByIdAsync(query.SkillId, Arg.Any<CancellationToken>()).Returns(skill);
-        userSkillRepo.GetSkillsByAuthIdAsync(query.AuthUserId, Arg.Any<CancellationToken>()).Returns(new List<UserSkill>());
-        depRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<SkillDependency>());
+        var authId = Guid.NewGuid();
+        var mainSkillId = Guid.NewGuid();
+        var prereqId = Guid.NewGuid();
+        var unlockId = Guid.NewGuid();
 
-        var subjectId = System.Guid.NewGuid();
-        mappingRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<SubjectSkillMapping> { new() { SubjectId = subjectId, SkillId = query.SkillId } });
-        questRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Quest> { new() { Id = System.Guid.NewGuid(), Title = "Q1", SubjectId = subjectId, IsActive = true, ExperiencePointsReward = 50 } });
+        skillRepo.GetByIdAsync(mainSkillId, Arg.Any<CancellationToken>()).Returns(new Skill { Id = mainSkillId, Name = "Main", Tier = SkillTierLevel.Intermediate });
+        skillRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new Skill { Id = prereqId, Name = "Pre" },
+            new Skill { Id = unlockId, Name = "Unl" }
+        });
 
-        var result = await sut.Handle(query, CancellationToken.None);
-        result.Should().NotBeNull();
-        result!.LearningPath.Should().HaveCount(1);
-        result.LearningPath[0].Title.Should().Be("Q1");
+        // User has prereq at level 3 (<5), and main skill at level 5 (>=5)
+        userSkillRepo.GetSkillsByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new UserSkill { AuthUserId = authId, SkillId = prereqId, Level = 3, ExperiencePoints = 3000 },
+            new UserSkill { AuthUserId = authId, SkillId = mainSkillId, Level = 5, ExperiencePoints = 5000 }
+        });
+
+        depRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            // prereq: points TO main skill
+            new SkillDependency { SkillId = mainSkillId, PrerequisiteSkillId = prereqId, RelationshipType = SkillRelationshipType.Prerequisite },
+            // unlock: main skill points TO unlock skill
+            new SkillDependency { SkillId = unlockId, PrerequisiteSkillId = mainSkillId, RelationshipType = SkillRelationshipType.Prerequisite }
+        });
+
+        mapRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<SubjectSkillMapping>());
+        questRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<Quest>());
+
+        var sut = new GetSkillDetailQueryHandler(skillRepo, userSkillRepo, depRepo, mapRepo, questRepo, subjectRepo, logger);
+        var res = await sut.Handle(new GetSkillDetailQuery { AuthUserId = authId, SkillId = mainSkillId }, CancellationToken.None);
+
+        res.Should().NotBeNull();
+        res!.Prerequisites.Should().HaveCount(1);
+        res.Prerequisites[0].IsMet.Should().BeFalse();
+        res.Prerequisites[0].StatusLabel.Should().Contain("Levels");
+        res.Unlocks.Should().HaveCount(1);
+        res.Unlocks[0].IsMet.Should().BeTrue();
+        res.Unlocks[0].StatusLabel.Should().Be("Available");
     }
 }

@@ -14,8 +14,6 @@ public class AchievementDto
     public string? RuleConfig { get; set; }
 
     public string? Category { get; set; }
-    public string? Icon { get; set; }
-
     public string? IconUrl { get; set; }
 
     public int Version { get; set; }

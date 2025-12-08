@@ -8,11 +8,15 @@ namespace RogueLearn.User.Application.Features.Guilds.Commands.TransferLeadershi
 public class TransferGuildLeadershipCommandHandler : IRequestHandler<TransferGuildLeadershipCommand, Unit>
 {
     private readonly IGuildMemberRepository _memberRepository;
+    private readonly IUserRoleRepository _userRoleRepository;
+    private readonly IRoleRepository _roleRepository;
     private readonly IGuildNotificationService? _notificationService;
 
-    public TransferGuildLeadershipCommandHandler(IGuildMemberRepository memberRepository, IGuildNotificationService notificationService)
+    public TransferGuildLeadershipCommandHandler(IGuildMemberRepository memberRepository, IUserRoleRepository userRoleRepository, IRoleRepository roleRepository, IGuildNotificationService notificationService)
     {
         _memberRepository = memberRepository;
+        _userRoleRepository = userRoleRepository;
+        _roleRepository = roleRepository;
         _notificationService = notificationService;
     }
 
@@ -40,6 +44,37 @@ public class TransferGuildLeadershipCommandHandler : IRequestHandler<TransferGui
 
         newMaster.Role = GuildRole.GuildMaster;
         await _memberRepository.UpdateAsync(newMaster, cancellationToken);
+
+        if (_userRoleRepository != null && _roleRepository != null)
+        {
+            var guildMasterRole = await _roleRepository.GetByNameAsync("Guild Master", cancellationToken)
+                ?? throw new Application.Exceptions.NotFoundException("Role", "Guild Master");
+
+            foreach (var master in masters)
+            {
+                if (master.AuthUserId == newMaster.AuthUserId) continue;
+
+                var userRoles = await _userRoleRepository.GetRolesForUserAsync(master.AuthUserId, cancellationToken);
+                foreach (var ur in userRoles.Where(r => r.RoleId == guildMasterRole.Id))
+                {
+                    await _userRoleRepository.DeleteAsync(ur.Id, cancellationToken);
+                }
+            }
+
+            var newUserRoles = await _userRoleRepository.GetRolesForUserAsync(newMaster.AuthUserId, cancellationToken);
+            if (!newUserRoles.Any(ur => ur.RoleId == guildMasterRole.Id))
+            {
+                var userRole = new RogueLearn.User.Domain.Entities.UserRole
+                {
+                    Id = Guid.NewGuid(),
+                    AuthUserId = newMaster.AuthUserId,
+                    RoleId = guildMasterRole.Id,
+                    AssignedAt = DateTimeOffset.UtcNow,
+                    AssignedBy = newMaster.AuthUserId
+                };
+                await _userRoleRepository.AddAsync(userRole, cancellationToken);
+            }
+        }
 
         if (_notificationService != null)
         {

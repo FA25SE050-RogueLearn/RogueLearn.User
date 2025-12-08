@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -16,24 +15,24 @@ namespace RogueLearn.User.Application.Tests.Features.Skills.Queries.GetSkillById
 
 public class GetSkillByIdQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(Guid skillId)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
         var repo = Substitute.For<ISkillRepository>();
         var logger = Substitute.For<ILogger<GetSkillByIdQueryHandler>>();
+        var skillId = Guid.NewGuid();
         repo.GetByIdAsync(skillId, Arg.Any<CancellationToken>()).Returns((Skill?)null);
 
         var sut = new GetSkillByIdQueryHandler(repo, logger);
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(new GetSkillByIdQuery { Id = skillId }, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Found_MapsResponse(Guid skillId)
+    [Fact]
+    public async Task Handle_Found_MapsResponse()
     {
         var repo = Substitute.For<ISkillRepository>();
         var logger = Substitute.For<ILogger<GetSkillByIdQueryHandler>>();
+        var skillId = Guid.NewGuid();
         var skill = new Skill { Id = skillId, Name = "C#", Domain = "Programming", Tier = SkillTierLevel.Advanced, Description = "Deep" };
         repo.GetByIdAsync(skill.Id, Arg.Any<CancellationToken>()).Returns(skill);
 

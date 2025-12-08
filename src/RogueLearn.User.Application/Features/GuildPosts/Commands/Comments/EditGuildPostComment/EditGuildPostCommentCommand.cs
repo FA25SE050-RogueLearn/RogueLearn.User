@@ -3,4 +3,11 @@ using RogueLearn.User.Application.Features.GuildPosts.DTOs;
 
 namespace RogueLearn.User.Application.Features.GuildPosts.Commands.Comments.EditGuildPostComment;
 
-public record EditGuildPostCommentCommand(Guid GuildId, Guid PostId, Guid CommentId, Guid AuthorId, EditGuildPostCommentRequest Request) : IRequest<Unit>;
+public class EditGuildPostCommentCommand : IRequest<Unit>
+{
+    public Guid GuildId { get; init; }
+    public Guid PostId { get; init; }
+    public Guid CommentId { get; init; }
+    public Guid AuthorId { get; init; }
+    public EditGuildPostCommentRequest Request { get; init; } = new();
+}

@@ -11,13 +11,9 @@ namespace RogueLearn.User.Application.Services;
 
 public interface IQuestStepGenerationService
 {
-    /// <summary>
-    /// Generates quest steps asynchronously with built-in retry logic.
-    /// Retries up to 3 times on AI service failures (5xx errors).
-    /// Total: 4 attempts over ~4 minutes with exponential backoff.
-    /// </summary>
+    // Updated signature: authUserId -> adminId
     [AutomaticRetry(Attempts = 4, DelaysInSeconds = new[] { 30, 60, 120 })]
-    Task GenerateQuestStepsAsync(Guid authUserId, Guid questId, PerformContext context);
+    Task GenerateQuestStepsAsync(Guid adminId, Guid questId, PerformContext context);
 }
 
 public class QuestStepGenerationService : IQuestStepGenerationService
@@ -50,22 +46,21 @@ public class QuestStepGenerationService : IQuestStepGenerationService
     /// ⭐ UPDATED: Uses PerformContext to access Hangfire job ID for progress tracking
     /// </summary>
     [AutomaticRetry(Attempts = 4, DelaysInSeconds = new[] { 30, 60, 120 })]
-    public async Task GenerateQuestStepsAsync(Guid authUserId, Guid questId, PerformContext context)
+    public async Task GenerateQuestStepsAsync(Guid adminId, Guid questId, PerformContext context)
     {
         try
         {
-            // ⭐ UPDATED: Use PerformContext to get job ID (official Hangfire way)
             var jobId = context?.BackgroundJob?.Id;
 
             _logger.LogInformation(
-                "[BACKGROUND JOB] Starting quest step generation. Job: {JobId}, Quest: {QuestId}, User: {AuthUserId}",
-                jobId, questId, authUserId);
+                "[BACKGROUND JOB] Starting quest step generation. Job: {JobId}, Quest: {QuestId}, Admin: {AdminId}",
+                jobId, questId, adminId);
 
             var command = new GenerateQuestStepsCommand
             {
-                AuthUserId = authUserId,
+                AdminId = adminId, // Updated property
                 QuestId = questId,
-                HangfireJobId = jobId!  // ⭐ Pass job ID to handler
+                HangfireJobId = jobId!
             };
 
             var result = await _mediator.Send(command);

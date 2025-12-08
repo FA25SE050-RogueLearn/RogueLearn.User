@@ -11,7 +11,6 @@
   - `dotnet add {ProjectName}.Tests package xunit`
   - `dotnet add {ProjectName}.Tests package xunit.runner.visualstudio`
   - `dotnet add {ProjectName}.Tests package AutoFixture`
-  - `dotnet add {ProjectName}.Tests package AutoFixture.Xunit2`
   - `dotnet add {ProjectName}.Tests package FluentAssertions`
   - `dotnet add {ProjectName}.Tests package NSubstitute`
   - `dotnet add {ProjectName}.Tests package coverlet.collector`
@@ -19,19 +18,20 @@
   - `dotnet add {ProjectName}.Tests package coverlet.msbuild`
 
 ## Test Suites
-- [ ] Use `[Theory]` for parameterized tests.
+- [ ] Use `[Fact]` tests; iterate in-method datasets for multiple cases.
 - [ ] Create three suites per subject:
   - Normal Data: typical valid inputs, expected outputs and interactions.
   - Abnormal Data: invalid inputs, exceptions, nulls, misconfigurations.
   - Boundary Data: min/max, empty, one-item, thresholds, precision edges.
-- [ ] Prefer `[InlineData]` for small sets; `[MemberData]` for complex datasets.
-- [ ] Use `[AutoData]` / `[InlineAutoData]` to generate objects and reduce boilerplate.
+- [ ] For small sets, define tuples/arrays in the test and iterate.
+- [ ] For complex datasets, extract helpers/static datasets and iterate.
+- [ ] Use `AutoFixture` inside tests to generate objects and reduce boilerplate.
 - [ ] Use `NSubstitute` to mock dependencies and verify interactions.
 - [ ] Use `FluentAssertions` for expressive assertions.
 
 ## Template
 ```csharp
-using AutoFixture.Xunit2;
+using AutoFixture;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -40,95 +40,125 @@ namespace Foo.Tests.Services;
 
 public class BarServiceTests
 {
-    [Theory]
-    [InlineData(2, 3, 5)]
-    [InlineData(10, 20, 30)]
-    [InlineData(-1, 4, 3)]
-    public void NormalData_Add_ReturnsExpected(int a, int b, int expected)
+    [Fact]
+    public void NormalData_Add_ReturnsExpected()
     {
+        var cases = new[]
+        {
+            (2, 3, 5),
+            (10, 20, 30),
+            (-1, 4, 3)
+        };
+
         var dep = Substitute.For<IDependency>();
-        dep.Compute(a, b).Returns(expected);
-        var sut = new BarService(dep);
-        var result = sut.Add(a, b);
-        result.Should().Be(expected);
-        dep.Received(1).Compute(a, b);
+        foreach (var (a, b, expected) in cases)
+        {
+            dep.Compute(a, b).Returns(expected);
+            var sut = new BarService(dep);
+            var result = sut.Add(a, b);
+            result.Should().Be(expected);
+            dep.Received(1).Compute(a, b);
+            dep.ClearReceivedCalls();
+        }
     }
 
-    [Theory]
-    [InlineData(int.MaxValue, 1)]
-    [InlineData(int.MinValue, -1)]
-    public void BoundaryData_Add_HandlesEdges(int a, int b)
+    [Fact]
+    public void BoundaryData_Add_HandlesEdges()
+    {
+        var cases = new[]
+        {
+            (int.MaxValue, 1),
+            (int.MinValue, -1)
+        };
+
+        var sut = new BarService(Substitute.For<IDependency>());
+        foreach (var (a, b) in cases)
+        {
+            Action act = () => sut.Add(a, b);
+            act.Should().NotThrow();
+        }
+    }
+
+    [Fact]
+    public void AbnormalData_Add_InvalidInputs_Throws()
     {
         var sut = new BarService(Substitute.For<IDependency>());
-        Action act = () => sut.Add(a, b);
-        act.Should().NotThrow();
-    }
+        var cases = new[]
+        {
+            (0, 0),
+            (-100, 0)
+        };
 
-    [Theory]
-    [InlineAutoData(0, 0)]
-    [InlineAutoData(-100, 0)]
-    public void AbnormalData_Add_InvalidInputs_Throws(int a, int b, BarService sut)
-    {
-        Action act = () => sut.Add(a, b);
-        act.Should().Throw<ArgumentException>();
+        foreach (var (a, b) in cases)
+        {
+            Action act = () => sut.Add(a, b);
+            act.Should().Throw<ArgumentException>();
+        }
     }
 }
 ```
 
-## MemberData Example
+## Dataset Example
 ```csharp
 public static class BarData
 {
-    public static IEnumerable<object[]> Normal =>
+    public static (int a, int b, int expected)[] Normal =>
         new[]
         {
-            new object[] { 1, 2, 3 },
-            new object[] { 100, 200, 300 }
+            (1, 2, 3),
+            (100, 200, 300)
         };
 
-    public static IEnumerable<object[]> Boundary =>
+    public static (int a, int b)[] Boundary =>
         new[]
         {
-            new object[] { int.MaxValue, 0 },
-            new object[] { int.MinValue, 0 }
+            (int.MaxValue, 0),
+            (int.MinValue, 0)
         };
 
-    public static IEnumerable<object[]> Abnormal =>
+    public static (int a, int b)[] Abnormal =>
         new[]
         {
-            new object[] { 0, 0 },
-            new object[] { -1, -1 }
+            (0, 0),
+            (-1, -1)
         };
 }
 
-public class BarServiceTheorySets
+public class BarServiceFactSets
 {
-    [Theory]
-    [MemberData(nameof(BarData.Normal), MemberType = typeof(BarData))]
-    public void Normal(int a, int b, int expected)
+    [Fact]
+    public void Normal()
     {
         var dep = Substitute.For<IDependency>();
-        dep.Compute(a, b).Returns(expected);
-        var sut = new BarService(dep);
-        sut.Add(a, b).Should().Be(expected);
+        foreach (var (a, b, expected) in BarData.Normal)
+        {
+            dep.Compute(a, b).Returns(expected);
+            var sut = new BarService(dep);
+            sut.Add(a, b).Should().Be(expected);
+            dep.ClearReceivedCalls();
+        }
     }
 
-    [Theory]
-    [MemberData(nameof(BarData.Boundary), MemberType = typeof(BarData))]
-    public void Boundary(int a, int b)
+    [Fact]
+    public void Boundary()
     {
         var sut = new BarService(Substitute.For<IDependency>());
-        Action act = () => sut.Add(a, b);
-        act.Should().NotThrow();
+        foreach (var (a, b) in BarData.Boundary)
+        {
+            Action act = () => sut.Add(a, b);
+            act.Should().NotThrow();
+        }
     }
 
-    [Theory]
-    [MemberData(nameof(BarData.Abnormal), MemberType = typeof(BarData))]
-    public void Abnormal(int a, int b)
+    [Fact]
+    public void Abnormal()
     {
         var sut = new BarService(Substitute.For<IDependency>());
-        Action act = () => sut.Add(a, b);
-        act.Should().Throw<ArgumentException>();
+        foreach (var (a, b) in BarData.Abnormal)
+        {
+            Action act = () => sut.Add(a, b);
+            act.Should().Throw<ArgumentException>();
+        }
     }
 }
 ```

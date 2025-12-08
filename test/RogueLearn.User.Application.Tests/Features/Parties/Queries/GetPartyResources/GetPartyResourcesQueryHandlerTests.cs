@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Features.Parties.DTOs;
@@ -15,10 +14,10 @@ namespace RogueLearn.User.Application.Tests.Features.Parties.Queries.GetPartyRes
 
 public class GetPartyResourcesQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_ReturnsMapped(GetPartyResourcesQuery query)
+    [Fact]
+    public async Task Handle_ReturnsMapped()
     {
+        var query = new GetPartyResourcesQuery(System.Guid.NewGuid());
         var repo = Substitute.For<IPartyStashItemRepository>();
         var mapper = Substitute.For<AutoMapper.IMapper>();
         var sut = new GetPartyResourcesQueryHandler(repo, mapper);
@@ -28,5 +27,17 @@ public class GetPartyResourcesQueryHandlerTests
         var result = await sut.Handle(query, CancellationToken.None);
         result.Count.Should().Be(1);
         result.First().Title.Should().Be("T");
+    }
+
+    [Fact]
+    public async Task Handle_Empty_ReturnsEmpty()
+    {
+        var query = new GetPartyResourcesQuery(System.Guid.NewGuid());
+        var repo = Substitute.For<IPartyStashItemRepository>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var sut = new GetPartyResourcesQueryHandler(repo, mapper);
+        repo.GetResourcesByPartyAsync(query.PartyId, Arg.Any<CancellationToken>()).Returns(new List<PartyStashItem>());
+        var result = await sut.Handle(query, CancellationToken.None);
+        result.Count.Should().Be(0);
     }
 }

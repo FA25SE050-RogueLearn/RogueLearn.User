@@ -110,4 +110,35 @@ public class GetAcademicStatusQueryHandlerTests
         // GPA uses only numeric grade from s1: 3.5 * 3 credits = 10.5; denominator 3
         res.CurrentGpa.Should().Be(3.5);
     }
+
+    [Fact]
+    public async Task Handle_CompletedWithNonNumericGrades_SetsGpaZero()
+    {
+        var userId = Guid.NewGuid();
+        var enrollRepo = Substitute.For<IStudentEnrollmentRepository>();
+        enrollRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentEnrollment, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new StudentEnrollment { Id = Guid.NewGuid(), AuthUserId = userId });
+
+        var s1 = Guid.NewGuid();
+
+        var semesterRepo = Substitute.For<IStudentSemesterSubjectRepository>();
+        semesterRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentSemesterSubject, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new[]
+            {
+                new StudentSemesterSubject { AuthUserId = userId, SubjectId = s1, Status = SubjectEnrollmentStatus.Passed, Grade = "A" }
+            });
+
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new Subject { Id = s1, Credits = 3 }
+        });
+
+        var sut = CreateSut(enrollRepo: enrollRepo, semesterRepo: semesterRepo, subjectRepo: subjectRepo);
+        var res = await sut.Handle(new GetAcademicStatusQuery { AuthUserId = userId }, CancellationToken.None);
+
+        res.Should().NotBeNull();
+        res!.CompletedSubjects.Should().Be(1);
+        res.CurrentGpa.Should().Be(0);
+    }
 }

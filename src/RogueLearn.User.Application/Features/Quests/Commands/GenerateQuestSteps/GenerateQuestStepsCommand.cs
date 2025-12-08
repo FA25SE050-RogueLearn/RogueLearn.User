@@ -1,15 +1,15 @@
-﻿// RogueLearn.Us    er/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommand.cs
+﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommand.cs
 using MediatR;
 using RogueLearn.User.Domain.Entities;
 using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 
-// MODIFIED: The command now returns a list of DTOs.
 public class GenerateQuestStepsCommand : IRequest<List<GeneratedQuestStepDto>>
 {
+    // Changed from AuthUserId (student) to AdminId (creator)
     [JsonIgnore]
-    public Guid AuthUserId { get; set; }
+    public Guid AdminId { get; set; }
 
     [JsonIgnore]
     public Guid QuestId { get; set; }

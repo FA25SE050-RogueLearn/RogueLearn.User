@@ -5,7 +5,7 @@ using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.Parties.Queries.GetAllParties;
 
-public class GetAllPartiesQueryHandler : IRequestHandler<GetAllPartiesQuery, IReadOnlyList<PartyDto>>
+public class GetAllPartiesQueryHandler : IRequestHandler<GetAllPartiesQuery, IEnumerable<PartyDto>>
 {
     private readonly IPartyRepository _partyRepository;
     private readonly IMapper _mapper;
@@ -16,9 +16,13 @@ public class GetAllPartiesQueryHandler : IRequestHandler<GetAllPartiesQuery, IRe
         _mapper = mapper;
     }
 
-    public async Task<IReadOnlyList<PartyDto>> Handle(GetAllPartiesQuery request, CancellationToken cancellationToken)
+    public async Task<IEnumerable<PartyDto>> Handle(GetAllPartiesQuery request, CancellationToken cancellationToken)
     {
         var parties = await _partyRepository.GetAllAsync(cancellationToken);
-        return parties.Select(p => _mapper.Map<PartyDto>(p)).ToList();
+        // if (!request.IncludePrivate)
+        // {
+        //     parties = parties.Where(p => p.IsPublic);
+        // }
+        return parties.Select(p => _mapper.Map<PartyDto>(p));
     }
 }

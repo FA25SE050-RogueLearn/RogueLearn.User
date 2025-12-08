@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoFixture.Xunit2;
 using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
@@ -16,10 +15,10 @@ namespace RogueLearn.User.Application.Tests.Features.Guilds.Queries.GetGuildDash
 
 public class GetGuildDashboardQueryHandlerTests
 {
-    [Theory]
-    [AutoData]
-    public async Task Handle_NotFound_Throws(GetGuildDashboardQuery query)
+    [Fact]
+    public async Task Handle_NotFound_Throws()
     {
+        var query = new GetGuildDashboardQuery(System.Guid.NewGuid());
         var guildRepo = Substitute.For<IGuildRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var invRepo = Substitute.For<IGuildInvitationRepository>();
@@ -29,10 +28,10 @@ public class GetGuildDashboardQueryHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(query, CancellationToken.None));
     }
 
-    [Theory]
-    [AutoData]
-    public async Task Handle_Success_ComputesCounts(GetGuildDashboardQuery query)
+    [Fact]
+    public async Task Handle_Success_ComputesCounts()
     {
+        var query = new GetGuildDashboardQuery(System.Guid.NewGuid());
         var guildRepo = Substitute.For<IGuildRepository>();
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var invRepo = Substitute.For<IGuildInvitationRepository>();

@@ -122,6 +122,110 @@ public class ImportSubjectFromTextCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_UpdateExisting_UsesApprovedDateForUpdatedAt()
+    {
+        var html = Substitute.For<IHtmlCleaningService>();
+        html.ExtractCleanTextFromHtml(Arg.Any<string>()).Returns("text");
+        var storage = Substitute.For<ICurriculumImportStorage>();
+        var syllabusJson = "{\"SubjectCode\":\"CS202\",\"SubjectName\":\"Subj\",\"Credits\":3,\"ApprovedDate\":\"2024-05-01\",\"Content\":{}}";
+        storage.TryGetCachedSyllabusDataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(syllabusJson);
+
+        var existing = new Subject { Id = Guid.NewGuid(), SubjectCode = "CS202", UpdatedAt = DateTimeOffset.MinValue };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Subject, bool>>>(), Arg.Any<CancellationToken>()).Returns(existing);
+        subjectRepo.UpdateAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns(ci => (Subject)ci[0]!);
+        var mapper = Substitute.For<IMapper>();
+        mapper.Map<CreateSubjectResponse>(Arg.Any<Subject>()).Returns(new CreateSubjectResponse());
+
+        var sut = CreateSut(html: html, storage: storage, subjectRepo: subjectRepo, mapper: mapper);
+        _ = await sut.Handle(new ImportSubjectFromTextCommand { RawText = "<html/>" }, CancellationToken.None);
+
+        existing.UpdatedAt.Year.Should().Be(2024);
+        existing.UpdatedAt.Month.Should().Be(5);
+        existing.UpdatedAt.Day.Should().Be(1);
+        await subjectRepo.Received(1).UpdateAsync(existing, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_EnrichesUrls_WhenSessionsPresent()
+    {
+        var html = Substitute.For<IHtmlCleaningService>();
+        html.ExtractCleanTextFromHtml(Arg.Any<string>()).Returns("text");
+        var storage = Substitute.For<ICurriculumImportStorage>();
+        var syllabusJson = "{\"SubjectCode\":\"CS301\",\"SubjectName\":\"Subj\",\"Credits\":3,\"Content\":{\"SessionSchedule\":[{\"SessionNumber\":1,\"Topic\":\"Intro\"},{\"SessionNumber\":2,\"Topic\":\"Basics\"}],\"ConstructiveQuestions\":[{\"Name\":\"Q1\",\"Question\":\"?\"}]}}";
+        storage.TryGetCachedSyllabusDataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(syllabusJson);
+
+        var ai = Substitute.For<IAiQueryClassificationService>();
+        ai.ClassifySubjectAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(RogueLearn.User.Application.Services.SubjectCategory.Programming);
+        ai.GenerateBatchQueryVariantsAsync(Arg.Any<List<SyllabusSessionDto>>(), Arg.Any<string>(), Arg.Any<RogueLearn.User.Application.Services.SubjectCategory>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => new Dictionary<int, List<string>> { { 1, new List<string> { "q1" } }, { 2, new List<string> { "q2" } } });
+
+        var reading = Substitute.For<IReadingUrlService>();
+        reading.GetValidUrlForTopicAsync(Arg.Any<string>(), Arg.Any<IEnumerable<string>>(), Arg.Any<string>(), Arg.Any<RogueLearn.User.Application.Services.SubjectCategory>(), Arg.Any<List<string>>(), Arg.Any<Func<string, bool>>(), Arg.Any<CancellationToken>())
+               .Returns("http://example.com/a");
+
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Subject, bool>>>(), Arg.Any<CancellationToken>()).Returns((Subject?)null);
+        Subject? captured = null;
+        subjectRepo.AddAsync(Arg.Do<Subject>(s => captured = s), Arg.Any<CancellationToken>()).Returns(ci => captured!);
+
+        var mapper = Substitute.For<IMapper>();
+        mapper.Map<CreateSubjectResponse>(Arg.Any<Subject>()).Returns(new CreateSubjectResponse());
+
+        var sut = CreateSut(html: html, storage: storage, subjectRepo: subjectRepo, mapper: mapper, reading: reading, ai: ai);
+        _ = await sut.Handle(new ImportSubjectFromTextCommand { RawText = "<html/>" }, CancellationToken.None);
+
+        await storage.Received(1).SaveSyllabusDataAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<SyllabusData>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await reading.Received(2).GetValidUrlForTopicAsync(Arg.Any<string>(), Arg.Any<IEnumerable<string>>(), Arg.Any<string>(), Arg.Any<RogueLearn.User.Application.Services.SubjectCategory>(), Arg.Any<List<string>>(), Arg.Any<Func<string, bool>>(), Arg.Any<CancellationToken>());
+        captured!.Content.Should().NotBeNull();
+        captured!.Content!.ContainsKey("SessionSchedule").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_SkipsUrlSearch_WhenNoSessions()
+    {
+        var html = Substitute.For<IHtmlCleaningService>();
+        html.ExtractCleanTextFromHtml(Arg.Any<string>()).Returns("text");
+        var storage = Substitute.For<ICurriculumImportStorage>();
+        var syllabusJson = "{\"SubjectCode\":\"CS302\",\"SubjectName\":\"Subj\",\"Credits\":3,\"Content\":{\"SessionSchedule\":[],\"ConstructiveQuestions\":[]}}";
+        storage.TryGetCachedSyllabusDataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(syllabusJson);
+
+        var reading = Substitute.For<IReadingUrlService>();
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Subject, bool>>>(), Arg.Any<CancellationToken>()).Returns((Subject?)null);
+        subjectRepo.AddAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Subject>());
+        var mapper = Substitute.For<IMapper>();
+        mapper.Map<CreateSubjectResponse>(Arg.Any<Subject>()).Returns(new CreateSubjectResponse());
+
+        var sut = CreateSut(html: html, storage: storage, subjectRepo: subjectRepo, mapper: mapper, reading: reading);
+        _ = await sut.Handle(new ImportSubjectFromTextCommand { RawText = "<html/>" }, CancellationToken.None);
+
+        await reading.DidNotReceive().GetValidUrlForTopicAsync(Arg.Any<string>(), Arg.Any<IEnumerable<string>>(), Arg.Any<string>(), Arg.Any<RogueLearn.User.Application.Services.SubjectCategory>(), Arg.Any<List<string>>(), Arg.Any<Func<string, bool>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_DoesNotGenerateQuestions_WhenExistingPresent()
+    {
+        var html = Substitute.For<IHtmlCleaningService>();
+        html.ExtractCleanTextFromHtml(Arg.Any<string>()).Returns("text");
+        var storage = Substitute.For<ICurriculumImportStorage>();
+        var syllabusJson = "{\"SubjectCode\":\"CS303\",\"SubjectName\":\"Subj\",\"Credits\":3,\"Content\":{\"SessionSchedule\":[],\"ConstructiveQuestions\":[{\"Name\":\"Q\",\"Question\":\"?\"}]}}";
+        storage.TryGetCachedSyllabusDataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(syllabusJson);
+
+        var qgen = Substitute.For<IConstructiveQuestionGenerationPlugin>();
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Subject, bool>>>(), Arg.Any<CancellationToken>()).Returns((Subject?)null);
+        subjectRepo.AddAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Subject>());
+        var mapper = Substitute.For<IMapper>();
+        mapper.Map<CreateSubjectResponse>(Arg.Any<Subject>()).Returns(new CreateSubjectResponse());
+
+        var sut = CreateSut(qgen: qgen, html: html, storage: storage, subjectRepo: subjectRepo, mapper: mapper);
+        _ = await sut.Handle(new ImportSubjectFromTextCommand { RawText = "<html/>" }, CancellationToken.None);
+
+        await qgen.DidNotReceive().GenerateQuestionsAsync(Arg.Any<List<SyllabusSessionDto>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_InvalidJson_ThrowsBadRequest()
     {
         var html = Substitute.For<IHtmlCleaningService>();

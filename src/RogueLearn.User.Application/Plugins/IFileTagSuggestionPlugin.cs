@@ -8,4 +8,5 @@ namespace RogueLearn.User.Application.Plugins;
 public interface IFileTagSuggestionPlugin
 {
     Task<string> GenerateTagSuggestionsJsonAsync(AiFileAttachment attachment, int maxTags = 10, CancellationToken cancellationToken = default);
+    Task<string> GenerateTagSuggestionsJsonAsync(AiFileAttachment attachment, IEnumerable<string> knownTags, int maxTags = 10, CancellationToken cancellationToken = default);
 }

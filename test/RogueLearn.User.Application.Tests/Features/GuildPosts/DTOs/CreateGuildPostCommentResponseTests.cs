@@ -14,3 +14,4 @@ public class CreateGuildPostCommentResponseTests
         r.CommentId.Should().NotBe(Guid.Empty);
     }
 }
+

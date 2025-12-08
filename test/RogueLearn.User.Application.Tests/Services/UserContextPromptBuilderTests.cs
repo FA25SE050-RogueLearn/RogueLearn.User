@@ -69,9 +69,9 @@ public class UserContextPromptBuilderTests
 
         res.Should().Contain("Student Performance Summary");
         res.Should().Contain("**Student:** A B (student)");
-        res.Should().Contain("Class Information");
+        res.Should().Contain("Learning Track & Career Roadmap");
         res.Should().Contain("Intro CS");
-        res.Should().Contain("**Skill Focus Areas:** Algorithms, Data Structures");
+        res.Should().Contain("**Core Skill Focus Areas:** Algorithms, Data Structures");
 
         res.Should().Contain("**Overall GPA:** 2.64");
         res.Should().Contain("**Total Credits Earned:** 7");

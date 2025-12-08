@@ -86,7 +86,6 @@ public class UpdateAchievementCommandHandler : IRequestHandler<UpdateAchievement
         }
 
         entity.Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
-        entity.Icon = string.IsNullOrWhiteSpace(request.Icon) ? null : request.Icon.Trim();
         entity.IconUrl = string.IsNullOrWhiteSpace(request.IconUrl) ? null : request.IconUrl;
         entity.Version = request.Version <= 0 ? 1 : request.Version;
         entity.IsActive = request.IsActive;

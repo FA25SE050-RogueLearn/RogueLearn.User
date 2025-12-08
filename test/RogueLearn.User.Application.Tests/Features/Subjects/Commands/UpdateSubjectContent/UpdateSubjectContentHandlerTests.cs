@@ -10,6 +10,8 @@ using RogueLearn.User.Application.Models;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using System.Text.Json;
+using NewtonsoftJson = Newtonsoft.Json;
 
 namespace RogueLearn.User.Application.Tests.Features.Subjects.Commands.UpdateSubjectContent;
 
@@ -73,5 +75,53 @@ public class UpdateSubjectContentHandlerTests
         subject.Content.Should().NotBeNull();
         subject.Content!.ContainsKey("sessionSchedule").Should().BeTrue();
         await subjectRepo.Received(1).UpdateAsync(subject, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Serializes_IgnoresNullProperties()
+    {
+        var subjectId = Guid.NewGuid();
+        var subject = new Subject { Id = subjectId, SubjectCode = "CS202", SubjectName = "Data Structures" };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(subject);
+        subjectRepo.UpdateAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns(ci => (Subject)ci[0]!);
+
+        var sut = CreateSut(subjectRepo);
+        var content = new SyllabusContent
+        {
+            CourseDescription = "Desc",
+            CourseLearningOutcomes = null,
+            SessionSchedule = new List<SyllabusSessionDto> { new() { SessionNumber = 1, Topic = "Intro" } }
+        };
+
+        var cmd = new UpdateSubjectContentCommand { SubjectId = subjectId, Content = content };
+        var res = await sut.Handle(cmd, CancellationToken.None);
+
+        res.Should().BeSameAs(content);
+        subject.Content.Should().NotBeNull();
+        subject.Content!.ContainsKey("courseLearningOutcomes").Should().BeFalse();
+        subject.Content!.ContainsKey("sessionSchedule").Should().BeTrue();
+        await subjectRepo.Received(1).UpdateAsync(subject, Arg.Any<CancellationToken>());
+    }
+
+    
+
+    [Fact]
+    public async Task Handle_UpdateFails_Rethrows()
+    {
+        var subjectId = Guid.NewGuid();
+        var subject = new Subject { Id = subjectId, SubjectCode = "CS401", SubjectName = "Systems" };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(subject);
+        subjectRepo.UpdateAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns<Task<Subject>>(_ => throw new Exception("db failure"));
+
+        var content = new SyllabusContent
+        {
+            CourseDescription = "Desc",
+            SessionSchedule = new List<SyllabusSessionDto> { new() { SessionNumber = 1, Topic = "Intro" } }
+        };
+
+        var sut = CreateSut(subjectRepo);
+        await Assert.ThrowsAsync<Exception>(() => sut.Handle(new UpdateSubjectContentCommand { SubjectId = subjectId, Content = content }, CancellationToken.None));
     }
 }
