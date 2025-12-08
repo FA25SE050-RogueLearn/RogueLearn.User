@@ -59,16 +59,8 @@ public class JoinPublicPartyCommandHandler : IRequestHandler<JoinPublicPartyComm
             if (_invitationRepository != null)
             {
                 var pendingInvites = await _invitationRepository.GetPendingInvitationsByInviteeAsync(request.AuthUserId, cancellationToken);
-                var toDecline = pendingInvites.Where(i => i.PartyId == request.PartyId && i.Status == InvitationStatus.Pending).ToList();
-                if (toDecline.Any())
-                {
-                    foreach (var inv in toDecline)
-                    {
-                        inv.Status = InvitationStatus.Declined;
-                        inv.RespondedAt = DateTimeOffset.UtcNow;
-                    }
-                    await _invitationRepository.UpdateRangeAsync(toDecline, cancellationToken);
-                }
+                var toDelete = pendingInvites.Where(i => i.PartyId == request.PartyId && i.Status == InvitationStatus.Pending).ToList();
+                await _invitationRepository.DeleteRangeAsync(toDelete.Select(i => i.Id), cancellationToken);
             }
             return Unit.Value;
         }

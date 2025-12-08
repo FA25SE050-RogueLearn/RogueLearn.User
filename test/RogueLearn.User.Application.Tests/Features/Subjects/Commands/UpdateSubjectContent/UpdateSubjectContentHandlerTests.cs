@@ -12,6 +12,7 @@ using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using NewtonsoftJson = Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace RogueLearn.User.Application.Tests.Features.Subjects.Commands.UpdateSubjectContent;
 
@@ -26,6 +27,8 @@ public class UpdateSubjectContentHandlerTests
         return new UpdateSubjectContentHandler(subjectRepo, logger);
     }
 
+    
+
     [Fact]
     public async Task Handle_NullContent_ThrowsArgumentNull()
     {
@@ -37,6 +40,20 @@ public class UpdateSubjectContentHandlerTests
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
+    [Fact]
+    public async Task Handle_SystemTextJsonThrows_WrappedInvalidOperation()
+    {
+        var subjectId = Guid.NewGuid();
+        var subject = new Subject { Id = subjectId, SubjectCode = "CS800", SubjectName = "SerializeErr" };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(subject);
+        subjectRepo.UpdateAsync(Arg.Any<Subject>(), Arg.Any<CancellationToken>()).Returns<Task<Subject>>(_ => throw new JsonException("boom"));
+
+        var sut = CreateSut(subjectRepo);
+        var content = new SyllabusContent { CourseDescription = "Desc", SessionSchedule = new List<SyllabusSessionDto> { new() { SessionNumber = 1, Topic = "Intro" } } };
+        var act = () => sut.Handle(new UpdateSubjectContentCommand { SubjectId = subjectId, Content = content }, CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Failed to serialize DTO: boom*");
+    }
     [Fact]
     public async Task Handle_SubjectNotFound_ThrowsNotFound()
     {
@@ -123,5 +140,125 @@ public class UpdateSubjectContentHandlerTests
 
         var sut = CreateSut(subjectRepo);
         await Assert.ThrowsAsync<Exception>(() => sut.Handle(new UpdateSubjectContentCommand { SubjectId = subjectId, Content = content }, CancellationToken.None));
+    }
+
+    [System.Text.Json.Serialization.JsonConverter(typeof(FailingContentConverter))]
+    private class BadContent : SyllabusContent { }
+
+    private class FailingContentConverter : System.Text.Json.Serialization.JsonConverter<BadContent>
+    {
+        public override BadContent? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+        {
+            throw new NotImplementedException();
+        }
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, BadContent value, System.Text.Json.JsonSerializerOptions options)
+        {
+            throw new System.Text.Json.JsonException("fail");
+        }
+    }
+
+    private class BadCourseLearningOutcome : CourseLearningOutcome
+    {
+        public new string Details
+        {
+            get => throw new Exception("boom");
+            set { }
+        }
+    }
+
+    private class CycleContent : SyllabusContent
+    {
+        public CycleContent? Child { get; set; }
+    }
+
+    
+
+    
+
+    
+
+    private class NullDictConverter : NewtonsoftJson.JsonConverter<Dictionary<string, object>>
+    {
+        public override Dictionary<string, object>? ReadJson(NewtonsoftJson.JsonReader reader, Type objectType, Dictionary<string, object>? existingValue, bool hasExistingValue, NewtonsoftJson.JsonSerializer serializer)
+        {
+            _ = JObject.Load(reader);
+            return null;
+        }
+        public override void WriteJson(NewtonsoftJson.JsonWriter writer, Dictionary<string, object>? value, NewtonsoftJson.JsonSerializer serializer)
+        {
+            writer.WriteNull();
+        }
+    }
+
+    [Fact]
+    public async Task Handle_DeserializeReturnsNull_ThrowsInvalidOperation()
+    {
+        var subjectId = Guid.NewGuid();
+        var subject = new Subject { Id = subjectId, SubjectCode = "CS600", SubjectName = "Topics" };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(subject);
+
+        var original = NewtonsoftJson.JsonConvert.DefaultSettings;
+        NewtonsoftJson.JsonConvert.DefaultSettings = () => new NewtonsoftJson.JsonSerializerSettings { Converters = new List<NewtonsoftJson.JsonConverter> { new NullDictConverter() } };
+        try
+        {
+            var sut = CreateSut(subjectRepo);
+            var content = new SyllabusContent { CourseDescription = "Desc" };
+            var act = () => sut.Handle(new UpdateSubjectContentCommand { SubjectId = subjectId, Content = content }, CancellationToken.None);
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Failed to convert content to Dictionary*");
+        }
+        finally
+        {
+            NewtonsoftJson.JsonConvert.DefaultSettings = original;
+        }
+    }
+
+    private class ThrowingDictConverter : NewtonsoftJson.JsonConverter<Dictionary<string, object>>
+    {
+        public override Dictionary<string, object>? ReadJson(NewtonsoftJson.JsonReader reader, Type objectType, Dictionary<string, object>? existingValue, bool hasExistingValue, NewtonsoftJson.JsonSerializer serializer)
+        {
+            throw new NewtonsoftJson.JsonException("boom");
+        }
+        public override void WriteJson(NewtonsoftJson.JsonWriter writer, Dictionary<string, object>? value, NewtonsoftJson.JsonSerializer serializer)
+        {
+            writer.WriteNull();
+        }
+    }
+
+    [Fact]
+    public async Task Handle_NewtonsoftThrows_WrappedAsInvalidOperation()
+    {
+        var subjectId = Guid.NewGuid();
+        var subject = new Subject { Id = subjectId, SubjectCode = "CS700", SubjectName = "Errors" };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(subject);
+
+        var original = NewtonsoftJson.JsonConvert.DefaultSettings;
+        NewtonsoftJson.JsonConvert.DefaultSettings = () => new NewtonsoftJson.JsonSerializerSettings { Converters = new List<NewtonsoftJson.JsonConverter> { new ThrowingDictConverter() } };
+        try
+        {
+            var sut = CreateSut(subjectRepo);
+            var content = new SyllabusContent { CourseDescription = "Desc" };
+            var act = () => sut.Handle(new UpdateSubjectContentCommand { SubjectId = subjectId, Content = content }, CancellationToken.None);
+            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Failed to prepare dictionary for DB: boom*");
+        }
+        finally
+        {
+            NewtonsoftJson.JsonConvert.DefaultSettings = original;
+        }
+    }
+
+    [Fact]
+    public async Task Handle_SelfReferentialCycle_DoesNotThrow()
+    {
+        var subjectId = Guid.NewGuid();
+        var subject = new Subject { Id = subjectId, SubjectCode = "CS900", SubjectName = "Cycle" };
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(subject);
+
+        var sut = CreateSut(subjectRepo);
+        var bad = new BadContent { CourseDescription = "Desc" };
+        await sut.Handle(new UpdateSubjectContentCommand { SubjectId = subjectId, Content = bad }, CancellationToken.None);
+        subject.Content.Should().NotBeNull();
     }
 }

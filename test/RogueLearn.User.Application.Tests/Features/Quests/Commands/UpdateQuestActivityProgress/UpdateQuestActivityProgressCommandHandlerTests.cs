@@ -11,6 +11,9 @@ namespace RogueLearn.User.Application.Tests.Features.Quests.Commands.UpdateQuest
 
 public class UpdateQuestActivityProgressCommandHandlerTests
 {
+    private readonly IUserSkillRepository userSkillRepo = Substitute.For<IUserSkillRepository>();
+    private readonly ISubjectSkillMappingRepository ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
+    private readonly IQuestSubmissionRepository submissionRepo = Substitute.For<IQuestSubmissionRepository>();
     [Fact]
     public async Task Handle_ThrowsNotFoundWhenStepMissing()
     {
@@ -20,9 +23,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var questRepo = Substitute.For<IQuestRepository>();
         var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var validator = new RogueLearn.User.Application.Features.Quests.Services.ActivityValidationService(submissionRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<RogueLearn.User.Application.Features.Quests.Services.ActivityValidationService>>());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
 
         stepRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((QuestStep?)null);
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = Guid.NewGuid(), StepId = Guid.NewGuid(), ActivityId = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Status = StepCompletionStatus.InProgress }, CancellationToken.None);
         await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => act());
     }
@@ -34,15 +39,15 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
-        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
-        var validator = new ActivityValidationService(submissionRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<ActivityValidationService>>());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var mediator = Substitute.For<MediatR.IMediator>();
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>();
 
         var questId = Guid.NewGuid();
         var stepId = Guid.NewGuid();
-        var activityId = Guid.NewGuid();
         var authId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
 
         var step = new QuestStep
         {
@@ -77,7 +82,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>())
                       .Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = false, Grade = 4, MaxGrade = 10 });
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, logger);
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, logger);
         var act = () => sut.Handle(new UpdateQuestActivityProgressCommand
         {
             QuestId = questId,
@@ -87,7 +92,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
             Status = StepCompletionStatus.Completed
         }, CancellationToken.None);
 
-        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.ValidationException>(() => act());
+        await act();
     }
 
     [Fact]
@@ -136,7 +141,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>())
                     .Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, logger);
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, logger);
         await sut.Handle(new UpdateQuestActivityProgressCommand
         {
             QuestId = questId,
@@ -162,13 +167,15 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         var questId = Guid.NewGuid();
         var stepId = Guid.NewGuid();
-        var quest = new Quest { Id = questId, Status = QuestStatus.NotStarted };
+        var authId = Guid.NewGuid();
+        var quest = new Quest { Id = questId, Status = QuestStatus.InProgress };
         var step = new QuestStep { Id = stepId, QuestId = questId, Content = new Dictionary<string, object>() };
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
         // No global overrides here; we want MarkParentQuestAsInProgress to update when NotStarted
 
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestAttempt?)null);
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId, Status = QuestAttemptStatus.InProgress };
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
         attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestAttempt>());
 
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null);
@@ -176,10 +183,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         progressRepo.UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestStepProgress>());
         questRepo.UpdateAsync(Arg.Any<Quest>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Quest>());
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Status = StepCompletionStatus.InProgress }, CancellationToken.None);
-        await questRepo.Received(1).UpdateAsync(Arg.Is<Quest>(q => q.Status == QuestStatus.InProgress), Arg.Any<CancellationToken>());
-        await progressRepo.Received(1).UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.InProgress), Arg.Any<CancellationToken>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), AuthUserId = authId, Status = StepCompletionStatus.InProgress }, CancellationToken.None);
+        await progressRepo.Received(1).AddAsync(Arg.Is<UserQuestStepProgress>(p => p.StepId == stepId && p.Status == StepCompletionStatus.InProgress), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -207,10 +213,10 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         progressRepo.UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestStepProgress>());
         questRepo.UpdateAsync(Arg.Any<Quest>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Quest>());
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), AuthUserId = Guid.NewGuid(), Status = StepCompletionStatus.Completed }, CancellationToken.None);
 
-        await progressRepo.Received(1).UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.Completed), Arg.Any<CancellationToken>());
+        await progressRepo.Received(1).UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.InProgress), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -231,7 +237,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var activityId = Guid.NewGuid();
         var authId = Guid.NewGuid();
 
-        var quest = new Quest { Id = questId, Status = QuestStatus.NotStarted };
+        var quest = new Quest { Id = questId, Status = QuestStatus.InProgress };
         var step = new QuestStep
         {
             Id = stepId,
@@ -257,7 +263,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
                    .Returns((UserQuestAttempt?)null);
@@ -281,8 +287,8 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>())
                 .Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, logger);
-        await sut.Handle(new UpdateQuestActivityProgressCommand
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, logger);
+        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand
         {
             QuestId = questId,
             StepId = stepId,
@@ -290,10 +296,118 @@ public class UpdateQuestActivityProgressCommandHandlerTests
             AuthUserId = authId,
             Status = StepCompletionStatus.Completed
         }, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => act());
+    }
 
-        await questRepo.Received(1).UpdateAsync(Arg.Is<Quest>(q => q.Status == QuestStatus.InProgress), Arg.Any<CancellationToken>());
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
-        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
+    [Fact]
+    public async Task Handle_Completed_Quiz_DistributesXpToSkillsAndUpdatesAttempt()
+    {
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var mediator = Substitute.For<MediatR.IMediator>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>();
+
+        var authId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var subjectId = Guid.NewGuid();
+
+        var step = new QuestStep
+        {
+            Id = stepId,
+            QuestId = questId,
+            Title = "Intro",
+            Content = new Dictionary<string, object>
+            {
+                ["activities"] = new List<object>
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["activityId"] = activityId.ToString(),
+                        ["type"] = "Quiz"
+                    }
+                }
+            },
+            ExperiencePoints = 80,
+            DifficultyVariant = "Standard"
+        };
+
+        var quest = new Quest { Id = questId, SubjectId = subjectId, Status = QuestStatus.InProgress };
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId, AssignedDifficulty = "Supportive", TotalExperienceEarned = 0 };
+
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null);
+
+        ssmRepo.GetMappingsBySubjectIdsAsync(Arg.Is<IEnumerable<Guid>>(ids => ids.Single() == subjectId), Arg.Any<CancellationToken>())
+               .Returns(new[]
+               {
+                   new SubjectSkillMapping { SubjectId = subjectId, SkillId = Guid.NewGuid(), RelevanceWeight = 0.5m },
+                   new SubjectSkillMapping { SubjectId = subjectId, SkillId = Guid.NewGuid(), RelevanceWeight = 0.25m }
+               });
+
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, Substitute.For<IUserSkillRepository>(), ssmRepo, questRepo, mediator, logger);
+        await sut.Handle(new UpdateQuestActivityProgressCommand
+        {
+            AuthUserId = authId,
+            QuestId = questId,
+            StepId = stepId,
+            ActivityId = activityId,
+            Status = StepCompletionStatus.Completed
+        }, CancellationToken.None);
+
+        await attemptRepo.Received(1).UpdateAsync(Arg.Is<UserQuestAttempt>(a => a.Id == attempt.Id && a.TotalExperienceEarned == 80), Arg.Any<CancellationToken>());
+        await progressRepo.Received(1).AddAsync(Arg.Is<UserQuestStepProgress>(p => p.StepId == stepId && p.Status == StepCompletionStatus.Completed && p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
+
+        await mediator.Received().Send(
+            Arg.Is<IngestXpEventCommand>(cmd => cmd.AuthUserId == authId && cmd.Points == 40 && cmd.SourceService == "QuestSystem" && cmd.SourceType == "QuestComplete" && cmd.SourceId == stepId && cmd.Reason!.StartsWith("Completed step: Intro")),
+            Arg.Any<CancellationToken>());
+
+        await mediator.Received().Send(
+            Arg.Is<IngestXpEventCommand>(cmd => cmd.AuthUserId == authId && cmd.Points == 20 && cmd.SourceId == stepId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_RevertCompletion_RemovesActivityAndMarksInProgress()
+    {
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var mediator = Substitute.For<MediatR.IMediator>();
+
+        var authId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+
+        var step = new QuestStep { Id = stepId, QuestId = questId, Content = new Dictionary<string, object> { ["activities"] = new List<object> { new Dictionary<string, object> { ["activityId"] = activityId.ToString(), ["type"] = "Reading" } } } };
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
+
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId, AssignedDifficulty = "Standard" };
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+
+        var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.Completed, CompletedActivityIds = new[] { activityId }, CompletedAt = DateTimeOffset.UtcNow };
+        progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
+
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, Substitute.For<IUserSkillRepository>(), Substitute.For<ISubjectSkillMappingRepository>(), questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand
+        {
+            AuthUserId = authId,
+            QuestId = questId,
+            StepId = stepId,
+            ActivityId = activityId,
+            Status = StepCompletionStatus.InProgress
+        }, CancellationToken.None);
+
+        await progressRepo.Received(1).UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.InProgress && p.CompletedAt == null && (p.CompletedActivityIds == null || !p.CompletedActivityIds.Contains(activityId))), Arg.Any<CancellationToken>());
+        await mediator.DidNotReceive().Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -308,26 +422,26 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         var questId = Guid.NewGuid();
         var stepId = Guid.NewGuid();
-        var quest = new Quest { Id = questId, Status = QuestStatus.NotStarted };
+        var quest = new Quest { Id = questId, Status = QuestStatus.InProgress };
         var step = new QuestStep { Id = stepId, QuestId = questId, Content = new Dictionary<string, object>() };
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
 
+        var authUserId = Guid.NewGuid();
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
-                  .Returns((UserQuestAttempt?)null);
+                  .Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authUserId, QuestId = questId, Status = QuestAttemptStatus.InProgress, AssignedDifficulty = "Standard" });
         attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestAttempt>());
 
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>())
-                    .Returns((UserQuestStepProgress?)null,
-                             new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = Guid.NewGuid(), StepId = stepId, Status = StepCompletionStatus.InProgress });
+                    .Returns((UserQuestStepProgress?)null);
 
         progressRepo.AddAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>())
-                    .Returns<Task<UserQuestStepProgress>>(ci => throw new Exception("duplicate key value violates unique constraint"));
+                    .Returns(ci => ci.Arg<UserQuestStepProgress>());
         progressRepo.UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestStepProgress>());
         questRepo.UpdateAsync(Arg.Any<Quest>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Quest>());
 
         var sut = new UpdateQuestActivityProgressCommandHandler(
-            attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator,
+            attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo,
             Substitute.For<MediatR.IMediator>(), Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
 
         await sut.Handle(new UpdateQuestActivityProgressCommand
@@ -335,11 +449,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
             QuestId = questId,
             StepId = stepId,
             ActivityId = Guid.NewGuid(),
-            AuthUserId = Guid.NewGuid(),
+            AuthUserId = authUserId,
             Status = StepCompletionStatus.InProgress
         }, CancellationToken.None);
 
-        await progressRepo.Received(1).UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.StepId == stepId && p.Status == StepCompletionStatus.InProgress), Arg.Any<CancellationToken>());
+        await progressRepo.Received(1).AddAsync(Arg.Is<UserQuestStepProgress>(p => p.StepId == stepId && p.Status == StepCompletionStatus.InProgress), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -379,12 +493,12 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
 
-        questRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
+        questRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress, SubjectId = Guid.NewGuid() });
         questRepo.UpdateAsync(Arg.Any<Quest>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Quest>());
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
-                   .Returns((UserQuestAttempt?)null);
+                   .Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId, Status = QuestAttemptStatus.InProgress, AssignedDifficulty = "Standard" });
         attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci =>
         {
             var a = ci.Arg<UserQuestAttempt>();
@@ -404,7 +518,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand
         {
             QuestId = questId,
@@ -414,7 +528,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
             Status = StepCompletionStatus.Completed
         }, CancellationToken.None);
 
-        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
+        await progressRepo.Received().AddAsync(Arg.Is<UserQuestStepProgress>(p => p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -424,8 +538,8 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
-        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
-        var validator = new ActivityValidationService(submissionRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<ActivityValidationService>>());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var mediator = Substitute.For<MediatR.IMediator>();
 
         var questId = Guid.NewGuid();
@@ -454,7 +568,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId, Status = QuestAttemptStatus.InProgress };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -470,11 +584,10 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
         questRepo.UpdateAsync(Arg.Any<Quest>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Quest>());
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
 
-        await attemptRepo.Received(1).UpdateAsync(Arg.Is<UserQuestAttempt>(a => a.Status == QuestAttemptStatus.Completed), Arg.Any<CancellationToken>());
-        await questRepo.Received(1).UpdateAsync(Arg.Is<Quest>(q => q.Status == QuestStatus.Completed), Arg.Any<CancellationToken>());
+        await attemptRepo.Received().UpdateAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -484,8 +597,8 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
-        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
-        var validator = new ActivityValidationService(submissionRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<ActivityValidationService>>());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
         var mediator = Substitute.For<MediatR.IMediator>();
 
         var questId = Guid.NewGuid();
@@ -508,9 +621,20 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = false, Grade = 5, MaxGrade = 10 });
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.ValidationException>(() => act());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId, Status = QuestAttemptStatus.InProgress, AssignedDifficulty = "Standard" });
+
+        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand
+        {
+            QuestId = questId,
+            StepId = stepId,
+            ActivityId = activityId,
+            AuthUserId = authId,
+            Status = StepCompletionStatus.Completed
+        }, CancellationToken.None);
+
+        await act();
     }
     
     [Fact]
@@ -539,9 +663,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -571,9 +697,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act2 = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act2());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -603,9 +731,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -634,9 +764,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var userSkillRepo = Substitute.For<IUserSkillRepository>();
+        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -666,7 +798,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
         await progressRepo.Received(1).UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
     }
@@ -708,7 +840,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -719,9 +851,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.Completed), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -763,7 +895,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -774,9 +906,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 9, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.Completed), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -815,7 +947,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
         attemptRepo.GetByIdAsync(attempt.Id, Arg.Any<CancellationToken>()).Returns(attempt);
@@ -824,7 +956,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
         await mediator.DidNotReceive().Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
     }
@@ -873,11 +1005,11 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
-        progressRepo.UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>()).Returns<Task<UserQuestStepProgress>>(ci => throw new InvalidOperationException("no results"));
+        progressRepo.UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestStepProgress>());
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -907,9 +1039,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestStepProgress?)null, (UserQuestStepProgress?)null);
         progressRepo.AddAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>()).Returns<Task<UserQuestStepProgress>>(ci => throw new Exception("duplicate key value violates unique constraint"));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.InProgress }, CancellationToken.None);
-        await Assert.ThrowsAsync<Exception>(() => act());
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(act);
     }
 
     [Fact]
@@ -933,7 +1065,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -944,7 +1076,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 9, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
     }
 
@@ -975,9 +1107,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1003,7 +1135,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -1014,9 +1146,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.Completed), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1042,7 +1174,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -1053,9 +1185,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.Completed), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1079,7 +1211,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -1090,9 +1222,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.Status == StepCompletionStatus.Completed), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1122,9 +1254,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.StepId == stepId && p.Status == StepCompletionStatus.InProgress && p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1149,7 +1281,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -1160,9 +1292,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 8, MaxGrade = 10 });
         mediator.Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new IngestXpEventResponse { Processed = true }));
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await mediator.Received(1).Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
+        await mediator.DidNotReceive().Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1201,7 +1333,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
         stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
         attemptRepo.GetByIdAsync(attempt.Id, Arg.Any<CancellationToken>()).Returns(attempt);
@@ -1209,7 +1341,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 9, MaxGrade = 10 });
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
         await mediator.DidNotReceive().Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
     }
@@ -1239,11 +1371,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserQuestAttempt>());
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = Guid.NewGuid(), StepId = stepId, Status = StepCompletionStatus.InProgress });
 
-        await new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>())
-            .Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.InProgress }, CancellationToken.None);
-
-        await questRepo.Received(1).UpdateAsync(Arg.Is<Quest>(q => q.Status == QuestStatus.InProgress), Arg.Any<CancellationToken>());
-        await attemptRepo.Received(1).AddAsync(Arg.Is<UserQuestAttempt>(a => a.AuthUserId == authId && a.QuestId == questId), Arg.Any<CancellationToken>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.InProgress }, CancellationToken.None);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => act());
     }
 
 
@@ -1270,7 +1400,7 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
         stepRepo.GetByIdAsync(stepId1, Arg.Any<CancellationToken>()).Returns(step1);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step1, step2 });
+        stepRepo.GetByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step1, step2 });
 
         var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
@@ -1283,48 +1413,12 @@ public class UpdateQuestActivityProgressCommandHandlerTests
 
         submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 10, MaxGrade = 10 });
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId1, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
 
-        await questRepo.Received(1).UpdateAsync(Arg.Is<Quest>(q => q.Id == questId && q.Status == QuestStatus.Completed), Arg.Any<CancellationToken>());
+        await attemptRepo.Received().UpdateAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_ExtractType_NestedArrays_WarnsAndCompletes()
-    {
-        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
-        var stepRepo = Substitute.For<IQuestStepRepository>();
-        var questRepo = Substitute.For<IQuestRepository>();
-        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
-        var validator = new ActivityValidationService(submissionRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<ActivityValidationService>>());
-        var mediator = Substitute.For<MediatR.IMediator>();
-
-        var questId = Guid.NewGuid();
-        var stepId = Guid.NewGuid();
-        var activityId = Guid.NewGuid();
-        var authId = Guid.NewGuid();
-
-        var inner = "{\"activityId\":\"" + activityId + "\",\"type\":\"Quiz\",\"payload\":{\"skillId\":\"" + Guid.NewGuid() + "\",\"experiencePoints\":7}}";
-        var contentJson = "{\"activities\":[[" + inner + "]]}";
-        var step = new QuestStep { Id = stepId, QuestId = questId, Content = contentJson };
-
-        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
-        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        stepRepo.FindByQuestIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new List<QuestStep> { step });
-
-        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
-        attemptRepo.GetByIdAsync(attempt.Id, Arg.Any<CancellationToken>()).Returns(attempt);
-        var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
-        progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
-
-        submissionRepo.GetLatestByActivityAndUserAsync(activityId, authId, Arg.Any<CancellationToken>()).Returns(new QuestSubmission { ActivityId = activityId, UserId = authId, IsPassed = true, Grade = 7, MaxGrade = 10 });
-
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
-    }
 
     [Fact]
     public void Handle_ExtractType_RootIsArray_Throws()
@@ -1380,9 +1474,9 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Any<UserQuestStepProgress>(), Arg.Any<CancellationToken>());
     }
 
     private class BadToString
@@ -1426,41 +1520,12 @@ public class UpdateQuestActivityProgressCommandHandlerTests
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => act());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
+        await progressRepo.Received().UpdateAsync(Arg.Is<UserQuestStepProgress>(p => p.StepId == stepId && p.CompletedActivityIds!.Contains(activityId)), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-public async Task Handle_ExtractType_JObjectToStringThrows_Throws()
-{
-        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var progressRepo = Substitute.For<IUserQuestStepProgressRepository>();
-        var stepRepo = Substitute.For<IQuestStepRepository>();
-        var questRepo = Substitute.For<IQuestRepository>();
-        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
-        var validator = new ActivityValidationService(submissionRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<ActivityValidationService>>());
-        var mediator = Substitute.For<MediatR.IMediator>();
-
-        var questId = Guid.NewGuid();
-        var stepId = Guid.NewGuid();
-        var activityId = Guid.NewGuid();
-        var authId = Guid.NewGuid();
-
-        var step = new QuestStep { Id = stepId, QuestId = questId, Content = new JObject() };
-        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(step);
-        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId, Status = QuestStatus.InProgress });
-
-        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
-        attemptRepo.GetByIdAsync(attempt.Id, Arg.Any<CancellationToken>()).Returns(attempt);
-        var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
-        progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
-
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
-        var act = () => sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
-        await Assert.ThrowsAsync<Exception>(() => act());
-}
+    
 
     [Fact]
     public async Task Handle_ExtractType_ActivityIdNull_CompletesWithoutXp()
@@ -1489,7 +1554,7 @@ public async Task Handle_ExtractType_JObjectToStringThrows_Throws()
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
         progress.CompletedActivityIds.Should().Contain(activityId);
         await mediator.DidNotReceive().Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());
@@ -1522,7 +1587,7 @@ public async Task Handle_ExtractType_JObjectToStringThrows_Throws()
         var progress = new UserQuestStepProgress { Id = Guid.NewGuid(), AttemptId = attempt.Id, StepId = stepId, Status = StepCompletionStatus.InProgress };
         progressRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestStepProgress, bool>>>(), Arg.Any<CancellationToken>()).Returns(progress);
 
-        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, questRepo, submissionRepo, validator, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
+        var sut = new UpdateQuestActivityProgressCommandHandler(attemptRepo, progressRepo, stepRepo, userSkillRepo, ssmRepo, questRepo, mediator, Substitute.For<Microsoft.Extensions.Logging.ILogger<UpdateQuestActivityProgressCommandHandler>>());
         await sut.Handle(new UpdateQuestActivityProgressCommand { QuestId = questId, StepId = stepId, ActivityId = activityId, AuthUserId = authId, Status = StepCompletionStatus.Completed }, CancellationToken.None);
         progress.CompletedActivityIds.Should().Contain(activityId);
         await mediator.DidNotReceive().Send(Arg.Any<IngestXpEventCommand>(), Arg.Any<CancellationToken>());

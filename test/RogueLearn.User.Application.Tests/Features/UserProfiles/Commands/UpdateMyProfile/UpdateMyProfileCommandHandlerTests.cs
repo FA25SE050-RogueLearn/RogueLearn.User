@@ -23,7 +23,9 @@ public class UpdateMyProfileCommandHandlerTests
         IRoleRepository? roleRepository = null,
         IAvatarStorage? avatarStorage = null,
         IMapper? mapper = null,
-        ILogger<UpdateMyProfileCommandHandler>? logger = null)
+        ILogger<UpdateMyProfileCommandHandler>? logger = null,
+        IClassRepository? classRepository = null,
+        ICurriculumProgramRepository? curriculumProgramRepository = null)
     {
         userProfileRepository ??= Substitute.For<IUserProfileRepository>();
         userRoleRepository ??= Substitute.For<IUserRoleRepository>();
@@ -31,7 +33,9 @@ public class UpdateMyProfileCommandHandlerTests
         avatarStorage ??= Substitute.For<IAvatarStorage>();
         mapper ??= Substitute.For<IMapper>();
         logger ??= Substitute.For<ILogger<UpdateMyProfileCommandHandler>>();
-        return new UpdateMyProfileCommandHandler(userProfileRepository, userRoleRepository, roleRepository, avatarStorage, mapper, logger);
+        classRepository ??= Substitute.For<IClassRepository>();
+        curriculumProgramRepository ??= Substitute.For<ICurriculumProgramRepository>();
+        return new UpdateMyProfileCommandHandler(userProfileRepository, userRoleRepository, roleRepository, avatarStorage, mapper, logger, classRepository, curriculumProgramRepository);
     }
 
     [Fact]
@@ -170,5 +174,97 @@ public class UpdateMyProfileCommandHandlerTests
         profile.Bio.Should().Be("");
         profile.Preferences.Should().NotBeNull();
         await userRepo.Received(1).UpdateAsync(profile, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_PreferencesJson_Invalid_ThrowsJsonException()
+    {
+        var authId = Guid.NewGuid();
+        var profile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId };
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
+        var mapper = Substitute.For<IMapper>();
+        var sut = CreateSut(userRepo, Substitute.For<IUserRoleRepository>(), Substitute.For<IRoleRepository>(), Substitute.For<IAvatarStorage>(), mapper, Substitute.For<ILogger<UpdateMyProfileCommandHandler>>());
+
+        var cmd = new UpdateMyProfileCommand { AuthUserId = authId, PreferencesJson = "{bad" };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await act.Should().ThrowAsync<System.Text.Json.JsonException>();
+    }
+
+    [Fact]
+    public async Task Handle_PreferencesJson_Empty_SetsNull()
+    {
+        var authId = Guid.NewGuid();
+        var profile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId };
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
+        userRepo.UpdateAsync(Arg.Any<UserProfile>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserProfile>());
+        var mapper = Substitute.For<IMapper>();
+        mapper.Map<UserProfileDto>(Arg.Any<UserProfile>()).Returns(new UserProfileDto { AuthUserId = authId });
+        var sut = CreateSut(userRepo, Substitute.For<IUserRoleRepository>(), Substitute.For<IRoleRepository>(), Substitute.For<IAvatarStorage>(), mapper, Substitute.For<ILogger<UpdateMyProfileCommandHandler>>());
+
+        var cmd = new UpdateMyProfileCommand { AuthUserId = authId, PreferencesJson = "   " };
+        var res = await sut.Handle(cmd, CancellationToken.None);
+        res.Should().NotBeNull();
+        profile.Preferences.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ClassId_NotExists_ThrowsNotFound()
+    {
+        var authId = Guid.NewGuid();
+        var profile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId };
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
+        var classRepo = Substitute.For<IClassRepository>();
+        classRepo.ExistsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+        var sut = CreateSut(userRepo, Substitute.For<IUserRoleRepository>(), Substitute.For<IRoleRepository>(), Substitute.For<IAvatarStorage>(), Substitute.For<IMapper>(), Substitute.For<ILogger<UpdateMyProfileCommandHandler>>(), classRepo);
+
+        var cmd = new UpdateMyProfileCommand { AuthUserId = authId, ClassId = Guid.NewGuid() };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_RouteId_NotExists_ThrowsNotFound()
+    {
+        var authId = Guid.NewGuid();
+        var profile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId };
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
+        var programRepo = Substitute.For<ICurriculumProgramRepository>();
+        programRepo.ExistsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+        var sut = CreateSut(userRepo, Substitute.For<IUserRoleRepository>(), Substitute.For<IRoleRepository>(), Substitute.For<IAvatarStorage>(), Substitute.For<IMapper>(), Substitute.For<ILogger<UpdateMyProfileCommandHandler>>(), Substitute.For<IClassRepository>(), programRepo);
+
+        var cmd = new UpdateMyProfileCommand { AuthUserId = authId, RouteId = Guid.NewGuid() };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_Assigns_ClassId_And_RouteId_WhenValid()
+    {
+        var authId = Guid.NewGuid();
+        var profile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId };
+        var userRepo = Substitute.For<IUserProfileRepository>();
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
+        userRepo.UpdateAsync(Arg.Any<UserProfile>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<UserProfile>());
+        var mapper = Substitute.For<IMapper>();
+        mapper.Map<UserProfileDto>(Arg.Any<UserProfile>()).Returns(new UserProfileDto { AuthUserId = authId });
+
+        var classRepo = Substitute.For<IClassRepository>();
+        var programRepo = Substitute.For<ICurriculumProgramRepository>();
+        var classId = Guid.NewGuid();
+        var routeId = Guid.NewGuid();
+        classRepo.ExistsAsync(classId, Arg.Any<CancellationToken>()).Returns(true);
+        programRepo.ExistsAsync(routeId, Arg.Any<CancellationToken>()).Returns(true);
+
+        var sut = CreateSut(userRepo, Substitute.For<IUserRoleRepository>(), Substitute.For<IRoleRepository>(), Substitute.For<IAvatarStorage>(), mapper, Substitute.For<ILogger<UpdateMyProfileCommandHandler>>(), classRepo, programRepo);
+        var cmd = new UpdateMyProfileCommand { AuthUserId = authId, ClassId = classId, RouteId = routeId };
+        var res = await sut.Handle(cmd, CancellationToken.None);
+
+        res.Should().NotBeNull();
+        profile.ClassId.Should().Be(classId);
+        profile.RouteId.Should().Be(routeId);
     }
 }

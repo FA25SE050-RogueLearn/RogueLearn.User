@@ -62,7 +62,7 @@ public class AddPartyResourceCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Forbidden_WhenNotLeader()
+    public async Task Handle_ActiveMember_NotLeader_AllowsAddResource()
     {
         var repo = Substitute.For<IPartyStashItemRepository>();
         var notif = Substitute.For<IPartyNotificationService>();
@@ -77,7 +77,33 @@ public class AddPartyResourceCommandHandlerTests
         var content = new { text = "body" };
         var cmd = new AddPartyResourceCommand(partyId, sharedBy, originalNote, "Title", content, tags);
 
+        PartyStashItem? captured = null;
         memberRepo.GetMemberAsync(cmd.PartyId, cmd.SharedByUserId, Arg.Any<CancellationToken>()).Returns(new PartyMember { PartyId = cmd.PartyId, AuthUserId = cmd.SharedByUserId, Status = RogueLearn.User.Domain.Enums.MemberStatus.Active, Role = RogueLearn.User.Domain.Enums.PartyRole.Member });
+        repo.AddAsync(Arg.Do<PartyStashItem>(i => captured = i), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<PartyStashItem>());
+        mapper.Map<PartyStashItemDto>(Arg.Any<PartyStashItem>()).Returns(new PartyStashItemDto(System.Guid.NewGuid(), partyId, originalNote, sharedBy, "Title", content, tags, System.DateTimeOffset.UtcNow, System.DateTimeOffset.UtcNow));
+
+        var dto = await sut.Handle(cmd, CancellationToken.None);
+        Assert.NotNull(captured);
+        Assert.Equal(partyId, dto.PartyId);
+    }
+
+    [Fact]
+    public async Task Handle_InactiveMember_Forbidden()
+    {
+        var repo = Substitute.For<IPartyStashItemRepository>();
+        var notif = Substitute.For<IPartyNotificationService>();
+        var mapper = Substitute.For<AutoMapper.IMapper>();
+        var memberRepo = Substitute.For<IPartyMemberRepository>();
+        var sut = new AddPartyResourceCommandHandler(repo, notif, mapper, memberRepo);
+
+        var partyId = System.Guid.NewGuid();
+        var sharedBy = System.Guid.NewGuid();
+        var originalNote = System.Guid.NewGuid();
+        var tags = new[] { "a", "b" };
+        var content = new { text = "body" };
+        var cmd = new AddPartyResourceCommand(partyId, sharedBy, originalNote, "Title", content, tags);
+
+        memberRepo.GetMemberAsync(cmd.PartyId, cmd.SharedByUserId, Arg.Any<CancellationToken>()).Returns(new PartyMember { PartyId = cmd.PartyId, AuthUserId = cmd.SharedByUserId, Status = RogueLearn.User.Domain.Enums.MemberStatus.Suspended, Role = RogueLearn.User.Domain.Enums.PartyRole.Member });
 
         await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
     }

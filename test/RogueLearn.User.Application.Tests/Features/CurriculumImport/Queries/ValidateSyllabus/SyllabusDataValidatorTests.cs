@@ -48,4 +48,74 @@ public class SyllabusDataValidatorTests
         var result = validator.Validate(syllabus);
         result.IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public void ApprovedDate_Too_Old_Fails()
+    {
+        var syllabus = new SyllabusData
+        {
+            SubjectCode = "SC",
+            VersionNumber = 1,
+            Content = new SyllabusContent()
+        };
+        syllabus.ApprovedDate = DateOnly.FromDateTime(DateTime.Now.AddYears(-11));
+        var validator = new SyllabusDataValidator();
+        validator.Validate(syllabus).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApprovedDate_Too_Future_Fails()
+    {
+        var syllabus = new SyllabusData
+        {
+            SubjectCode = "SC",
+            VersionNumber = 1,
+            Content = new SyllabusContent()
+        };
+        syllabus.ApprovedDate = DateOnly.FromDateTime(DateTime.Now.AddYears(6));
+        var validator = new SyllabusDataValidator();
+        validator.Validate(syllabus).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SubjectCode_InvalidPattern_Fails()
+    {
+        var syllabus = new SyllabusData
+        {
+            SubjectCode = "bad code",
+            VersionNumber = 1,
+            Content = new SyllabusContent()
+        };
+        var validator = new SyllabusDataValidator();
+        validator.Validate(syllabus).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Content_Null_Fails()
+    {
+        var syllabus = new SyllabusData
+        {
+            SubjectCode = "SC",
+            VersionNumber = 1,
+            Content = null!
+        };
+        var validator = new SyllabusDataValidator();
+        validator.Validate(syllabus).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ConstructiveQuestion_Invalid_Session_Fails()
+    {
+        var syllabus = new SyllabusData
+        {
+            SubjectCode = "SC",
+            VersionNumber = 1,
+            Content = new SyllabusContent
+            {
+                ConstructiveQuestions = new List<ConstructiveQuestion> { new() { Name = "n", Question = "q", SessionNumber = 0 } }
+            }
+        };
+        var validator = new SyllabusDataValidator();
+        validator.Validate(syllabus).IsValid.Should().BeFalse();
+    }
 }

@@ -1,301 +1,462 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
-using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
-using RogueLearn.User.Application.Features.QuestSubmissions.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-using Xunit;
+using RogueLearn.User.Application.Features.QuestSubmissions.Services;
 
 namespace RogueLearn.User.Application.Tests.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
 
 public class SubmitQuizAnswerCommandHandlerTests
 {
-    private static SubmitQuizAnswerCommand CreateBaseCommand()
+    private static string BuildContentJson(Guid activityId, bool includeActivitiesArray = true, bool emptyString = false)
     {
-        return new SubmitQuizAnswerCommand
-        {
-            AuthUserId = Guid.NewGuid(),
-            QuestId = Guid.NewGuid(),
-            StepId = Guid.NewGuid(),
-            ActivityId = Guid.NewGuid(),
-            Answers = new Dictionary<string, string> { { "a", "b" } },
-            CorrectAnswerCount = 7,
-            TotalQuestions = 10
-        };
+        if (emptyString) return string.Empty;
+        if (!includeActivitiesArray) return "{}";
+        return $"{{\"activities\":[{{\"activityId\":\"{activityId}\",\"type\":\"Quiz\"}}]}}";
     }
 
     [Fact]
-    public async Task Handle_QuestNotFound_Throws()
+    public async Task Handle_NullStepContent_LogsAndThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quiz = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+        var stepId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = null });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quiz, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), CorrectAnswerCount = 0, TotalQuestions = 1 }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns((Quest?)null);
-
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+    private class CustomJObject
+    {
+        public override string ToString() => string.Empty;
     }
 
     [Fact]
-    public async Task Handle_StepNotFound_Throws()
+    public async Task Handle_EmptyJsonAfterConversion_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quiz = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+        var stepId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = new CustomJObject() });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quiz, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), CorrectAnswerCount = 0, TotalQuestions = 1 }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = Guid.NewGuid(), Content = new { } });
+    private class UnsupportedType { }
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+    [Fact]
+    public async Task Handle_UnsupportedContentType_ThrowsNotFound()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quiz = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+        var stepId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = new UnsupportedType() });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quiz, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), CorrectAnswerCount = 0, TotalQuestions = 1 }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
 
     [Fact]
-    public async Task Handle_ActivityUnknown_Throws()
+    public async Task Handle_InvalidJson_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
-
-        var content = new Dictionary<string, object> { { "activities", new List<object>() } };
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = content });
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestAttempt?)null);
-        attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci =>
-        {
-            var a = ci.Arg<UserQuestAttempt>();
-            a.Id = Guid.NewGuid();
-            return a;
-        });
-
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+        var quiz = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+        var stepId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = "{" });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quiz, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), CorrectAnswerCount = 0, TotalQuestions = 1 }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
 
     [Fact]
-    public async Task Handle_Success_GradesAndStores()
+    public async Task Handle_ActivitiesContainsNonObject_SkipsAndThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quiz = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+        var stepId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        var stepContent = "{\"activities\":[\"string-activity\"]}";
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = stepContent });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quiz, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), CorrectAnswerCount = 0, TotalQuestions = 1 }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
 
-        var activityId = cmd.ActivityId;
-        var activities = new List<object>
-        {
-            new Dictionary<string, object> { { "activityId", activityId.ToString() }, { "type", "Quiz" } }
-        };
-        var content = new Dictionary<string, object> { { "activities", activities } };
+    [Fact]
+    public async Task Handle_InvalidActivityId_SkipsAndThrowsNotFound()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quiz = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+        var stepId = Guid.NewGuid();
+        var questId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        var attempt = new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId };
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(attempt);
+        var stepContent = "{\"activities\":[{\"activityId\":\"not-a-guid\",\"type\":\"quiz\"}]}";
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = stepContent });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quiz, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = Guid.NewGuid(), CorrectAnswerCount = 0, TotalQuestions = 1 }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
+    [Fact]
+    public async Task Handle_StringContent_ParsesAndReturnsResponse()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = content });
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = cmd.AuthUserId, QuestId = cmd.QuestId, Status = QuestAttemptStatus.InProgress });
-        quizSvc.EvaluateQuizSubmission(cmd.CorrectAnswerCount, cmd.TotalQuestions).Returns((true, 70m));
-        subRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = BuildContentJson(activityId) });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+        submissionRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
+        quizService.EvaluateQuizSubmission(Arg.Any<int>(), Arg.Any<int>()).Returns((true, 100m));
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        var res = await sut.Handle(cmd, CancellationToken.None);
-
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var res = await sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 3, TotalQuestions = 3, Answers = new Dictionary<string, string>() }, CancellationToken.None);
         res.IsPassed.Should().BeTrue();
-        res.ScorePercentage.Should().Be(70);
-        await subRepo.Received(1).AddAsync(Arg.Is<QuestSubmission>(s => s.AttemptId != Guid.Empty && s.ActivityId == activityId), Arg.Any<CancellationToken>());
+        res.ScorePercentage.Should().Be(100m);
     }
 
     [Fact]
-    public async Task Handle_ExtractType_NullContent_ThrowsNotFound()
+    public async Task Handle_EmptyStringContent_WarnsAndThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = null });
-        attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => { var a = ci.Arg<UserQuestAttempt>(); a.Id = Guid.NewGuid(); return a; });
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = BuildContentJson(activityId, emptyString: true) });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
 
     [Fact]
-    public async Task Handle_ExtractType_EmptyString_ThrowsNotFound()
+    public async Task Handle_NoActivitiesProperty_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = "" });
-        attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => { var a = ci.Arg<UserQuestAttempt>(); a.Id = Guid.NewGuid(); return a; });
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = BuildContentJson(activityId, includeActivitiesArray: false) });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_UnexpectedErrorExtractingActivityType_ThrowsNotFound()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+
+        var jObj = new JObject();
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = jObj });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
 
     private class JObject
     {
-        public override string ToString() => "{ invalid";
+        public override string ToString() => throw new Exception("boom");
     }
 
     [Fact]
-    public async Task Handle_ExtractType_InvalidJson_ReturnsUnknown_ThrowsNotFound()
+    public async Task Handle_JObjectType_EmptyToString_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = new JObject() });
-        attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => { var a = ci.Arg<UserQuestAttempt>(); a.Id = Guid.NewGuid(); return a; });
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+        var dynJObject = CreateDynamicJObject("");
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = dynJObject });
+
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
     }
 
     [Fact]
-    public async Task Handle_ExtractType_UnsupportedType_ThrowsNotFound()
+    public async Task Handle_JObjectType_ActivityNotFound_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = new List<int> { 1, 2 } });
-        attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => { var a = ci.Arg<UserQuestAttempt>(); a.Id = Guid.NewGuid(); return a; });
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+        var json = "{\"activities\":[{\"activityId\":\"" + Guid.NewGuid() + "\",\"type\":\"Quiz\"}]}";
+        var dynJObject = CreateDynamicJObject(json);
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = dynJObject });
+
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.NotFoundException>();
+    }
+
+    private static object CreateDynamicJObject(string toStringValue)
+    {
+        var asmName = new System.Reflection.AssemblyName("DynJObjectAsm");
+        var asmBuilder = System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(asmName, System.Reflection.Emit.AssemblyBuilderAccess.Run);
+        var moduleBuilder = asmBuilder.DefineDynamicModule("MainModule");
+        var typeBuilder = moduleBuilder.DefineType("JObject", System.Reflection.TypeAttributes.Public);
+        var methodBuilder = typeBuilder.DefineMethod("ToString", System.Reflection.MethodAttributes.Public | System.Reflection.MethodAttributes.Virtual, typeof(string), Type.EmptyTypes);
+        var il = methodBuilder.GetILGenerator();
+        il.Emit(System.Reflection.Emit.OpCodes.Ldstr, toStringValue);
+        il.Emit(System.Reflection.Emit.OpCodes.Ret);
+        var createdType = typeBuilder.CreateType();
+        return Activator.CreateInstance(createdType)!;
     }
 
     [Fact]
-    public async Task Handle_ExtractType_JObject_Succeeds()
+    public async Task Handle_OuterCatch_ErrorProcessingQuizSubmission_Rethrows()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        var activityId = cmd.ActivityId;
-        var arr = new Newtonsoft.Json.Linq.JArray
-        {
-            new Newtonsoft.Json.Linq.JObject
-            {
-                ["activityId"] = activityId.ToString(),
-                ["type"] = "Quiz"
-            }
-        };
-        var content = new Newtonsoft.Json.Linq.JObject { ["activities"] = arr };
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = BuildContentJson(activityId) });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+        quizService.When(q => q.EvaluateQuizSubmission(Arg.Any<int>(), Arg.Any<int>())).Do(_ => throw new Exception("grading failed"));
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = content });
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = cmd.AuthUserId, QuestId = cmd.QuestId, Status = QuestAttemptStatus.InProgress });
-        quizSvc.EvaluateQuizSubmission(cmd.CorrectAnswerCount, cmd.TotalQuestions).Returns((true, 90m));
-        subRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
-
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        var res = await sut.Handle(cmd, CancellationToken.None);
-        res.IsPassed.Should().BeTrue();
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var act = () => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        await act.Should().ThrowAsync<Exception>();
     }
 
     [Fact]
-    public async Task Handle_FailedEvaluation_SetsIsPassedFalse()
+    public async Task Handle_QuestNotFound_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        var activityId = cmd.ActivityId;
-        var activities = new List<object>
-        {
-            new Dictionary<string, object> { { "activityId", activityId.ToString() }, { "type", "Quiz" } }
-        };
-        var content = new Dictionary<string, object> { { "activities", activities } };
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns((Quest?)null);
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = content });
-        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = cmd.AuthUserId, QuestId = cmd.QuestId, Status = QuestAttemptStatus.InProgress });
-        quizSvc.EvaluateQuizSubmission(cmd.CorrectAnswerCount, cmd.TotalQuestions).Returns((false, 40m));
-        subRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
-
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        var res = await sut.Handle(cmd, CancellationToken.None);
-        res.IsPassed.Should().BeFalse();
-        res.ScorePercentage.Should().Be(40);
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None));
     }
 
     [Fact]
-    public async Task Handle_CreatesAttemptWhenMissing()
+    public async Task Handle_StepWrongQuest_ThrowsNotFound()
     {
-        var cmd = CreateBaseCommand();
-        var subRepo = Substitute.For<IQuestSubmissionRepository>();
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
         var stepRepo = Substitute.For<IQuestStepRepository>();
         var questRepo = Substitute.For<IQuestRepository>();
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
-        var quizSvc = Substitute.For<IQuizValidationService>();
-        var logger = Substitute.For<ILogger<SubmitQuizAnswerCommandHandler>>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
 
-        var activityId = cmd.ActivityId;
-        var activities = new List<object>
-        {
-            new Dictionary<string, object> { { "activityId", activityId.ToString() }, { "type", "Quiz" } }
-        };
-        var content = new Dictionary<string, object> { { "activities", activities } };
+        var questId = Guid.NewGuid();
+        var otherQuestId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = otherQuestId, Content = BuildContentJson(activityId) });
 
-        questRepo.GetByIdAsync(cmd.QuestId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = cmd.QuestId });
-        stepRepo.GetByIdAsync(cmd.StepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = cmd.StepId, QuestId = cmd.QuestId, Content = content });
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_AttemptMissing_CreatesAttemptAndSaves()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = BuildContentJson(activityId) });
         attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns((UserQuestAttempt?)null);
         attemptRepo.AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>()).Returns(ci => { var a = ci.Arg<UserQuestAttempt>(); a.Id = Guid.NewGuid(); return a; });
-        quizSvc.EvaluateQuizSubmission(cmd.CorrectAnswerCount, cmd.TotalQuestions).Returns((true, 80m));
-        subRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
+        submissionRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
+        quizService.EvaluateQuizSubmission(Arg.Any<int>(), Arg.Any<int>()).Returns((true, 80m));
 
-        var sut = new SubmitQuizAnswerCommandHandler(subRepo, stepRepo, questRepo, attemptRepo, quizSvc, logger);
-        var res = await sut.Handle(cmd, CancellationToken.None);
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var res = await sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 4, TotalQuestions = 5, Answers = new Dictionary<string, string>() }, CancellationToken.None);
         res.IsPassed.Should().BeTrue();
-        await subRepo.Received(1).AddAsync(Arg.Is<QuestSubmission>(s => s.AttemptId != Guid.Empty), Arg.Any<CancellationToken>());
+        await attemptRepo.Received(1).AddAsync(Arg.Any<UserQuestAttempt>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_DictionaryContent_ParsesAndReturnsResponse()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        var content = new Dictionary<string, object> { ["activities"] = new List<Dictionary<string, object>> { new() { ["activityId"] = activityId.ToString(), ["type"] = "Quiz" } } };
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = content });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+        submissionRepo.AddAsync(Arg.Any<QuestSubmission>(), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<QuestSubmission>());
+        quizService.EvaluateQuizSubmission(Arg.Any<int>(), Arg.Any<int>()).Returns((false, 60m));
+
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        var res = await sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 3, TotalQuestions = 5, Answers = new Dictionary<string, string>() }, CancellationToken.None);
+        res.IsPassed.Should().BeFalse();
+        res.Message.Should().Contain("70%");
+    }
+
+    [Fact]
+    public async Task Handle_ActivityNotFoundInArray_ThrowsNotFound()
+    {
+        var submissionRepo = Substitute.For<IQuestSubmissionRepository>();
+        var stepRepo = Substitute.For<IQuestStepRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        var quizService = Substitute.For<IQuizValidationService>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<SubmitQuizAnswerCommandHandler>>();
+
+        var questId = Guid.NewGuid();
+        var stepId = Guid.NewGuid();
+        var activityId = Guid.NewGuid();
+        var authId = Guid.NewGuid();
+        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(new Quest { Id = questId });
+        stepRepo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, QuestId = questId, Content = "{\"activities\":[{\"activityId\":\"00000000-0000-0000-0000-000000000000\",\"type\":\"Quiz\"}]}" });
+        attemptRepo.FirstOrDefaultAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>()).Returns(new UserQuestAttempt { Id = Guid.NewGuid(), AuthUserId = authId, QuestId = questId });
+
+        var sut = new SubmitQuizAnswerCommandHandler(submissionRepo, stepRepo, questRepo, attemptRepo, quizService, logger);
+        await Assert.ThrowsAsync<RogueLearn.User.Application.Exceptions.NotFoundException>(() => sut.Handle(new SubmitQuizAnswerCommand { AuthUserId = authId, QuestId = questId, StepId = stepId, ActivityId = activityId, CorrectAnswerCount = 1, TotalQuestions = 1, Answers = new Dictionary<string, string>() }, CancellationToken.None));
     }
 }
