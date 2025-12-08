@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test-and-coverage:
-    name: Test and Coverage
+  application-tests:
+    name: Application Tests and Coverage
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,14 +25,14 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
-      - name: Restore
+      - name: Restore Solution
         run: dotnet restore MySolution.sln
 
-      - name: Build
+      - name: Build Solution
         run: dotnet build MySolution.sln --configuration Release --no-restore
 
-      - name: Test with Coverage
-        run: dotnet test MySolution.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+      - name: Test Application with Coverage
+        run: dotnet test test/RogueLearn.User.Application.Tests/RogueLearn.User.Application.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
 
       - name: Install ReportGenerator
         run: dotnet tool install --global dotnet-reportgenerator-globaltool
@@ -40,16 +40,16 @@ jobs:
       - name: Add dotnet tools to PATH
         run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      - name: Generate Coverage Report
-        run: reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage" -reporttypes:"MarkdownSummary;Html"
+      - name: Generate Coverage Report (Application)
+        run: reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage-application" -reporttypes:"MarkdownSummary;Html"
 
-      - name: Upload Coverage Artifact
+      - name: Upload Coverage Artifact (Application)
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
-          path: coverage
+          name: application-coverage-report
+          path: coverage-application
 
-      - name: Link HTML Coverage Artifact in Summary
+      - name: Link Application Coverage Artifact in Summary
         env:
           SERVER_URL: ${{ github.server_url }}
           REPO: ${{ github.repository }}
@@ -58,23 +58,94 @@ jobs:
         run: |
           API_URL="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts"
           curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" > artifacts.json
-          ARTIFACT_ID=$(python3 -c "import json; d=json.load(open('artifacts.json')); print(next((str(a['id']) for a in d.get('artifacts',[]) if a.get('name')=='coverage-report'), '')))")
+          ARTIFACT_ID=$(python3 -c "import json; d=json.load(open('artifacts.json')); print(next((str(a['id']) for a in d.get('artifacts',[]) if a.get('name')=='application-coverage-report'), '')))")
           if [ -n "$ARTIFACT_ID" ]; then
             LINK="$SERVER_URL/$REPO/actions/artifacts/$ARTIFACT_ID"
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 📈 Coverage HTML Report (Artifact)" >> $GITHUB_STEP_SUMMARY
-            echo "Download and open 'coverage/index.html' from the artifact:" >> $GITHUB_STEP_SUMMARY
+            echo "### 📈 Application Coverage HTML Report (Artifact)" >> $GITHUB_STEP_SUMMARY
+            echo "Download and open 'coverage-application/index.html' from the artifact:" >> $GITHUB_STEP_SUMMARY
             echo "$LINK" >> $GITHUB_STEP_SUMMARY
           else
-            echo "Coverage artifact link not found" >> $GITHUB_STEP_SUMMARY
+            echo "Application coverage artifact link not found" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Append Coverage Summary to Action Summary
+      - name: Append Application Coverage Summary
         run: |
-          if [ -f coverage/Summary.md ]; then
-            cat coverage/Summary.md >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage-application/Summary.md ]; then
+            cat coverage-application/Summary.md >> $GITHUB_STEP_SUMMARY
           else
-            echo "Coverage summary not found" >> $GITHUB_STEP_SUMMARY
+            echo "Application coverage summary not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  api-tests:
+    name: API Tests and Coverage
+    runs-on: ubuntu-latest
+    needs: application-tests
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore Solution
+        run: dotnet restore MySolution.sln
+
+      - name: Build API Project
+        run: dotnet build src/RogueLearn.User.Api/RogueLearn.User.Api.csproj --configuration Release --no-restore
+
+      - name: Build API Tests
+        run: dotnet build test/RogueLearn.User.Api.Tests/RogueLearn.User.Api.Tests.csproj --configuration Release --no-restore
+
+      - name: Test API with Coverage
+        run: dotnet test test/RogueLearn.User.Api.Tests/RogueLearn.User.Api.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Add dotnet tools to PATH
+        run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Generate Coverage Report (API)
+        run: reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coverage-api" -reporttypes:"MarkdownSummary;Html"
+
+      - name: Upload Coverage Artifact (API)
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage-report
+          path: coverage-api
+
+      - name: Link API Coverage Artifact in Summary
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          API_URL="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts"
+          curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" > artifacts.json
+          ARTIFACT_ID=$(python3 -c "import json; d=json.load(open('artifacts.json')); print(next((str(a['id']) for a in d.get('artifacts',[]) if a.get('name')=='api-coverage-report'), '')))")
+          if [ -n "$ARTIFACT_ID" ]; then
+            LINK="$SERVER_URL/$REPO/actions/artifacts/$ARTIFACT_ID"
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📈 API Coverage HTML Report (Artifact)" >> $GITHUB_STEP_SUMMARY
+            echo "Download and open 'coverage-api/index.html' from the artifact:" >> $GITHUB_STEP_SUMMARY
+            echo "$LINK" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "API coverage artifact link not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Append API Coverage Summary
+        run: |
+          if [ -f coverage-api/Summary.md ]; then
+            cat coverage-api/Summary.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "API coverage summary not found" >> $GITHUB_STEP_SUMMARY
           fi
   docker:
     name: Build and Push
