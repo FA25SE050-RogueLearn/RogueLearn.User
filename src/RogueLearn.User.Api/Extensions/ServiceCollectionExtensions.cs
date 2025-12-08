@@ -160,6 +160,7 @@ public static class ServiceCollectionExtensions
         // Register the repository for match results.
         services.AddScoped<IGameSessionRepository, GameSessionRepository>();
         services.AddScoped<IMatchResultRepository, MatchResultRepository>();
+        services.AddScoped<IMatchPlayerSummaryRepository, MatchPlayerSummaryRepository>();
 
         return services;
     }

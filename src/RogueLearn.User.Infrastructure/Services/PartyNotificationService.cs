@@ -3,6 +3,7 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using Newtonsoft.Json;
 
 namespace RogueLearn.User.Infrastructure.Services;
 
@@ -55,6 +56,7 @@ public class PartyNotificationService : IPartyNotificationService
         _logger.LogInformation("Invitation notification sent for Party {PartyId} to User {InviteeId}", invitation.PartyId, invitation.InviteeId);
         var partyName = await GetPartyNameAsync(invitation.PartyId, cancellationToken);
         var inviterName = await GetUserNameAsync(invitation.InviterId, cancellationToken);
+        var (joinLink, gameSessionId) = ExtractJoinInfo(invitation.Message);
         await _notificationRepository.AddAsync(new Notification
         {
             AuthUserId = invitation.InviteeId,
@@ -67,7 +69,9 @@ public class PartyNotificationService : IPartyNotificationService
                 ["partyId"] = invitation.PartyId,
                 ["inviterId"] = invitation.InviterId,
                 ["inviterName"] = inviterName,
-                ["partyName"] = partyName
+                ["partyName"] = partyName,
+                ["joinLink"] = joinLink ?? string.Empty,
+                ["gameSessionId"] = gameSessionId?.ToString() ?? string.Empty
             }
         }, cancellationToken);
     }
@@ -201,5 +205,28 @@ public class PartyNotificationService : IPartyNotificationService
                 ["leaderName"] = newLeaderName
             }
         }, cancellationToken);
+    }
+
+    private static (string? joinLink, Guid? gameSessionId) ExtractJoinInfo(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return (null, null);
+        try
+        {
+            var obj = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(message);
+            if (obj == null) return (null, null);
+            obj.TryGetValue("joinLink", out var join);
+            obj.TryGetValue("gameSessionId", out var session);
+            string? joinLink = join?.ToString();
+            Guid? sessionId = null;
+            if (session != null && Guid.TryParse(session.ToString(), out var gid))
+            {
+                sessionId = gid;
+            }
+            return (joinLink, sessionId);
+        }
+        catch
+        {
+            return (null, null);
+        }
     }
 }

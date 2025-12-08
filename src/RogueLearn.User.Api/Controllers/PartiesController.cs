@@ -210,7 +210,22 @@ public class PartiesController : ControllerBase
     {
         var inviterId = User.GetAuthUserId();
         var expiresAt = body.ExpiresAt ?? DateTimeOffset.UtcNow.AddDays(7);
-        var cmd = new InviteMemberCommand(partyId, inviterId, body.Targets, body.Message, expiresAt);
+        var cmd = new InviteMemberCommand(partyId, inviterId, body.Targets, body.Message, expiresAt, body.JoinLink, body.GameSessionId);
+        await _mediator.Send(cmd, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Send game invites to party members (allows any party member; no leader restriction). Intended for sharing join links/codes for a game session.
+    /// </summary>
+    [HttpPost("{partyId:guid}/game-invite")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> InviteMemberToGame(Guid partyId, [FromBody] InviteMemberRequest body, CancellationToken cancellationToken)
+    {
+        var inviterId = User.GetAuthUserId();
+        var expiresAt = body.ExpiresAt ?? DateTimeOffset.UtcNow.AddHours(6);
+        var cmd = new InviteMemberCommand(partyId, inviterId, body.Targets, body.Message, expiresAt, body.JoinLink, body.GameSessionId);
         await _mediator.Send(cmd, cancellationToken);
         return NoContent();
     }

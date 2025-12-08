@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,6 +12,10 @@ using System.IO;
 using Microsoft.SemanticKernel;
 using Microsoft.AspNetCore.Http;
 using System.Text.RegularExpressions;
+using System.Linq;
+using RogueLearn.User.Application.Features.GameSessions.Commands.CompleteGameSession;
+using RogueLearn.User.Application.Features.UnityMatches.Commands.SubmitUnityMatchResult;
+using RogueLearn.User.Domain.Entities;
 
 namespace RogueLearn.User.Api.Controllers
 {
@@ -20,24 +25,33 @@ namespace RogueLearn.User.Api.Controllers
     [AllowAnonymous]
     public class GameSessionsController : ControllerBase
     {
+        private readonly IMediator _mediator;
         private readonly Microsoft.SemanticKernel.Kernel _kernel;
         private readonly RogueLearn.User.Domain.Interfaces.ISubjectRepository _subjectRepository;
         private readonly RogueLearn.User.Domain.Interfaces.IMatchResultRepository _matchResultRepository;
         private readonly RogueLearn.User.Domain.Interfaces.IGameSessionRepository _gameSessionRepository;
+        private readonly RogueLearn.User.Domain.Interfaces.IMatchPlayerSummaryRepository _matchPlayerSummaryRepository;
+        private readonly RogueLearn.User.Domain.Interfaces.IQuestStepRepository _questStepRepository;
 
         // MVP: All session data now stored in database for production scalability
         private static readonly Regex JoinCodeRegex = new Regex(@"Relay\s+Join\s+Code\s*:\s*([A-Z0-9]{6,12})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public GameSessionsController(
+            IMediator mediator,
             Microsoft.SemanticKernel.Kernel kernel,
             RogueLearn.User.Domain.Interfaces.ISubjectRepository subjectRepository,
             RogueLearn.User.Domain.Interfaces.IMatchResultRepository matchResultRepository,
-            RogueLearn.User.Domain.Interfaces.IGameSessionRepository gameSessionRepository)
+            RogueLearn.User.Domain.Interfaces.IGameSessionRepository gameSessionRepository,
+            RogueLearn.User.Domain.Interfaces.IMatchPlayerSummaryRepository matchPlayerSummaryRepository,
+            RogueLearn.User.Domain.Interfaces.IQuestStepRepository questStepRepository)
         {
+            _mediator = mediator;
             _kernel = kernel;
             _subjectRepository = subjectRepository;
             _matchResultRepository = matchResultRepository;
             _gameSessionRepository = gameSessionRepository;
+            _matchPlayerSummaryRepository = matchPlayerSummaryRepository;
+            _questStepRepository = questStepRepository;
         }
 
         // DTOs for strong and reliable model binding from JSON bodies
@@ -54,145 +68,6 @@ namespace RogueLearn.User.Api.Controllers
             [JsonPropertyName("relay_join_code"), JsonProperty("relay_join_code")] public string? RelayJoinCode { get; set; }
             [JsonPropertyName("pack_spec"), JsonProperty("pack_spec")] public PackSpecDto? PackSpec { get; set; }
             [JsonPropertyName("user_id"), JsonProperty("user_id")] public string? UserId { get; set; }
-        }
-
-        public class CompletionRequest
-        {
-            [JsonPropertyName("result"), JsonProperty("result")] public string? Result { get; set; }
-            [JsonPropertyName("timestamp"), JsonProperty("timestamp")] public string? Timestamp { get; set; }
-            [JsonPropertyName("summary"), JsonProperty("summary")] public JsonElement Summary { get; set; }
-        }
-
-        private static string NormalizeCompletionToV2(string raw)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(raw);
-                var root = doc.RootElement;
-                string? result = null;
-                string? ts = null;
-                if (root.TryGetProperty("result", out var r)) result = r.ValueKind == JsonValueKind.String ? r.GetString() : r.ToString();
-                if (root.TryGetProperty("timestamp", out var t)) ts = t.ValueKind == JsonValueKind.String ? t.GetString() : DateTime.UtcNow.ToString("o");
-                var topicsArray = new List<object>();
-                if (root.TryGetProperty("summary", out var summaryEl))
-                {
-                    if (summaryEl.ValueKind == JsonValueKind.Object && summaryEl.TryGetProperty("topics", out var topicsEl))
-                    {
-                        if (topicsEl.ValueKind == JsonValueKind.Array)
-                        {
-                            bool hasObjects = false;
-                            foreach (var item in topicsEl.EnumerateArray())
-                            {
-                                if (item.ValueKind == JsonValueKind.Object)
-                                {
-                                    hasObjects = true;
-                                    string? topicName = item.TryGetProperty("topic", out var tn) && tn.ValueKind == JsonValueKind.String ? tn.GetString() : null;
-                                    int totalVal = item.TryGetProperty("total", out var tt) && tt.ValueKind == JsonValueKind.Number ? tt.GetInt32() : 0;
-                                    int correctVal = item.TryGetProperty("correct", out var cc) && cc.ValueKind == JsonValueKind.Number ? cc.GetInt32() : 0;
-                                    topicsArray.Add(new { topic = topicName ?? string.Empty, total = totalVal, correct = correctVal });
-                                }
-                            }
-                            if (!hasObjects)
-                            {
-                                topicsArray = new List<object>();
-                            }
-                        }
-                        else if (topicsEl.ValueKind == JsonValueKind.String)
-                        {
-                            var s = topicsEl.GetString() ?? string.Empty;
-                            try
-                            {
-                                using var inner = JsonDocument.Parse(s);
-                                var innerRoot = inner.RootElement;
-                                if (innerRoot.ValueKind == JsonValueKind.Array)
-                                {
-                                    bool hasObjects = false;
-                                    foreach (var item in innerRoot.EnumerateArray())
-                                    {
-                                        if (item.ValueKind == JsonValueKind.Object)
-                                        {
-                                            hasObjects = true;
-                                            string? topicName = item.TryGetProperty("topic", out var tn) && tn.ValueKind == JsonValueKind.String ? tn.GetString() : null;
-                                            int totalVal = item.TryGetProperty("total", out var tt) && tt.ValueKind == JsonValueKind.Number ? tt.GetInt32() : 0;
-                                            int correctVal = item.TryGetProperty("correct", out var cc) && cc.ValueKind == JsonValueKind.Number ? cc.GetInt32() : 0;
-                                            topicsArray.Add(new { topic = topicName ?? string.Empty, total = totalVal, correct = correctVal });
-                                        }
-                                    }
-                                    if (!hasObjects) topicsArray = new List<object>();
-                                }
-                            }
-                            catch { topicsArray = new List<object>(); }
-                        }
-                    }
-                }
-                var obj = new
-                {
-                    format = "v2",
-                    result = result ?? string.Empty,
-                    timestamp = ts ?? DateTime.UtcNow.ToString("o"),
-                    summary = new { topics = topicsArray }
-                };
-                return System.Text.Json.JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = false });
-            }
-            catch
-            {
-                var obj = new
-                {
-                    format = "v2",
-                    result = string.Empty,
-                    timestamp = DateTime.UtcNow.ToString("o"),
-                    summary = new { topics = Array.Empty<object>() }
-                };
-                return System.Text.Json.JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = false });
-            }
-        }
-
-        private static string BuildRawFromModel(CompletionRequest summary)
-        {
-            var obj = new
-            {
-                result = summary?.Result,
-                timestamp = summary?.Timestamp,
-                summary = HasValue(summary!.Summary) ? summary!.Summary : default(JsonElement)
-            };
-            return System.Text.Json.JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = false });
-        }
-
-        private static bool HasValue(JsonElement el) => el.ValueKind != JsonValueKind.Undefined && el.ValueKind != JsonValueKind.Null;
-
-        private static string NormalizeCompletionFromModel(CompletionRequest model)
-        {
-            var topicsArray = new List<object>();
-            try
-            {
-                var summaryEl = model.Summary;
-                if (HasValue(summaryEl) && summaryEl.ValueKind == JsonValueKind.Object)
-                {
-                    if (summaryEl.TryGetProperty("topics", out var topicsEl) && topicsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in topicsEl.EnumerateArray())
-                        {
-                            if (item.ValueKind == JsonValueKind.Object)
-                            {
-                                string? topicName = item.TryGetProperty("topic", out var tn) && tn.ValueKind == JsonValueKind.String ? tn.GetString() : null;
-                                int totalVal = item.TryGetProperty("total", out var tt) && tt.ValueKind == JsonValueKind.Number ? tt.GetInt32() : 0;
-                                int correctVal = item.TryGetProperty("correct", out var cc) && cc.ValueKind == JsonValueKind.Number ? cc.GetInt32() : 0;
-                                topicsArray.Add(new { topic = topicName ?? string.Empty, total = totalVal, correct = correctVal });
-                            }
-                        }
-                    }
-                }
-            }
-            catch { topicsArray = new List<object>(); }
-
-            var obj = new
-            {
-                format = "v2",
-                result = model?.Result ?? string.Empty,
-                timestamp = model?.Timestamp ?? DateTime.UtcNow.ToString("o"),
-                summary = new { topics = topicsArray }
-            };
-            return System.Text.Json.JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = false });
         }
 
         // MVP: Create game session with question pack (saved to database)
@@ -271,80 +146,22 @@ namespace RogueLearn.User.Api.Controllers
         [Consumes("application/json")]
         public async Task<IActionResult> CompleteSession(Guid sessionId, [FromBody] JsonElement body)
         {
-            // MVP FIX: Enable request body buffering to allow multiple reads
-            Request.EnableBuffering();
-
-            // Check if session already completed (from database)
-            var gameSession = await _gameSessionRepository.GetBySessionIdAsync(sessionId);
-            var alreadyCompleted = gameSession?.Status == "completed";
-
             try
             {
-                var raw = body.ValueKind == JsonValueKind.Undefined ? string.Empty : body.GetRawText();
-                if (string.IsNullOrWhiteSpace(raw))
+                var result = await _mediator.Send(new CompleteGameSessionCommand(sessionId));
+                if (result.AlreadyCompleted)
                 {
-                    try
-                    {
-                        Request.Body.Position = 0;
-                        using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-                        var altRaw = await reader.ReadToEndAsync();
-                        if (!string.IsNullOrWhiteSpace(altRaw)) raw = altRaw;
-                    }
-                    catch { /* fallback ignored */ }
-                }
-                var preview = raw.Length > 200 ? raw.Substring(0, 200) + "..." : raw;
-                var sender = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-                var ua = Request.Headers.ContainsKey("User-Agent") ? Request.Headers["User-Agent"].ToString() : "unknown";
-                var fmtHeader = Request.Headers.ContainsKey("X-Rogue-Format") ? Request.Headers["X-Rogue-Format"].ToString() : null;
-                var senderHeader = Request.Headers.ContainsKey("X-Rogue-Sender") ? Request.Headers["X-Rogue-Sender"].ToString() : null;
-                Console.WriteLine($"[DEMO] Completion headers: remote={sender}, ua={ua}, X-Rogue-Format={fmtHeader}, X-Rogue-Sender={senderHeader}");
-                Console.WriteLine($"[DEMO] Completion raw preview (len={raw.Length}): {preview}");
-
-                string normalized;
-                try
-                {
-                    var model = string.IsNullOrWhiteSpace(raw)
-                        ? new CompletionRequest()
-                        : System.Text.Json.JsonSerializer.Deserialize<CompletionRequest>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    normalized = string.IsNullOrWhiteSpace(raw)
-                        ? NormalizeCompletionFromModel(model ?? new CompletionRequest())
-                        : NormalizeCompletionToV2(raw);
-                }
-                catch
-                {
-                    normalized = NormalizeCompletionToV2(raw);
+                    return Ok(new { match_id = result.MatchId, status = "already_completed" });
                 }
 
-                if (!alreadyCompleted && gameSession != null)
-                {
-                    gameSession.Status = "completed";
-                    gameSession.CompletedAt = DateTimeOffset.UtcNow;
-
-                    var existingMatch = await _matchResultRepository.GetByMatchIdAsync(sessionId.ToString());
-                    if (existingMatch != null)
-                    {
-                        gameSession.MatchResultId = existingMatch.Id;
-                        if (existingMatch.UserId.HasValue && !gameSession.UserId.HasValue)
-                        {
-                            gameSession.UserId = existingMatch.UserId;
-                        }
-                    }
-
-                    await _gameSessionRepository.UpdateAsync(gameSession);
-                }
+                var response = new { match_id = result.MatchId };
+                return Created($"/api/quests/game/sessions/{sessionId}/complete", response);
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[DEMO] Failed to persist completion for session {sessionId}: {ex.Message}");
+                return StatusCode(500, new { error = "Failed to complete session", details = ex.Message });
             }
-
-            if (alreadyCompleted)
-            {
-                return Ok(new { match_id = sessionId.ToString(), status = "already_completed" });
-            }
-
-            var response = new { match_id = sessionId.ToString() };
-            return Created($"/api/quests/game/sessions/{sessionId}/complete", response);
         }
 
         // MVP: Unity posts match results here (from ServerMatchRecorder)
@@ -355,147 +172,40 @@ namespace RogueLearn.User.Api.Controllers
         {
             try
             {
-                // Read raw JSON from request body
-                using var reader = new StreamReader(Request.Body, Encoding.UTF8);
-                var jsonString = await reader.ReadToEndAsync();
-
-                // Parse JSON document
-                using var doc = JsonDocument.Parse(jsonString);
-                var root = doc.RootElement;
-
-                // Extract key fields
-                var matchId = root.TryGetProperty("matchId", out var matchIdEl) && matchIdEl.ValueKind == JsonValueKind.String
-                    ? matchIdEl.GetString()
-                    : Guid.NewGuid().ToString();
-
-                var result = root.TryGetProperty("result", out var resultEl) && resultEl.ValueKind == JsonValueKind.String
-                    ? resultEl.GetString()
-                    : "unknown";
-
-                var joinCode = root.TryGetProperty("joinCode", out var joinEl) && joinEl.ValueKind == JsonValueKind.String
-                    ? joinEl.GetString()
-                    : null;
-
-                var scene = root.TryGetProperty("scene", out var sceneEl) && sceneEl.ValueKind == JsonValueKind.String
-                    ? sceneEl.GetString()
-                    : "unknown";
-
-                var startUtc = root.TryGetProperty("startUtc", out var startEl) && startEl.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(startEl.GetString(), out var start)
-                    ? start
-                    : DateTime.UtcNow.AddMinutes(-5);
-
-                var endUtc = root.TryGetProperty("endUtc", out var endEl) && endEl.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(endEl.GetString(), out var end)
-                    ? end
-                    : DateTime.UtcNow;
-
-                var totalPlayers = root.TryGetProperty("totalPlayers", out var totalPlayersEl) && totalPlayersEl.ValueKind == JsonValueKind.Number
-                    ? totalPlayersEl.GetInt32()
-                    : 0;
-
-                // Extract user_id if provided (from frontend)
-                Guid? userId = null;
-                if (root.TryGetProperty("userId", out var userIdEl) && userIdEl.ValueKind == JsonValueKind.String)
-                {
-                    var userIdStr = userIdEl.GetString();
-                    if (!string.IsNullOrEmpty(userIdStr) && Guid.TryParse(userIdStr, out var parsedUserId))
-                    {
-                        userId = parsedUserId;
-                    }
-                }
-
-                // Try to resolve the originating game session so we can attach the question pack
-                var resolvedSession = await ResolveSessionForMatchAsync(matchId, userId, joinCode, endUtc);
-                if (resolvedSession == null)
-                {
-                    Console.WriteLine($"[Unity Match] ⚠️ No game session resolved for match {matchId} (join code: {joinCode ?? "none"})");
-                }
-
-                // Create match result entity
-                var matchResult = new RogueLearn.User.Domain.Entities.MatchResult
-                {
-                    MatchId = matchId ?? Guid.NewGuid().ToString(),
-                    StartUtc = startUtc,
-                    EndUtc = endUtc,
-                    Result = result ?? "unknown",
-                    Scene = scene ?? "unknown",
-                    TotalPlayers = totalPlayers,
-                    UserId = userId,
-                    MatchDataJson = resolvedSession != null
-                        ? MergeQuestionPackIntoMatchData(jsonString, resolvedSession.QuestionPackJson, resolvedSession.SessionId)
-                        : jsonString // Store full JSON as string
-                };
-
-                var savedMatch = await _matchResultRepository.AddAsync(matchResult);
-
-                Console.WriteLine($"[Unity Match] Attempting to link match result {savedMatch.Id} to game session");
-                Console.WriteLine($"[Unity Match] MatchId: {savedMatch.MatchId}");
-
-                // First try: Look up by exact matchId (if it's a valid GUID)
-                RogueLearn.User.Domain.Entities.GameSession? session = resolvedSession;
-                Guid sessionGuid;
-                if (session == null && Guid.TryParse(savedMatch.MatchId, out sessionGuid))
-                {
-                    Console.WriteLine($"[Unity Match] Parsed sessionGuid: {sessionGuid}");
-                    session = await _gameSessionRepository.GetBySessionIdAsync(sessionGuid);
-                    if (session != null)
-                    {
-                        Console.WriteLine($"[Unity Match] Found game session by exact GUID");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"[Unity Match] ⚠️ Failed to parse MatchId '{matchResult.MatchId}' as GUID");
-                }
-
-                // Second try: If not found and we have a userId, find the most recent uncompleted session
-                if (session == null && matchResult.UserId.HasValue)
-                {
-                    Console.WriteLine($"[Unity Match] Looking for most recent uncompleted session for user {matchResult.UserId.Value}");
-                    var recentSessions = await _gameSessionRepository.GetRecentSessionsByUserAsync(matchResult.UserId.Value, 20);
-                    session = recentSessions
-                        .Where(s => s.Status != "completed" || s.MatchResultId == null)
-                        .OrderByDescending(s => s.CreatedAt)
-                        .FirstOrDefault();
-
-                    if (session != null)
-                    {
-                        Console.WriteLine($"[Unity Match] Found uncompleted session {session.Id} for user");
-                    }
-                }
-
-                // Third try: reuse the resolved session (even if completed) and keep the linkage
-                if (session == null && resolvedSession != null)
-                {
-                    session = resolvedSession;
-                }
-
-                if (session != null)
-                {
-                    Console.WriteLine($"[Unity Match] Updating game session {session.Id} with match_result_id");
-                    session.MatchResultId = savedMatch.Id;
-                    session.CompletedAt = session.CompletedAt ?? DateTimeOffset.UtcNow;
-                    session.Status = "completed";
-                    if (savedMatch.UserId.HasValue && !session.UserId.HasValue)
-                    {
-                        session.UserId = savedMatch.UserId;
-                    }
-                    await _gameSessionRepository.UpdateAsync(session);
-                    Console.WriteLine($"[Unity Match] ✓ Successfully linked match result to game session");
-                }
-                else
-                {
-                    Console.WriteLine($"[Unity Match] ⚠️ No game session found to link - neither by GUID nor by user");
-                }
-
-                return Ok(new { success = true, matchId = savedMatch.MatchId, sessionId = session?.SessionId });
+                var effectivePayload = await ReadPayloadAsync();
+                var command = SubmitUnityMatchResultCommand.FromPayload(effectivePayload);
+                var result = await _mediator.Send(command);
+                return Ok(new { success = result.Success, matchId = result.MatchId, sessionId = result.SessionId });
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[Unity Match] Failed to save match result: {ex.Message}");
                 Console.Error.WriteLine($"[Unity Match] Stack trace: {ex.StackTrace}");
                 return StatusCode(500, new { error = "Failed to save match result", details = ex.Message });
+            }
+        }
+
+        private async Task<JsonElement> ReadPayloadAsync()
+        {
+            // Read raw body manually to avoid formatter issues (Newtonsoft vs System.Text.Json)
+            try
+            {
+                Request.EnableBuffering();
+                using var reader = new StreamReader(Request.Body, Encoding.UTF8, leaveOpen: true);
+                var body = await reader.ReadToEndAsync();
+                Request.Body.Position = 0;
+
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    return JsonDocument.Parse("{}").RootElement.Clone();
+                }
+
+                var doc = JsonDocument.Parse(body);
+                return doc.RootElement.Clone();
+            }
+            catch
+            {
+                return JsonDocument.Parse("{}").RootElement.Clone();
             }
         }
 
@@ -547,52 +257,46 @@ namespace RogueLearn.User.Api.Controllers
             }
         }
 
-        [HttpGet("{sessionId:guid}/result")]
-        public IActionResult GetResult(Guid sessionId)
-        {
-            try
-            {
-                var baseDir = Path.Combine(Directory.GetCurrentDirectory(), "tmp", "match-results", "results");
-                var path = Path.Combine(baseDir, $"result_{sessionId}.json");
-                if (System.IO.File.Exists(path))
-                {
-                    var json = System.IO.File.ReadAllText(path, Encoding.UTF8);
-                    return Content(json, "application/json");
-                }
-                return NotFound(new { error = "Result not found for session" });
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[DEMO] Failed to read result for session {sessionId}: {ex.Message}");
-                return StatusCode(500, new { error = "Failed to read result" });
-            }
-        }
-
         // MVP: Get player summaries from database
         // GET /api/quests/game/sessions/{sessionId}/players
         [HttpGet("{sessionId:guid}/players")]
-        public IActionResult GetPlayers(Guid sessionId)
+        public async Task<IActionResult> GetPlayers(Guid sessionId)
         {
             try
             {
-                var overrideDir = Environment.GetEnvironmentVariable("RESULTS_DIR");
-                string baseDir = string.IsNullOrWhiteSpace(overrideDir)
-                    ? Path.Combine(Directory.GetCurrentDirectory(), "tmp", "match-results", "players")
-                    : Path.Combine(overrideDir, "players");
-                if (!Directory.Exists(baseDir)) return Ok(Array.Empty<object>());
-                var files = Directory.GetFiles(baseDir, $"player_*_{sessionId}.json");
-                var list = new List<object>();
-                foreach (var f in files)
+                var summaries = await _matchPlayerSummaryRepository.GetBySessionIdAsync(sessionId);
+
+                if (summaries.Count == 0)
                 {
-                    var name = Path.GetFileNameWithoutExtension(f);
-                    var parts = name.Split('_');
-                    if (parts.Length >= 3)
+                    var session = await _gameSessionRepository.GetBySessionIdAsync(sessionId);
+                    if (session?.MatchResultId != null)
                     {
-                        var uid = parts[1];
-                        var json = System.IO.File.ReadAllText(f, Encoding.UTF8);
-                        list.Add(new { user_id = uid, summary = Newtonsoft.Json.JsonConvert.DeserializeObject(json) });
+                        summaries = await _matchPlayerSummaryRepository.GetByMatchResultIdAsync(session.MatchResultId.Value);
                     }
                 }
+
+                var list = summaries.Select(s =>
+                {
+                    object? topics = null;
+                    if (!string.IsNullOrWhiteSpace(s.TopicBreakdownJson))
+                    {
+                        try { topics = System.Text.Json.JsonSerializer.Deserialize<JsonElement>(s.TopicBreakdownJson!); }
+                        catch { topics = s.TopicBreakdownJson; }
+                    }
+
+                    return new
+                    {
+                        id = s.Id,
+                        user_id = s.UserId,
+                        client_id = s.ClientId,
+                        total_questions = s.TotalQuestions,
+                        correct_answers = s.CorrectAnswers,
+                        average_time = s.AverageTime,
+                        topic_breakdown = topics,
+                        created_at = s.CreatedAt
+                    };
+                });
+
                 return Ok(list);
             }
             catch (Exception ex)
@@ -726,17 +430,26 @@ namespace RogueLearn.User.Api.Controllers
             }
 
             var questions = new List<object>();
-            for (int i = 1; i <= count; i++)
+            // Fallback 1: try to pull from quest steps (knowledge check / quiz)
+            questions.AddRange(await TryBuildPackFromQuestStepsAsync(count));
+            if (questions.Count == 0)
+            {
+                Console.WriteLine($"[GameSession] ⚠️ No quest steps found for subject: {subject}, topic: {topic}, difficulty: {difficulty}");
+            }
+            // Fallback 2: if still short, use simple arithmetic
+            var remaining = count - questions.Count;
+            for (int i = 1; i <= remaining; i++)
             {
                 var a = i;
                 var b = i;
                 var correct = a + b;
                 questions.Add(new
                 {
-                    id = $"q{i}",
+                    id = $"fallback_q{i}",
                     prompt = $"{a}+{b}=?",
                     options = new[] { (a).ToString(), (correct).ToString(), (a + 1).ToString(), (correct + 2).ToString() },
-                    answerIndex = 1
+                    answerIndex = 1,
+                    topic = "basic arithmetic"
                 });
             }
 
@@ -802,6 +515,151 @@ namespace RogueLearn.User.Api.Controllers
             return s.Trim();
         }
 
+        // Fallback: build questions from quest steps (knowledge_check / quiz activities)
+        private async Task<List<object>> TryBuildPackFromQuestStepsAsync(int count)
+        {
+            var results = new List<object>();
+            try
+            {
+                // Grab recent quest steps; small page to avoid large scans
+                var steps = await _questStepRepository.GetPagedAsync(1, 25);
+                foreach (var step in steps.OrderByDescending(s => s.CreatedAt))
+                {
+                    if (step.Content == null) continue;
+                    var questionsFromStep = ExtractQuestionsFromStepContent(step.Content);
+                    foreach (var q in questionsFromStep)
+                    {
+                        if (results.Count >= count) break;
+                        results.Add(q);
+                    }
+                    if (results.Count >= count) break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[GameSession] Fallback quest step extraction failed: {ex.Message}");
+            }
+
+            return results;
+        }
+
+        private static IEnumerable<object> ExtractQuestionsFromStepContent(object content)
+        {
+            var list = new List<object>();
+            try
+            {
+                string jsonString;
+                if (content is string s)
+                {
+                    jsonString = s;
+                }
+                else
+                {
+                    jsonString = Newtonsoft.Json.JsonConvert.SerializeObject(content);
+                }
+
+                using var doc = JsonDocument.Parse(jsonString);
+                if (doc.RootElement.TryGetProperty("activities", out var activities) && activities.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var act in activities.EnumerateArray())
+                    {
+                        if (act.ValueKind != JsonValueKind.Object) continue;
+                        var type = act.TryGetProperty("type", out var t) ? t.GetString() : null;
+                        if (string.IsNullOrWhiteSpace(type)) continue;
+                        var normalizedType = type.ToLowerInvariant();
+                        if (normalizedType != "knowledgecheck" && normalizedType != "quiz") continue;
+
+                        if (act.TryGetProperty("payload", out var payload) && payload.ValueKind == JsonValueKind.Object)
+                        {
+                            // If payload has an inner "questions" array, expand it
+                            if (payload.TryGetProperty("questions", out var qArr) && qArr.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var q in qArr.EnumerateArray())
+                                {
+                                    var question = BuildQuestionFromPayload(q, payload);
+                                    if (question != null) list.Add(question);
+                                }
+                            }
+                            else
+                            {
+                                var question = BuildQuestionFromPayload(payload, payload);
+                                if (question != null) list.Add(question);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // ignore bad content
+            }
+
+            return list;
+        }
+
+        private static object? BuildQuestionFromPayload(JsonElement payload, JsonElement parentPayload)
+        {
+            try
+            {
+                string? prompt = null;
+                if (payload.TryGetProperty("prompt", out var p)) prompt = p.GetString();
+                else if (payload.TryGetProperty("question", out var q)) prompt = q.GetString();
+                else if (payload.TryGetProperty("text", out var t)) prompt = t.GetString();
+
+                if (string.IsNullOrWhiteSpace(prompt)) return null;
+
+                string[]? options = null;
+                if (payload.TryGetProperty("options", out var opts) && opts.ValueKind == JsonValueKind.Array)
+                {
+                    options = opts.EnumerateArray()
+                        .Where(e => e.ValueKind == JsonValueKind.String)
+                        .Select(e => e.GetString() ?? string.Empty)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .ToArray();
+                }
+
+                if (options == null || options.Length < 2) return null;
+
+                int answerIndex = -1;
+                if (payload.TryGetProperty("answerIndex", out var ai) && ai.TryGetInt32(out var aii))
+                {
+                    answerIndex = aii;
+                }
+                else if (payload.TryGetProperty("correctOption", out var co) && co.ValueKind == JsonValueKind.Number && co.TryGetInt32(out var coi))
+                {
+                    answerIndex = coi;
+                }
+                else if (payload.TryGetProperty("answer", out var ans))
+                {
+                    var ansStr = ans.ToString();
+                    if (!string.IsNullOrWhiteSpace(ansStr))
+                    {
+                        var idx = Array.FindIndex(options, o => string.Equals(o, ansStr, StringComparison.OrdinalIgnoreCase));
+                        if (idx >= 0) answerIndex = idx;
+                    }
+                }
+
+                if (answerIndex < 0 || answerIndex >= options.Length) answerIndex = 0;
+
+                string? topic = null;
+                if (payload.TryGetProperty("topic", out var tp)) topic = tp.GetString();
+                if (string.IsNullOrWhiteSpace(topic) && parentPayload.TryGetProperty("topic", out var tp2)) topic = tp2.GetString();
+
+                return new
+                {
+                    id = payload.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString(),
+                    prompt,
+                    options,
+                    answerIndex,
+                    topic = string.IsNullOrWhiteSpace(topic) ? "knowledge check" : topic
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private async Task<string?> TryReadSyllabusFromDbAsync(string? subjectCode)
         {
             try
@@ -858,41 +716,10 @@ namespace RogueLearn.User.Api.Controllers
             return matchNode.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
         }
 
-        private async Task<RogueLearn.User.Domain.Entities.GameSession?> ResolveSessionForMatchAsync(string? matchId, Guid? userId, string? joinCode, DateTime endUtc)
-        {
-            RogueLearn.User.Domain.Entities.GameSession? session = null;
-
-            if (Guid.TryParse(matchId, out var sessionGuid))
-            {
-                session = await _gameSessionRepository.GetBySessionIdAsync(sessionGuid);
-                if (session != null) return session;
-            }
-
-            if (!string.IsNullOrWhiteSpace(joinCode))
-            {
-                session = await _gameSessionRepository.GetByJoinCodeAsync(joinCode.Trim());
-                if (session != null) return session;
-            }
-
-            if (userId.HasValue)
-            {
-                var recentSessions = await _gameSessionRepository.GetRecentSessionsByUserAsync(userId.Value, 20);
-                var targetTime = endUtc == default ? DateTime.UtcNow : endUtc.ToUniversalTime();
-                session = recentSessions
-                    .OrderBy(s =>
-                    {
-                        var pivot = (s.CompletedAt ?? s.CreatedAt).UtcDateTime;
-                        return Math.Abs((pivot - targetTime).TotalMinutes);
-                    })
-                    .FirstOrDefault();
-            }
-
-            return session;
-        }
-
         // MVP: Get Unity match results from database
         // GET /api/quests/game/sessions/unity-matches?limit=10&userId=xxx
         [HttpGet("unity-matches")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> GetUnityMatches([FromQuery] int limit = 10, [FromQuery] string? userId = null)
         {
             try
@@ -904,10 +731,35 @@ namespace RogueLearn.User.Api.Controllers
                     userIdGuid = parsedUserId;
                 }
 
-                // Get matches (filtered by user if userId provided)
-                var matchResults = userIdGuid.HasValue
-                    ? await _matchResultRepository.GetMatchesByUserAsync(userIdGuid.Value, limit)
-                    : await _matchResultRepository.GetRecentMatchesAsync(limit);
+                List<MatchResult> matchResults;
+                if (userIdGuid.HasValue)
+                {
+                    // Prefer per-player linkage (match_player_summaries) so non-host players get their matches
+                    var matchResultIds = await _matchPlayerSummaryRepository.GetRecentMatchResultIdsByUserAsync(userIdGuid.Value, limit);
+                    var list = new List<MatchResult>();
+                    foreach (var id in matchResultIds)
+                    {
+                        var mr = await _matchResultRepository.GetByIdAsync(id);
+                        if (mr != null) list.Add(mr);
+                    }
+
+                    // Fallback to host-linked matches if no per-player records exist
+                    if (list.Count == 0)
+                    {
+                        list = await _matchResultRepository.GetMatchesByUserAsync(userIdGuid.Value, limit);
+                    }
+
+                    matchResults = list
+                        .OrderByDescending(m => m.StartUtc)
+                        .Take(limit)
+                        .ToList();
+                    Console.WriteLine($"[GameSession] ℹ️ Found {list.Count} matches for user {userIdGuid}");
+                }
+                else
+                {
+                    matchResults = await _matchResultRepository.GetRecentMatchesAsync(limit);
+                    Console.WriteLine($"[GameSession] ℹ️ Found {matchResults.Count} recent matches");
+                }
 
                 var matchesJson = new List<string>();
                 foreach (var m in matchResults.Where(m => !string.IsNullOrWhiteSpace(m.MatchDataJson)))
@@ -959,7 +811,7 @@ namespace RogueLearn.User.Api.Controllers
 
                 // Build response JSON manually
                 var responseJson = "{\"matches\":[" + string.Join(",", matchesJson) + "]}";
-
+                Console.WriteLine($"[GameSession] ℹ️ Returning {matchesJson.Count} matches for user {userIdGuid}");
                 return Content(responseJson, "application/json");
             }
             catch (Exception ex)
@@ -1280,3 +1132,4 @@ namespace RogueLearn.User.Api.Controllers
         }
     }
 }
+

@@ -115,7 +115,11 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.Level, opt => opt.Ignore())
             .ForMember(dest => dest.ExperiencePoints, opt => opt.Ignore())
             .ForMember(dest => dest.Bio, opt => opt.Ignore());
-        CreateMap<PartyInvitation, PartyInvitationDto>();
+        CreateMap<PartyInvitation, PartyInvitationDto>()
+            .ForCtorParam("JoinLink", opt => opt.MapFrom(_ => (string?)null))
+            .ForCtorParam("GameSessionId", opt => opt.MapFrom(_ => (Guid?)null))
+            .ForCtorParam("PartyName", opt => opt.MapFrom(_ => string.Empty))
+            .ForCtorParam("InviteeName", opt => opt.MapFrom(_ => string.Empty));
         CreateMap<PartyStashItem, PartyStashItemDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
 

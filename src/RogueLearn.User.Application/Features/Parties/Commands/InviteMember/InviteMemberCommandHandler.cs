@@ -5,6 +5,7 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using Newtonsoft.Json;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.InviteMember;
 
@@ -67,7 +68,7 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
                 }
 
                 existing.InviterId = request.InviterAuthUserId;
-                existing.Message = request.Message;
+                existing.Message = SerializeMessage(request.Message, request.JoinLink, request.GameSessionId);
                 existing.Status = InvitationStatus.Pending;
                 existing.InvitedAt = DateTimeOffset.UtcNow;
                 existing.RespondedAt = null;
@@ -83,7 +84,7 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
                     PartyId = request.PartyId,
                     InviterId = request.InviterAuthUserId,
                     InviteeId = inviteeId.Value,
-                    Message = request.Message,
+                    Message = SerializeMessage(request.Message, request.JoinLink, request.GameSessionId),
                     Status = InvitationStatus.Pending,
                     ExpiresAt = request.ExpiresAt,
                     InvitedAt = DateTimeOffset.UtcNow
@@ -95,5 +96,23 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
         }
 
         return Unit.Value;
+    }
+
+    private static string? SerializeMessage(string? message, string? joinLink, Guid? gameSessionId)
+    {
+        // If no extra data, keep plain message
+        if (string.IsNullOrWhiteSpace(joinLink) && !gameSessionId.HasValue)
+        {
+            return message;
+        }
+
+        var payload = new
+        {
+            message,
+            joinLink,
+            gameSessionId
+        };
+
+        return JsonConvert.SerializeObject(payload);
     }
 }

@@ -118,6 +118,7 @@ public static class ServiceCollectionExtensions
         // Game session repositories (Unity boss fight multiplayer)
         services.AddScoped<IGameSessionRepository, GameSessionRepository>();
         services.AddScoped<IMatchResultRepository, MatchResultRepository>();
+        services.AddScoped<IMatchPlayerSummaryRepository, MatchPlayerSummaryRepository>();
         // ADDED: Register the feedback repository
         services.AddScoped<IUserQuestStepFeedbackRepository, UserQuestStepFeedbackRepository>();
 

@@ -2,6 +2,7 @@ using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Features.Parties.DTOs;
 using RogueLearn.User.Domain.Interfaces;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Parties.Queries.GetMyPendingInvitations;
 
@@ -42,11 +43,49 @@ public class GetMyPendingInvitationsQueryHandler : IRequestHandler<GetMyPendingI
             i.InviteeId,
             i.Status,
             i.Message,
+            ParseJoinLink(i.Message),
+            ParseGameSessionId(i.Message),
             i.InvitedAt,
             i.RespondedAt,
             i.ExpiresAt,
             partyNameById.TryGetValue(i.PartyId, out var name) ? name : string.Empty,
             inviteeNameById.TryGetValue(i.InviteeId, out var iname) ? iname : string.Empty
         )).ToList();
+    }
+
+    private static string? ParseJoinLink(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            if (doc.RootElement.TryGetProperty("joinLink", out var linkProp) && linkProp.ValueKind == JsonValueKind.String)
+            {
+                return linkProp.GetString();
+            }
+        }
+        catch
+        {
+            // Message might be plain text – ignore parsing errors.
+        }
+        return null;
+    }
+
+    private static Guid? ParseGameSessionId(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            if (doc.RootElement.TryGetProperty("gameSessionId", out var idProp) && idProp.ValueKind == JsonValueKind.String && Guid.TryParse(idProp.GetString(), out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+            // Ignore malformed JSON, fall back to null.
+        }
+        return null;
     }
 }

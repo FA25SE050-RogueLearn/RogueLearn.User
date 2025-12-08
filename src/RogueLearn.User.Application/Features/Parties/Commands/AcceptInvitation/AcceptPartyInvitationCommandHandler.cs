@@ -3,6 +3,7 @@ using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using RogueLearn.User.Application.Interfaces;
+using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Parties.Commands.AcceptInvitation;
 
@@ -46,6 +47,20 @@ public class AcceptPartyInvitationCommandHandler : IRequestHandler<AcceptPartyIn
             throw new Exceptions.ForbiddenException("Invitation not intended for this user.");
         }
 
+        // Game invite shortcut: if the message payload contains joinLink/gameSessionId,
+        // simply mark as accepted without membership mutation to avoid duplicate-member errors.
+        if (IsGameInvite(invitation.Message))
+        {
+            invitation.Status = InvitationStatus.Accepted;
+            invitation.RespondedAt = DateTimeOffset.UtcNow;
+            await _invitationRepository.UpdateAsync(invitation, cancellationToken);
+            if (_notificationService != null)
+            {
+                await _notificationService.SendInvitationAcceptedNotificationAsync(invitation, cancellationToken);
+            }
+            return Unit.Value;
+        }
+
         var existingMember = await _memberRepository.GetMemberAsync(request.PartyId, request.AuthUserId, cancellationToken);
         if (existingMember != null && existingMember.Status == MemberStatus.Active)
         {
@@ -80,5 +95,22 @@ public class AcceptPartyInvitationCommandHandler : IRequestHandler<AcceptPartyIn
         }
 
         return Unit.Value;
+    }
+
+    private static bool IsGameInvite(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            var root = doc.RootElement;
+            var hasJoinLink = root.TryGetProperty("joinLink", out var jl) && jl.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(jl.GetString());
+            var hasSession = root.TryGetProperty("gameSessionId", out var gs) && gs.ValueKind == JsonValueKind.String && Guid.TryParse(gs.GetString(), out _);
+            return hasJoinLink || hasSession;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

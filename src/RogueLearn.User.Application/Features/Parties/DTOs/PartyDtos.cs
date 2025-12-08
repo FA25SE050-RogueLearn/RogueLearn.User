@@ -28,6 +28,8 @@ public record PartyInvitationDto(
     Guid InviteeId,
     InvitationStatus Status,
     string? Message,
+    string? JoinLink,
+    Guid? GameSessionId,
     DateTimeOffset InvitedAt,
     DateTimeOffset? RespondedAt,
     DateTimeOffset ExpiresAt,
@@ -35,6 +37,6 @@ public record PartyInvitationDto(
     string InviteeName
 );
 public record PartyStashItemDto(Guid Id, Guid PartyId, Guid OriginalNoteId, Guid SharedByUserId, string Title, object? Content, IReadOnlyList<string>? Tags, DateTimeOffset SharedAt, DateTimeOffset UpdatedAt);
-public record InviteMemberRequest(IReadOnlyList<InviteTarget> Targets, string? Message, DateTimeOffset? ExpiresAt);
+public record InviteMemberRequest(IReadOnlyList<InviteTarget> Targets, string? Message, DateTimeOffset? ExpiresAt, string? JoinLink = null, Guid? GameSessionId = null);
 public record AddPartyResourceRequest(Guid OriginalNoteId, string Title, object Content, IReadOnlyList<string> Tags);
 public record UpdatePartyResourceRequest(string Title, object Content, IReadOnlyList<string> Tags);
