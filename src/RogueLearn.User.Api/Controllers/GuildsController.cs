@@ -353,10 +353,6 @@ public class GuildsController : ControllerBase
         return NoContent();
     }
 
-
-    public record AddContributionPointsRequest(int PointsToAdd);
-    public record AddGuildMeritPointsRequest(int PointsToAdd);
-
     /// <summary>
     /// Get roles of a guild member. Returns list to support future multi-role.
     /// </summary>
@@ -368,5 +364,4 @@ public class GuildsController : ControllerBase
         return Ok(roles);
     }
 }
-
-public record ApplyGuildJoinRequestRequest(string? Message);
+ 
