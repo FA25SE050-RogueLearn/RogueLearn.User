@@ -369,6 +369,3 @@ public class PartiesController : ControllerBase
         return Ok(roles);
     }
 }
-
-public record AssignPartyMemberRoleRequest(PartyRole Role);
-public record RevokePartyMemberRoleRequest(PartyRole Role);
