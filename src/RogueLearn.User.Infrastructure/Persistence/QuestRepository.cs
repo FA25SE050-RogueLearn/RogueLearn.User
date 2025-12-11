@@ -41,4 +41,15 @@ public class QuestRepository : GenericRepository<Quest>, IQuestRepository
 
         return response.Models;
     }
+    // ADDED: Implementation using explicit Filter to avoid LINQ NullReferenceException
+    public async Task<Quest?> GetActiveQuestBySubjectIdAsync(Guid subjectId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<Quest>()
+            .Filter("subject_id", Operator.Equals, subjectId.ToString())
+            .Filter("is_active", Operator.Equals, "true")
+            .Single(cancellationToken);
+
+        return response;
+    }
 }
