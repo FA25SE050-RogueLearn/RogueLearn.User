@@ -53,7 +53,7 @@ public class QuestStepContentEditorController : ControllerBase
     /// Replaces the entire content object.
     /// </summary>
     [HttpPut("content")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(UpdateQuestStepContentResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -64,15 +64,15 @@ public class QuestStepContentEditorController : ControllerBase
     {
         if (questStepId != command.QuestStepId && command.QuestStepId != Guid.Empty)
         {
-            return BadRequest("QuestStepId in route does not match body.");
+            return BadRequest(new { error = "QuestStepId in route does not match body." });
         }
 
         command.QuestStepId = questStepId;
 
         try
         {
-            await _mediator.Send(command, cancellationToken);
-            return NoContent();
+            var result = await _mediator.Send(command, cancellationToken);
+            return Ok(result);
         }
         catch (RogueLearn.User.Application.Exceptions.ValidationException ex)
         {

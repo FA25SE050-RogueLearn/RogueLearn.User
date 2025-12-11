@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepContent;
 
-public class UpdateQuestStepContentCommandHandler : IRequestHandler<UpdateQuestStepContentCommand>
+public class UpdateQuestStepContentCommandHandler : IRequestHandler<UpdateQuestStepContentCommand, UpdateQuestStepContentResponse>
 {
     private readonly IQuestStepRepository _questStepRepository;
     private readonly ILogger<UpdateQuestStepContentCommandHandler> _logger;
@@ -21,7 +21,7 @@ public class UpdateQuestStepContentCommandHandler : IRequestHandler<UpdateQuestS
         _logger = logger;
     }
 
-    public async Task Handle(UpdateQuestStepContentCommand request, CancellationToken cancellationToken)
+    public async Task<UpdateQuestStepContentResponse> Handle(UpdateQuestStepContentCommand request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Updating content for QuestStep {QuestStepId}", request.QuestStepId);
 
@@ -49,5 +49,14 @@ public class UpdateQuestStepContentCommandHandler : IRequestHandler<UpdateQuestS
 
         _logger.LogInformation("Successfully updated content for QuestStep {QuestStepId}. Activity count: {Count}",
             request.QuestStepId, request.Activities.Count);
+
+        return new UpdateQuestStepContentResponse
+        {
+            QuestStepId = questStep.Id,
+            IsSuccess = true,
+            Message = "Quest step content updated successfully.",
+            ActivityCount = request.Activities.Count,
+            UpdatedAt = questStep.UpdatedAt
+        };
     }
 }

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepContent;
 
-public class UpdateQuestStepContentCommand : IRequest
+public class UpdateQuestStepContentCommand : IRequest<UpdateQuestStepContentResponse>
 {
     [JsonIgnore]
     public Guid QuestStepId { get; set; }
