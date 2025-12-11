@@ -1,6 +1,8 @@
+// RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestStepContentEditorController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
+using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepContent;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestStepContent;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -42,6 +44,47 @@ public class QuestStepContentEditorController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting quest step content");
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Updates the content (activities) of a quest step.
+    /// Replaces the entire content object.
+    /// </summary>
+    [HttpPut("content")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateQuestStepContent(
+        Guid questStepId,
+        [FromBody] UpdateQuestStepContentCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (questStepId != command.QuestStepId && command.QuestStepId != Guid.Empty)
+        {
+            return BadRequest("QuestStepId in route does not match body.");
+        }
+
+        command.QuestStepId = questStepId;
+
+        try
+        {
+            await _mediator.Send(command, cancellationToken);
+            return NoContent();
+        }
+        catch (RogueLearn.User.Application.Exceptions.ValidationException ex)
+        {
+            return BadRequest(new { error = "Validation failed", details = ex.Errors });
+        }
+        catch (RogueLearn.User.Application.Exceptions.NotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating quest step content");
             return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
         }
     }
