@@ -21,7 +21,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\building_blocks\BuildingBlocks.Shared\BuildingBlocks.Shared.csproj" />
     <ProjectReference Include="..\RogueLearn.User.Application\RogueLearn.User.Application.csproj" />
-    <ProjectReference Include="..\RogueLearn.User.Domain\RogueLearn.User.Domain.csproj" />
   </ItemGroup>
 
 </Project>
