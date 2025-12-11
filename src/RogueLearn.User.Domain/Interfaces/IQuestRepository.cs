@@ -8,4 +8,7 @@ public interface IQuestRepository : IGenericRepository<Quest>
 {
     Task<IEnumerable<Quest>> GetQuestsByChapterIdsAsync(IEnumerable<Guid> chapterIds, CancellationToken cancellationToken = default);
     Task<IEnumerable<Quest>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
+
+    // ADDED: specialized method for safe filtering by subject_id
+    Task<Quest?> GetActiveQuestBySubjectIdAsync(Guid subjectId, CancellationToken cancellationToken = default);
 }

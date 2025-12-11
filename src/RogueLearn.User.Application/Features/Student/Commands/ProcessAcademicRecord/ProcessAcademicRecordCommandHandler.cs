@@ -1,7 +1,4 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordCommandHandler.cs
-// KEY CHANGE: Remove background job scheduling loop
-// ADDED: HTML validation and AI extraction result validation
-
 using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -199,8 +196,10 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var subjectCatalog = allAllowedSubjects.ToDictionary(s => s.SubjectCode);
         _logger.LogInformation("Built combined subject catalog for program and class with {Count} subjects.", subjectCatalog.Count);
 
-        var existingSemesterSubjects = (await _semesterSubjectRepository.FindAsync(
-            ss => ss.AuthUserId == request.AuthUserId, cancellationToken)
+        // Fetch existing records using specialized method to avoid Guid LINQ issues
+        // We use GetSemesterSubjectsByUserAsync which internally uses string-based filters
+        var existingSemesterSubjects = (await _semesterSubjectRepository.GetSemesterSubjectsByUserAsync(
+            request.AuthUserId, cancellationToken)
             ).ToList();
 
         int recordsAdded = 0;
