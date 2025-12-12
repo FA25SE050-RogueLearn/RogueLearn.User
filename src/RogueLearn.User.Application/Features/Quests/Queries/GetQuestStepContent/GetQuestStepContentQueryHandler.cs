@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestStepContent/GetQuestStepContentQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -85,6 +86,7 @@ public class GetQuestStepContentQueryHandler : IRequestHandler<GetQuestStepConte
                         {
                             ActivityId = activityObj["activityId"]?.ToString() ?? string.Empty,
                             Type = activityObj["type"]?.ToString() ?? string.Empty,
+                            SkillId = activityObj["skillId"]?.ToString(),
                             // Convert payload JToken to a Dictionary that serializes properly
                             Payload = activityObj["payload"]?.ToObject<Dictionary<string, object>>(
                                 new NewtonsoftJson.JsonSerializer

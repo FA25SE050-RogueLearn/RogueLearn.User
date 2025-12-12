@@ -3,6 +3,9 @@ using NSubstitute;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestStepContent;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
+using System.Reflection;
 
 namespace RogueLearn.User.Application.Tests.Features.Quests.Queries.GetQuestStepContent;
 
@@ -143,5 +146,98 @@ public class GetQuestStepContentQueryHandlerTests
 
         var sut = new GetQuestStepContentQueryHandler(repo, Substitute.For<Microsoft.Extensions.Logging.ILogger<GetQuestStepContentQueryHandler>>());
         await Assert.ThrowsAsync<Exception>(() => sut.Handle(new GetQuestStepContentQuery { QuestStepId = stepId }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_DeserializationNull_ReturnsEmpty()
+    {
+        var repo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetQuestStepContentQueryHandler>>();
+        var stepId = Guid.NewGuid();
+        repo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, Content = "null" });
+        var sut = new GetQuestStepContentQueryHandler(repo, logger);
+        var res = await sut.Handle(new GetQuestStepContentQuery { QuestStepId = stepId }, CancellationToken.None);
+        res.Activities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_InvalidJson_ThrowsInvalidOperation()
+    {
+        var repo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetQuestStepContentQueryHandler>>();
+        var stepId = Guid.NewGuid();
+        repo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, Content = "{ invalid" });
+        var sut = new GetQuestStepContentQueryHandler(repo, logger);
+        var act = () => sut.Handle(new GetQuestStepContentQuery { QuestStepId = stepId }, CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Handle_JTokenNull_PayloadNull()
+    {
+        var repo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetQuestStepContentQueryHandler>>();
+        var stepId = Guid.NewGuid();
+        var content = new JObject
+        {
+            ["activities"] = new JArray
+            {
+                new JObject
+                {
+                    ["activityId"] = "a",
+                    ["type"] = "t",
+                    ["payload"] = new JObject { ["x"] = JValue.CreateNull() }
+                }
+            }
+        };
+        repo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, Content = content });
+        var sut = new GetQuestStepContentQueryHandler(repo, logger);
+        var res = await sut.Handle(new GetQuestStepContentQuery { QuestStepId = stepId }, CancellationToken.None);
+        res.Activities.Should().HaveCount(1);
+        var payload = (System.Collections.Generic.Dictionary<string, object>)res.Activities[0].Payload!;
+        payload["x"].Should().BeNull();
+    }
+
+    [Fact]
+    public void NestedObjectConverter_WriteJson_CallsSerialize()
+    {
+        var handlerType = typeof(GetQuestStepContentQueryHandler);
+        var convType = handlerType.GetNestedType("NestedObjectConverter", BindingFlags.NonPublic);
+        var instance = Activator.CreateInstance(convType!);
+
+        var writer = new JsonTextWriter(new System.IO.StringWriter());
+        var serializer = new JsonSerializer();
+        var method = convType!.GetMethod("WriteJson", BindingFlags.Instance | BindingFlags.Public);
+        method!.Invoke(instance, new object?[] { writer, new { a = 1 }, serializer });
+    }
+
+    private sealed class BadToString
+    {
+        public override string ToString() => throw new Exception("boom");
+    }
+
+    [Fact]
+    public async Task Handle_UnexpectedErrorParsing_CaughtByGeneralCatch()
+    {
+        var repo = Substitute.For<IQuestStepRepository>();
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<GetQuestStepContentQueryHandler>>();
+        var stepId = Guid.NewGuid();
+        repo.GetByIdAsync(stepId, Arg.Any<CancellationToken>()).Returns(new QuestStep { Id = stepId, Content = "{}" });
+
+        var callCount = 0;
+        logger
+            .When(l => l.Log(Arg.Any<Microsoft.Extensions.Logging.LogLevel>(), Arg.Any<Microsoft.Extensions.Logging.EventId>(), Arg.Any<object>(), Arg.Any<Exception?>(), Arg.Any<Func<object, Exception, string>>()!))
+            .Do(_ =>
+            {
+                callCount++;
+                if (callCount == 2)
+                {
+                    throw new Exception("logger failure");
+                }
+            });
+
+        var sut = new GetQuestStepContentQueryHandler(repo, logger);
+        var act = () => sut.Handle(new GetQuestStepContentQuery { QuestStepId = stepId }, CancellationToken.None);
+        await act.Should().ThrowAsync<Exception>();
     }
 }

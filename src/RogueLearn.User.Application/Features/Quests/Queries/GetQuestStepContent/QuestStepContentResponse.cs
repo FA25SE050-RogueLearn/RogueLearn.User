@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestStepContent/QuestStepContentResponse.cs
 using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestStepContent;
@@ -14,6 +15,9 @@ public class QuestStepActivity
 
     [JsonPropertyName("type")]
     public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("skillId")]
+    public string? SkillId { get; set; }
 
     [JsonPropertyName("payload")]
     public object? Payload { get; set; }

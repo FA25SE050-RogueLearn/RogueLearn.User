@@ -46,6 +46,8 @@ public class PartyDtosTests
             Guid.NewGuid(),
             InvitationStatus.Pending,
             "msg",
+            "join-link",
+            Guid.NewGuid(),
             DateTimeOffset.UtcNow,
             null,
             DateTimeOffset.UtcNow.AddDays(1),

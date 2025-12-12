@@ -36,11 +36,6 @@ public class AddPartyResourceCommandHandler : IRequestHandler<AddPartyResourceCo
             throw new Application.Exceptions.ForbiddenException("Actor is not an active party member");
         }
 
-        if (member.Role != PartyRole.Leader)
-        {
-            throw new Application.Exceptions.ForbiddenException("Only party leaders may add resources");
-        }
-
         var stashItem = new PartyStashItem
         {
             PartyId = request.PartyId,

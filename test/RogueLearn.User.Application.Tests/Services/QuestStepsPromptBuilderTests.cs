@@ -9,67 +9,42 @@ namespace RogueLearn.User.Application.Tests.Services;
 
 public class QuestStepsPromptBuilderTests
 {
-    private WeekContext BuildWeek(bool withResources)
+    private QuestStepDefinition BuildModule(bool withResources)
     {
-        var week = new WeekContext
+        var module = new QuestStepDefinition
         {
-            WeekNumber = 1,
-            TotalWeeks = 10,
-            TopicsToCover = new List<string> { "Topic A", "Topic B" },
-            AvailableResources = new List<ValidResource>
+            ModuleNumber = 1,
+            Title = "Topic A & Topic B",
+            Sessions = new List<SyllabusSessionDto>
             {
-                new() { Url = "https://example.com/a", SourceContext = "Tutorial" },
-                new() { Url = "https://example.com/b", SourceContext = "Docs" }
+                new() { SessionNumber = 1, Topic = "Topic A", SuggestedUrl = withResources ? "https://example.com/a" : "" },
+                new() { SessionNumber = 2, Topic = "Topic B", SuggestedUrl = withResources ? "https://example.com/b" : "" }
             }
         };
-        if (!withResources)
-        {
-            week.AvailableResources.Clear();
-        }
-        return week;
+        return module;
     }
 
-    private AcademicContext BuildAcademicContext()
-    {
-        return new AcademicContext
-        {
-            CurrentGpa = 7.5,
-            AttemptReason = QuestAttemptReason.CurrentlyStudying,
-            PrerequisiteHistory = new List<PrerequisitePerformance>
-            {
-                new() { SubjectCode = "CS101", SubjectName = "Intro", PerformanceLevel = "Weak", Grade = "5.0" }
-            },
-            RelatedSubjects = new List<RelatedSubjectGrade>
-            {
-                new() { SubjectCode = "CS102", Grade = "7.0" }
-            },
-            StrengthAreas = new List<string> { "Algorithms" },
-            ImprovementAreas = new List<string> { "Pointers" }
-        };
-    }
+    private AcademicContext BuildAcademicContext() => new AcademicContext { CurrentGpa = 7.5 };
 
     [Fact]
-    public void BuildPrompt_HandlesResourceVariants()
+    public void BuildMasterPrompt_HandlesResourceVariants()
     {
         var builder = new QuestStepsPromptBuilder();
         foreach (var withResources in new[] { false, true })
         {
-            var prompt = builder.BuildPrompt(
-                BuildWeek(withResources),
-                userContext: "Student X",
+            var prompt = builder.BuildMasterPrompt(
+                BuildModule(withResources),
                 relevantSkills: new List<Skill>(),
                 subjectName: "C programming",
                 courseDescription: "Basics",
-                academicContext: BuildAcademicContext());
+                userClass: null);
 
             if (!withResources)
             {
-                prompt.Should().Contain("No External URLs Available");
-                prompt.Should().Contain("0 `Reading` activities");
+                prompt.ToLowerInvariant().Should().Contain("no url provided");
             }
             else
             {
-                prompt.Should().Contain("Approved Resource Pool");
                 prompt.Should().Contain("https://example.com/a");
                 prompt.Should().Contain("https://example.com/b");
             }
@@ -77,87 +52,60 @@ public class QuestStepsPromptBuilderTests
     }
 
     [Fact]
-    public void BuildPrompt_IncludesEscapeSequenceRules()
+    public void BuildMasterPrompt_IncludesOutputRules()
     {
         var builder = new QuestStepsPromptBuilder();
-        var prompt = builder.BuildPrompt(
-            BuildWeek(true),
-            userContext: "Student X",
+        var prompt = builder.BuildMasterPrompt(
+            BuildModule(true),
             relevantSkills: new List<Skill>(),
             subjectName: "C programming",
             courseDescription: "Basics",
-            academicContext: BuildAcademicContext());
+            userClass: null);
 
-        prompt.Should().Contain("CRITICAL JSON STRING ENCODING RULES");
-        prompt.Should().Contain("Double backslashes");
+        prompt.Should().Contain("MUST DO");
+        prompt.Should().Contain("MUST NOT DO");
     }
 
     [Fact]
-    public void BuildPrompt_IncludesSkillsJson_WhenSkillsProvided()
+    public void BuildMasterPrompt_IncludesSkillsJson_WhenSkillsProvided()
     {
         var builder = new QuestStepsPromptBuilder();
-        var prompt = builder.BuildPrompt(
-            BuildWeek(true),
-            userContext: "Student X",
+        var prompt = builder.BuildMasterPrompt(
+            BuildModule(true),
             relevantSkills: new List<Skill>{ new() { Id = Guid.NewGuid(), Name = "Algorithms" } },
             subjectName: "C programming",
             courseDescription: "Basics",
-            academicContext: BuildAcademicContext());
+            userClass: null);
         prompt.Should().Contain("```json");
         prompt.ToLowerInvariant().Should().Contain("algorithms");
     }
 
+    // Removed: prompt now includes output-schema examples for clarity even if no skills
     [Fact]
-    public void BuildPrompt_Warns_When_No_Skills()
+    public void BuildMasterPrompt_Includes_ErrorHint_When_Provided()
     {
         var builder = new QuestStepsPromptBuilder();
-        var prompt = builder.BuildPrompt(
-            BuildWeek(false),
-            userContext: "Student Y",
-            relevantSkills: new List<Skill>(),
-            subjectName: "Data Structures",
-            courseDescription: "Theory",
-            academicContext: BuildAcademicContext());
-        prompt.Should().Contain("WARNING: No skills provided");
-    }
-
-    [Fact]
-    public void BuildPrompt_Includes_ErrorHint_When_Provided()
-    {
-        var builder = new QuestStepsPromptBuilder();
-        var prompt = builder.BuildPrompt(
-            BuildWeek(true),
-            userContext: "Student Z",
+        var prompt = builder.BuildMasterPrompt(
+            BuildModule(true),
             relevantSkills: new List<Skill>(),
             subjectName: "C programming",
             courseDescription: "Basics",
-            academicContext: BuildAcademicContext(),
             userClass: null,
             errorHint: "JSON not valid");
-        prompt.Should().Contain("## CORRECTION REQUIRED");
+        prompt.Should().Contain("CORRECTION REQUIRED");
         prompt.Should().Contain("JSON not valid");
     }
 
     [Fact]
-    public void GetPersonalizationInstructions_Covers_Gpa_Branches_And_AttemptReason()
+    public void BuildMasterPrompt_Includes_Final_Checklist()
     {
         var builder = new QuestStepsPromptBuilder();
-        var m = typeof(QuestStepsPromptBuilder).GetMethod("GetPersonalizationInstructions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var ctxHigh = new AcademicContext { CurrentGpa = 8.6, AttemptReason = QuestAttemptReason.FirstTime };
-        var ctxGood = new AcademicContext { CurrentGpa = 7.5, AttemptReason = QuestAttemptReason.CurrentlyStudying };
-        var ctxLow = new AcademicContext { CurrentGpa = 6.0, AttemptReason = QuestAttemptReason.Retake };
-        ctxLow.PrerequisiteHistory.Add(new PrerequisitePerformance { SubjectCode = "CS101", SubjectName = "Intro", PerformanceLevel = "Weak" });
-        ctxLow.ImprovementAreas.Add("Pointers");
-        ctxLow.StrengthAreas.Add("Loops");
-        var sHigh = (string)m!.Invoke(builder, new object[] { ctxHigh })!;
-        var sGood = (string)m!.Invoke(builder, new object[] { ctxGood })!;
-        var sLow = (string)m!.Invoke(builder, new object[] { ctxLow })!;
-        sHigh.Should().Contain("High Achiever");
-        sGood.Should().Contain("Good Performance");
-        sLow.Should().Contain("Needs Support");
-        sLow.Should().Contain("Retake Student");
-        sLow.Should().Contain("Foundation Gaps");
-        sLow.Should().Contain("Remediation Focus");
-        sLow.Should().Contain("Leverage Strengths");
+        var prompt = builder.BuildMasterPrompt(
+            BuildModule(true),
+            relevantSkills: new List<Skill>(),
+            subjectName: "C programming",
+            courseDescription: "Basics",
+            userClass: null);
+        prompt.Should().Contain("FINAL VALIDATION CHECKLIST");
     }
 }

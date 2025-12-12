@@ -28,4 +28,13 @@ public class SuggestNoteTagsFromUploadQueryValidatorTests
         var res = validator.Validate(q);
         res.IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public void Missing_Type_And_Filename_Fails()
+    {
+        var validator = new SuggestNoteTagsFromUploadQueryValidator(CreateOptions());
+        var q = new SuggestNoteTagsFromUploadQuery { AuthUserId = System.Guid.NewGuid(), FileStream = new MemoryStream(new byte[10]), FileLength = 10, ContentType = string.Empty, FileName = string.Empty, MaxTags = 5 };
+        var res = validator.Validate(q);
+        res.IsValid.Should().BeFalse();
+    }
 }

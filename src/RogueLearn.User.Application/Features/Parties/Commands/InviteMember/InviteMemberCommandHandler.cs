@@ -49,12 +49,7 @@ public class InviteMemberCommandHandler : IRequestHandler<InviteMemberCommand, U
                 }
             }
 
-            if (!inviteeId.HasValue)
-            {
-                throw new Exceptions.BadRequestException("Invalid invite target.");
-            }
-
-            if (inviteeId.Value == request.InviterAuthUserId)
+            if (inviteeId!.Value == request.InviterAuthUserId)
             {
                 throw new Exceptions.BadRequestException("Cannot invite yourself to the party.");
             }

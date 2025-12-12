@@ -30,7 +30,7 @@ public class QuestStepGenerationServiceTests
 
         await sut.GenerateQuestStepsAsync(authUserId, questId, context: null!);
 
-        await mediator.Received(1).Send(Arg.Is<GenerateQuestStepsCommand>(c => c.AuthUserId == authUserId && c.QuestId == questId), Arg.Any<CancellationToken>());
+        await mediator.Received(1).Send(Arg.Is<GenerateQuestStepsCommand>(c => c.AdminId == authUserId && c.QuestId == questId), Arg.Any<CancellationToken>());
     }
 
     [Fact]

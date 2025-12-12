@@ -19,7 +19,6 @@ using RogueLearn.User.Application.Features.Guilds.Queries.GetGuildInvitations;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetGuildMembers;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMyGuild;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetAllGuilds;
-using RogueLearn.User.Application.Features.Guilds.Commands.ManageRoles;
 using RogueLearn.User.Application.Features.Guilds.Queries.GetMemberRoles;
 using RogueLearn.User.Application.Features.Guilds.Commands.ApplyJoinRequest;
 using RogueLearn.User.Application.Features.Guilds.Commands.ApproveJoinRequest;
@@ -174,7 +173,7 @@ public class GuildsController : ControllerBase
     /// Invite members to the guild (Guild Master only).
     /// </summary>
     [HttpPost("{guildId:guid}/invite")]
-    [GuildMasterOrOfficerOnly("guildId")]
+    [GuildMasterOnly("guildId")]
     [ProducesResponseType(typeof(InviteGuildMembersResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -354,37 +353,6 @@ public class GuildsController : ControllerBase
         return NoContent();
     }
 
-    // --- Role Management Endpoints ---
-
-    /// <summary>
-    /// Assign a guild role to a member (GuildMaster only).
-    /// </summary>
-    [HttpPost("{guildId:guid}/members/{memberAuthUserId:guid}/roles/assign")]
-    [GuildMasterOnly("guildId")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> AssignGuildRole([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] AssignGuildMemberRoleRequest body)
-    {
-        var actorAuthUserId = User.GetAuthUserId();
-        await _mediator.Send(new AssignGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId));
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Revoke a guild role from a member (GuildMaster only). Baseline role remains.
-    /// </summary>
-    [HttpPost("{guildId:guid}/members/{memberAuthUserId:guid}/roles/revoke")]
-    [GuildMasterOnly("guildId")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> RevokeGuildRole([FromRoute] Guid guildId, [FromRoute] Guid memberAuthUserId, [FromBody] RevokeGuildMemberRoleRequest body)
-    {
-        var actorAuthUserId = User.GetAuthUserId();
-        await _mediator.Send(new RevokeGuildRoleCommand(guildId, memberAuthUserId, body.Role, actorAuthUserId));
-        return NoContent();
-    }
-
-    public record AddContributionPointsRequest(int PointsToAdd);
-    public record AddGuildMeritPointsRequest(int PointsToAdd);
-
     /// <summary>
     /// Get roles of a guild member. Returns list to support future multi-role.
     /// </summary>
@@ -396,7 +364,4 @@ public class GuildsController : ControllerBase
         return Ok(roles);
     }
 }
-
-public record AssignGuildMemberRoleRequest(GuildRole Role);
-public record RevokeGuildMemberRoleRequest(GuildRole Role);
-public record ApplyGuildJoinRequestRequest(string? Message);
+ 

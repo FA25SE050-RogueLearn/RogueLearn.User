@@ -1,128 +1,141 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoMapper;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
+using AutoMapper;
 using FluentValidation;
-using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Achievements.Commands.CreateAchievement;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
-using Xunit;
 
 namespace RogueLearn.User.Application.Tests.Features.Achievements.Commands.CreateAchievement;
 
 public class CreateAchievementCommandHandlerTests
 {
+    private static CreateAchievementCommandHandler CreateSut(
+        IAchievementRepository? repo = null,
+        IMapper? mapper = null,
+        IValidator<CreateAchievementCommand>? validator = null,
+        Microsoft.Extensions.Logging.ILogger<CreateAchievementCommandHandler>? logger = null)
+    {
+        repo ??= Substitute.For<IAchievementRepository>();
+        mapper ??= Substitute.For<IMapper>();
+        validator ??= Substitute.For<IValidator<CreateAchievementCommand>>();
+        logger ??= Substitute.For<Microsoft.Extensions.Logging.ILogger<CreateAchievementCommandHandler>>();
+        return new CreateAchievementCommandHandler(repo, mapper, validator, logger);
+    }
+
     [Fact]
-    public async Task Handle_KeyExists_ThrowsConflict()
+    public async Task Handle_KeyConflict_Throws()
     {
         var repo = Substitute.For<IAchievementRepository>();
         var mapper = Substitute.For<IMapper>();
         var validator = new CreateAchievementCommandValidator();
-        var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
-
         repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var command = new CreateAchievementCommand
-        {
-            Key = "key",
-            Name = "name",
-            Description = "desc",
-            SourceService = "svc",
-            RuleType = null,
-            Category = null,
-            IconUrl = null,
-            RuleConfig = null
-        };
-
-        var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
-        await Assert.ThrowsAsync<ConflictException>(() => sut.Handle(command, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task Handle_InvalidRuleConfig_ThrowsValidation()
-    {
-        var repo = Substitute.For<IAchievementRepository>();
-        var mapper = Substitute.For<IMapper>();
-        var validator = new CreateAchievementCommandValidator();
-        var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
-
-        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        var command = new CreateAchievementCommand
-        {
-            Key = "key",
-            Name = "name",
-            Description = "desc",
-            SourceService = "svc",
-            RuleType = null,
-            Category = null,
-            IconUrl = null,
-            RuleConfig = "{invalid-json}"
-        };
-
-        var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
-        await Assert.ThrowsAsync<FluentValidation.ValidationException>(() => sut.Handle(command, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task Handle_Success_ReturnsResponse()
-    {
-        var repo = Substitute.For<IAchievementRepository>();
-        var mapper = Substitute.For<IMapper>();
-        var validator = new CreateAchievementCommandValidator();
-        var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
-
-        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        var command = new CreateAchievementCommand
-        {
-            Key = "key",
-            Name = "name",
-            Description = "desc",
-            SourceService = "svc",
-            RuleType = null,
-            Category = null,
-            IconUrl = null,
-            RuleConfig = "{\"points\":10}"
-        };
-
-        repo.AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>()).Returns(ci => (Achievement)ci[0]!);
-
-        mapper.Map<CreateAchievementResponse>(Arg.Any<Achievement>()).Returns(ci =>
-        {
-            var a = (Achievement)ci[0]!;
-            return new CreateAchievementResponse { Id = a.Id, Key = a.Key, Name = a.Name };
-        });
-
-        var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
-        var resp = await sut.Handle(command, CancellationToken.None);
-
-        resp.Key.Should().Be("key");
-        resp.Name.Should().Be("name");
-        await repo.Received(1).AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_InvalidRuleConfigJson_ThrowsValidation()
-    {
-        var repo = Substitute.For<IAchievementRepository>();
-        var mapper = Substitute.For<IMapper>();
-        var validator = new CreateAchievementCommandValidator();
-        var logger = Substitute.For<ILogger<CreateAchievementCommandHandler>>();
-
-        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>()).Returns(false);
-
-        var sut = new CreateAchievementCommandHandler(repo, mapper, validator, logger);
-        var cmd = new CreateAchievementCommand { Key = "k", Name = "n", Description = "d", SourceService = "svc", RuleConfig = "{invalid" };
-
+        var sut = CreateSut(repo, mapper, validator);
+        var cmd = new CreateAchievementCommand { Key = "k", Name = "n", Description = "d", SourceService = "svc" };
         var act = () => sut.Handle(cmd, CancellationToken.None);
-        await Assert.ThrowsAsync<FluentValidation.ValidationException>(act);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.ConflictException>();
+    }
+
+    [Fact]
+    public async Task Handle_RuleConfigArray_ThrowsValidationObject()
+    {
+        var repo = Substitute.For<IAchievementRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var validator = new CreateAchievementCommandValidator();
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var sut = CreateSut(repo, mapper, validator);
+        var cmd = new CreateAchievementCommand { Key = "k", Name = "n", Description = "d", SourceService = "svc", RuleConfig = "[]" };
+        var act = () => sut.Handle(cmd, CancellationToken.None);
+        await act.Should().ThrowAsync<RogueLearn.User.Application.Exceptions.ValidationException>();
+    }
+
+    [Fact]
+    public async Task Handle_Success_CreatesEntityAndMapsResponse()
+    {
+        var repo = Substitute.For<IAchievementRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var validator = new CreateAchievementCommandValidator();
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var created = new Achievement { Id = Guid.NewGuid(), Key = "k", Name = "n", Description = "d", SourceService = "svc" };
+        repo.AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>())
+            .Returns(created);
+        mapper.Map<CreateAchievementResponse>(created).Returns(new CreateAchievementResponse { Id = created.Id, Key = created.Key, Name = created.Name, Description = created.Description, SourceService = created.SourceService });
+
+        var sut = CreateSut(repo, mapper, validator);
+        var cmd = new CreateAchievementCommand { Key = " k ", Name = " n ", Description = " d ", SourceService = " svc ", Version = 1 };
+        var res = await sut.Handle(cmd, CancellationToken.None);
+        res.Id.Should().Be(created.Id);
+        await repo.Received(1).AddAsync(Arg.Is<Achievement>(a => a.Key == "k" && a.Name == "n" && a.Description == "d" && a.SourceService == "svc"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_VersionClampAndNullsHandled()
+    {
+        var repo = Substitute.For<IAchievementRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var validator = new CreateAchievementCommandValidator();
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        repo.AddAsync(Arg.Any<Achievement>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Achievement>());
+        mapper.Map<CreateAchievementResponse>(Arg.Any<Achievement>()).Returns(new CreateAchievementResponse());
+
+        var sut = CreateSut(repo, mapper, validator);
+        var cmd = new CreateAchievementCommand { Key = "x", Name = "y", Description = "z", SourceService = "svc", Version = 1, RuleType = null, RuleConfig = null, Category = null, IconUrl = null };
+        await sut.Handle(cmd, CancellationToken.None);
+        await repo.Received(1).AddAsync(Arg.Is<Achievement>(a => a.Version == 1 && a.RuleType == null && a.RuleConfig == null && a.Category == null && a.IconUrl == null), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_RuleConfigObject_ParsedAndAssigned()
+    {
+        var repo = Substitute.For<IAchievementRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var validator = new CreateAchievementCommandValidator();
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        Achievement? captured = null;
+        repo.AddAsync(Arg.Do<Achievement>(a => captured = a), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Achievement>());
+        mapper.Map<CreateAchievementResponse>(Arg.Any<Achievement>()).Returns(new CreateAchievementResponse());
+
+        var sut = CreateSut(repo, mapper, validator);
+        var cmd = new CreateAchievementCommand { Key = "k", Name = "n", Description = "d", SourceService = "svc", RuleConfig = "{\"points\":10,\"enabled\":true}" };
+        await sut.Handle(cmd, CancellationToken.None);
+
+        captured!.RuleConfig.Should().NotBeNull();
+        captured!.RuleConfig!.Should().ContainKey("points");
+        captured!.RuleConfig!.Should().ContainKey("enabled");
+    }
+
+    [Fact]
+    public async Task Handle_RuleConfigWhitespace_SkipsParsing()
+    {
+        var repo = Substitute.For<IAchievementRepository>();
+        var mapper = Substitute.For<IMapper>();
+        var validator = new CreateAchievementCommandValidator();
+        repo.AnyAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Achievement, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        Achievement? captured = null;
+        repo.AddAsync(Arg.Do<Achievement>(a => captured = a), Arg.Any<CancellationToken>()).Returns(ci => ci.Arg<Achievement>());
+        mapper.Map<CreateAchievementResponse>(Arg.Any<Achievement>()).Returns(new CreateAchievementResponse());
+
+        var sut = CreateSut(repo, mapper, validator);
+        var cmd = new CreateAchievementCommand { Key = "k", Name = "n", Description = "d", SourceService = "svc", RuleConfig = "   " };
+        await sut.Handle(cmd, CancellationToken.None);
+
+        captured!.RuleConfig.Should().BeNull();
     }
 }

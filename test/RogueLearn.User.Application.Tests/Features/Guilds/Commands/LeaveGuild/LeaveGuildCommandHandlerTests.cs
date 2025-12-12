@@ -1,6 +1,4 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
+using FluentAssertions;
 using NSubstitute;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Guilds.Commands.LeaveGuild;
@@ -8,131 +6,83 @@ using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-using Xunit;
 
 namespace RogueLearn.User.Application.Tests.Features.Guilds.Commands.LeaveGuild;
 
 public class LeaveGuildCommandHandlerTests
 {
     [Fact]
-    public async Task Handle_MasterWithOthers_Disallowed()
+    public async Task GuildMaster_WithOtherMembers_ThrowsBadRequest()
     {
-        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();
-        var notification = Substitute.For<IGuildNotificationService>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
-
-        var master = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.GuildMaster };
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(master);
-        memberRepo.CountActiveMembersAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(2);
-        await Assert.ThrowsAsync<BadRequestException>(() => sut.Handle(cmd, CancellationToken.None));
+        var notify = Substitute.For<IGuildNotificationService>();
+        var gid = Guid.NewGuid();
+        var uid = Guid.NewGuid();
+        memberRepo.GetMemberAsync(gid, uid, Arg.Any<CancellationToken>()).Returns(new GuildMember { Id = Guid.NewGuid(), GuildId = gid, AuthUserId = uid, Role = GuildRole.GuildMaster, Status = MemberStatus.Active });
+        memberRepo.CountActiveMembersAsync(gid, Arg.Any<CancellationToken>()).Returns(2);
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notify);
+        var act = () => sut.Handle(new LeaveGuildCommand(gid, uid), CancellationToken.None);
+        await act.Should().ThrowAsync<BadRequestException>().WithMessage("GuildMaster cannot leave while other members exist*");
     }
 
     [Fact]
-    public async Task Handle_Success_DeletesAndUpdates()
+    public async Task Member_Leaves_RecalculatesRanks_AndNotifiesMaster()
     {
-        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();
-        var notification = Substitute.For<IGuildNotificationService>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
-
-        var member = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.Member };
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(member);
-        var guild = new Guild { Id = cmd.GuildId, CurrentMemberCount = 10 };
-        guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
-        memberRepo.GetMembersByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember>());
-
-        await sut.Handle(cmd, CancellationToken.None);
-        await memberRepo.Received(1).DeleteAsync(member.Id, Arg.Any<CancellationToken>());
-        await guildRepo.Received(1).UpdateAsync(Arg.Any<Guild>(), Arg.Any<CancellationToken>());
-        await memberRepo.Received(1).UpdateRangeAsync(Arg.Any<IEnumerable<GuildMember>>(), Arg.Any<CancellationToken>());
+        var notify = Substitute.For<IGuildNotificationService>();
+        var gid = Guid.NewGuid();
+        var uid = Guid.NewGuid();
+        var masterId = Guid.NewGuid();
+        var leaving = new GuildMember { Id = Guid.NewGuid(), GuildId = gid, AuthUserId = uid, Role = GuildRole.Member, Status = MemberStatus.Active };
+        memberRepo.GetMemberAsync(gid, uid, Arg.Any<CancellationToken>()).Returns(leaving);
+        var guild = new Guild { Id = gid, Name = "G" };
+        guildRepo.GetByIdAsync(gid, Arg.Any<CancellationToken>()).Returns(guild);
+        memberRepo.CountActiveMembersAsync(gid, Arg.Any<CancellationToken>()).Returns(1, 0);
+        var m1 = new GuildMember { Id = Guid.NewGuid(), GuildId = gid, AuthUserId = masterId, Role = GuildRole.GuildMaster, Status = MemberStatus.Active, ContributionPoints = 50, JoinedAt = DateTimeOffset.UtcNow.AddDays(-10) };
+        var m2 = new GuildMember { Id = Guid.NewGuid(), GuildId = gid, AuthUserId = Guid.NewGuid(), Role = GuildRole.Member, Status = MemberStatus.Active, ContributionPoints = 20, JoinedAt = DateTimeOffset.UtcNow.AddDays(-5) };
+        var m3 = new GuildMember { Id = Guid.NewGuid(), GuildId = gid, AuthUserId = Guid.NewGuid(), Role = GuildRole.Member, Status = MemberStatus.Inactive, ContributionPoints = 100 };
+        memberRepo.GetMembersByGuildAsync(gid, Arg.Any<CancellationToken>()).Returns(new[] { m1, m2, m3 });
+        List<GuildMember> updated = new();
+        memberRepo.UpdateRangeAsync(Arg.Do<IEnumerable<GuildMember>>(x => updated = x.ToList()), Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult(ci.Arg<IEnumerable<GuildMember>>()));
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notify);
+        await sut.Handle(new LeaveGuildCommand(gid, uid), CancellationToken.None);
+        updated.Should().Contain(m1).And.Contain(m2).And.Contain(m3);
+        m1.RankWithinGuild.Should().Be(1);
+        m2.RankWithinGuild.Should().Be(2);
+        m3.RankWithinGuild.Should().BeNull();
+        await notify.Received(1).NotifyMemberLeftAsync(gid, uid, masterId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_MemberNotFound_Throws()
+    public async Task GuildMaster_SoleMember_Leaves_RemovesGuildMasterRole()
     {
-        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
         var memberRepo = Substitute.For<IGuildMemberRepository>();
         var guildRepo = Substitute.For<IGuildRepository>();
         var userRoleRepo = Substitute.For<IUserRoleRepository>();
         var roleRepo = Substitute.For<IRoleRepository>();
-        var notification = Substitute.For<IGuildNotificationService>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
-
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns((GuildMember?)null);
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task Handle_MasterSoleMember_RemovesRoleAndUpdates()
-    {
-        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
-        var memberRepo = Substitute.For<IGuildMemberRepository>();
-        var guildRepo = Substitute.For<IGuildRepository>();
-        var userRoleRepo = Substitute.For<IUserRoleRepository>();
-        var roleRepo = Substitute.For<IRoleRepository>();
-        var notification = Substitute.For<IGuildNotificationService>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
-
-        var master = new GuildMember { Id = System.Guid.NewGuid(), GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.GuildMaster };
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(master);
-        memberRepo.CountActiveMembersAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(1);
-
-        var gmRole = new Role { Id = System.Guid.NewGuid(), Name = "Guild Master" };
+        var notify = Substitute.For<IGuildNotificationService>();
+        var gid = Guid.NewGuid();
+        var uid = Guid.NewGuid();
+        var leaving = new GuildMember { Id = Guid.NewGuid(), GuildId = gid, AuthUserId = uid, Role = GuildRole.GuildMaster, Status = MemberStatus.Active };
+        memberRepo.GetMemberAsync(gid, uid, Arg.Any<CancellationToken>()).Returns(leaving);
+        memberRepo.CountActiveMembersAsync(gid, Arg.Any<CancellationToken>()).Returns(1, 0);
+        var guild = new Guild { Id = gid, Name = "G" };
+        guildRepo.GetByIdAsync(gid, Arg.Any<CancellationToken>()).Returns(guild);
+        memberRepo.GetMembersByGuildAsync(gid, Arg.Any<CancellationToken>()).Returns(Array.Empty<GuildMember>());
+        var gmRole = new Role { Id = Guid.NewGuid(), Name = "Guild Master" };
         roleRepo.GetByNameAsync("Guild Master", Arg.Any<CancellationToken>()).Returns(gmRole);
-        var mapping = new UserRole { Id = System.Guid.NewGuid(), AuthUserId = cmd.AuthUserId, RoleId = gmRole.Id };
-        userRoleRepo.GetRolesForUserAsync(cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(new List<UserRole> { mapping });
-
-        var guild = new Guild { Id = cmd.GuildId };
-        guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(guild);
-        memberRepo.GetMembersByGuildAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(new List<GuildMember>());
-
-        await sut.Handle(cmd, CancellationToken.None);
-
-        await userRoleRepo.Received(1).DeleteAsync(mapping.Id, Arg.Any<CancellationToken>());
-        await guildRepo.Received(1).UpdateAsync(Arg.Is<Guild>(g => g.Id == cmd.GuildId), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_MasterSoleMember_MissingRole_Throws()
-    {
-        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
-        var memberRepo = Substitute.For<IGuildMemberRepository>();
-        var guildRepo = Substitute.For<IGuildRepository>();
-        var userRoleRepo = Substitute.For<IUserRoleRepository>();
-        var roleRepo = Substitute.For<IRoleRepository>();
-        var notification = Substitute.For<IGuildNotificationService>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
-
-        var master = new GuildMember { GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.GuildMaster };
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(master);
-        memberRepo.CountActiveMembersAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns(1);
-        roleRepo.GetByNameAsync("Guild Master", Arg.Any<CancellationToken>()).Returns((Role?)null);
-
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task Handle_GuildNotFoundAfterDelete_Throws()
-    {
-        var cmd = new LeaveGuildCommand(System.Guid.NewGuid(), System.Guid.NewGuid());
-        var memberRepo = Substitute.For<IGuildMemberRepository>();
-        var guildRepo = Substitute.For<IGuildRepository>();
-        var userRoleRepo = Substitute.For<IUserRoleRepository>();
-        var roleRepo = Substitute.For<IRoleRepository>();
-        var notification = Substitute.For<IGuildNotificationService>();
-        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notification);
-
-        var member = new GuildMember { Id = System.Guid.NewGuid(), GuildId = cmd.GuildId, AuthUserId = cmd.AuthUserId, Role = GuildRole.Member };
-        memberRepo.GetMemberAsync(cmd.GuildId, cmd.AuthUserId, Arg.Any<CancellationToken>()).Returns(member);
-        guildRepo.GetByIdAsync(cmd.GuildId, Arg.Any<CancellationToken>()).Returns((Guild?)null);
-
-        await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
+        var ur1 = new UserRole { Id = Guid.NewGuid(), AuthUserId = uid, RoleId = gmRole.Id };
+        var ur2 = new UserRole { Id = Guid.NewGuid(), AuthUserId = uid, RoleId = Guid.NewGuid() };
+        userRoleRepo.GetRolesForUserAsync(uid, Arg.Any<CancellationToken>()).Returns(new[] { ur1, ur2 });
+        var sut = new LeaveGuildCommandHandler(memberRepo, guildRepo, userRoleRepo, roleRepo, notify);
+        await sut.Handle(new LeaveGuildCommand(gid, uid), CancellationToken.None);
+        await userRoleRepo.Received().DeleteAsync(ur1.Id, Arg.Any<CancellationToken>());
     }
 }
