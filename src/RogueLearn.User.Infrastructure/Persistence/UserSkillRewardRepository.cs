@@ -47,4 +47,19 @@ public class UserSkillRewardRepository : GenericRepository<UserSkillReward>, IUs
 
         return response;
     }
+
+    /// <summary>
+    /// Returns all rewards for a given user and source (e.g., BossFight match result).
+    /// </summary>
+    public async Task<IEnumerable<UserSkillReward>> GetBySourceAllAsync(Guid authUserId, string sourceService, Guid sourceId, CancellationToken cancellationToken = default)
+    {
+        var response = await _supabaseClient
+            .From<UserSkillReward>()
+            .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
+            .Filter("source_service", Operator.Equals, sourceService)
+            .Filter("source_id", Operator.Equals, sourceId.ToString())
+            .Get(cancellationToken);
+
+        return response.Models;
+    }
 }

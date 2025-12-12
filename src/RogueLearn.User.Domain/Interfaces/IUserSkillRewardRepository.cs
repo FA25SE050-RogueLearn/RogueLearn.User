@@ -13,4 +13,9 @@ public interface IUserSkillRewardRepository : IGenericRepository<UserSkillReward
     /// This ensures proper idempotency when a single subject maps to multiple skills.
     /// </summary>
     Task<UserSkillReward?> GetBySourceAndSkillAsync(Guid authUserId, string sourceService, Guid sourceId, Guid skillId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns all rewards for a given user and source (e.g., BossFight match result).
+    /// </summary>
+    Task<IEnumerable<UserSkillReward>> GetBySourceAllAsync(Guid authUserId, string sourceService, Guid sourceId, CancellationToken cancellationToken = default);
 }
