@@ -222,29 +222,47 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         try
         {
             var jsonString = ExtractJsonString(step.Content);
+            _logger.LogInformation("🔍 IsQuizActivity: Checking activity {ActivityId} in step content", activityId);
+
             using var doc = JsonDocument.Parse(jsonString);
 
             var activitiesElement = TryGetActivitiesElement(doc);
-            if (activitiesElement == null) return false;
+            if (activitiesElement == null)
+            {
+                _logger.LogWarning("🔍 IsQuizActivity: No activities element found in step content");
+                return false;
+            }
 
             foreach (var activity in activitiesElement.Value.EnumerateArray())
             {
-                if (activity.ValueKind == JsonValueKind.Object &&
-                    activity.TryGetProperty("activityId", out var idEl) &&
-                    Guid.TryParse(idEl.GetString(), out var id) &&
-                    id == activityId)
+                if (activity.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                // Case-insensitive lookup for activityId
+                var idEl = GetPropertyCaseInsensitive(activity, "activityId");
+                if (idEl == null || !Guid.TryParse(idEl.Value.GetString(), out var id))
+                    continue;
+
+                if (id == activityId)
                 {
-                    if (activity.TryGetProperty("type", out var typeEl))
+                    // Case-insensitive lookup for type
+                    var typeEl = GetPropertyCaseInsensitive(activity, "type");
+                    if (typeEl != null)
                     {
-                        var type = typeEl.GetString();
-                        return string.Equals(type, "Quiz", StringComparison.OrdinalIgnoreCase);
+                        var type = typeEl.Value.GetString();
+                        var isQuiz = string.Equals(type, "Quiz", StringComparison.OrdinalIgnoreCase);
+                        _logger.LogInformation("🔍 IsQuizActivity: Found activity {ActivityId}, Type={Type}, IsQuiz={IsQuiz}",
+                            activityId, type, isQuiz);
+                        return isQuiz;
                     }
                 }
             }
+
+            _logger.LogWarning("🔍 IsQuizActivity: Activity {ActivityId} not found in activities array", activityId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking if activity {ActivityId} is quiz", activityId);
+            _logger.LogError(ex, "🔍 IsQuizActivity: Error checking if activity {ActivityId} is quiz", activityId);
         }
         return false;
     }
@@ -254,6 +272,9 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         try
         {
             var jsonString = ExtractJsonString(step.Content);
+            _logger.LogInformation("📊 CheckIfStepIsComplete: Checking step {StepId}, CompletedActivityIds count: {Count}",
+                step.Id, completedActivityIds.Count);
+
             using var doc = JsonDocument.Parse(jsonString);
 
             var activitiesElement = TryGetActivitiesElement(doc);
@@ -265,9 +286,12 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
                 foreach (var activity in activitiesElement.Value.EnumerateArray())
                 {
-                    if (activity.ValueKind == JsonValueKind.Object &&
-                        activity.TryGetProperty("activityId", out var idElement) &&
-                        Guid.TryParse(idElement.GetString(), out var activityGuid))
+                    if (activity.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    // Case-insensitive lookup for activityId
+                    var idElement = GetPropertyCaseInsensitive(activity, "activityId");
+                    if (idElement != null && Guid.TryParse(idElement.Value.GetString(), out var activityGuid))
                     {
                         if (completedActivityIds.Contains(activityGuid))
                         {
@@ -275,13 +299,42 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                         }
                     }
                 }
-                return matchedCount >= totalActivities;
+
+                var isComplete = matchedCount >= totalActivities;
+                _logger.LogInformation("📊 CheckIfStepIsComplete: Step {StepId} - Matched {Matched}/{Total}, IsComplete={IsComplete}",
+                    step.Id, matchedCount, totalActivities, isComplete);
+
+                return isComplete;
+            }
+            else
+            {
+                _logger.LogWarning("📊 CheckIfStepIsComplete: No activities element found for step {StepId}", step.Id);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking step completion for Step {StepId}", step.Id);
+            _logger.LogError(ex, "📊 CheckIfStepIsComplete: Error checking step completion for Step {StepId}", step.Id);
         }
         return false;
+    }
+
+    /// <summary>
+    /// Gets a property from a JSON element using case-insensitive matching.
+    /// Supports both PascalCase and camelCase property names.
+    /// </summary>
+    private static JsonElement? GetPropertyCaseInsensitive(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        return null;
     }
 }

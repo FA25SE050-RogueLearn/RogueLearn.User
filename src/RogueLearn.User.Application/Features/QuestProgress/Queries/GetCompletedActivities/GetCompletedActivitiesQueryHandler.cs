@@ -141,14 +141,28 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
         var activities = new List<ActivityProgressDto>();
         var completedSet = completedIds.ToHashSet();
 
-        if (content == null) return activities;
+        _logger.LogInformation("📋 ExtractAndMapActivities: Content is {ContentType}, CompletedIds count: {CompletedCount}",
+            content?.GetType().Name ?? "null", completedIds.Length);
+
+        if (content == null)
+        {
+            _logger.LogWarning("📋 ExtractAndMapActivities: Content is NULL, returning empty list");
+            return activities;
+        }
 
         try
         {
             // Robust extraction of JSON string from unknown object type
             var jsonString = ExtractJsonString(content);
 
-            if (string.IsNullOrWhiteSpace(jsonString)) return activities;
+            _logger.LogInformation("📋 ExtractAndMapActivities: JSON string length: {Length}, Preview: {Preview}",
+                jsonString.Length, jsonString.Length > 200 ? jsonString[..200] + "..." : jsonString);
+
+            if (string.IsNullOrWhiteSpace(jsonString))
+            {
+                _logger.LogWarning("📋 ExtractAndMapActivities: JSON string is empty");
+                return activities;
+            }
 
             using (var doc = JsonDocument.Parse(jsonString))
             {
@@ -156,19 +170,29 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
 
                 if (activitiesElement.HasValue)
                 {
+                    var activityCount = 0;
                     foreach (var activityElement in activitiesElement.Value.EnumerateArray())
                     {
-                        var activity = ParseActivityElement(activityElement);
+                        activityCount++;
+                        var activity = ParseActivityElement(activityElement, activityCount);
                         if (activity != null)
                         {
                             activity.IsCompleted = completedSet.Contains(activity.ActivityId);
                             activities.Add(activity);
+                            _logger.LogInformation("📋 Activity {Index}: Id={ActivityId}, Type={Type}, IsCompleted={IsCompleted}",
+                                activityCount, activity.ActivityId, activity.ActivityType, activity.IsCompleted);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("📋 Activity {Index}: Failed to parse activity element", activityCount);
                         }
                     }
+                    _logger.LogInformation("📋 ExtractAndMapActivities: Found {RawCount} elements, parsed {ParsedCount} activities",
+                        activityCount, activities.Count);
                 }
                 else
                 {
-                    _logger.LogWarning("No 'activities' element found in content: {JsonPreview}",
+                    _logger.LogWarning("📋 No 'activities' element found in content: {JsonPreview}",
                         jsonString.Length > 100 ? jsonString[..100] : jsonString);
                 }
             }
@@ -181,51 +205,90 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
         return activities;
     }
 
-    private ActivityProgressDto? ParseActivityElement(JsonElement activityElement)
+    private ActivityProgressDto? ParseActivityElement(JsonElement activityElement, int index)
     {
-        if (activityElement.ValueKind != JsonValueKind.Object) return null;
-
-        if (!activityElement.TryGetProperty("activityId", out var idElement) ||
-            !Guid.TryParse(idElement.GetString(), out var activityId))
+        if (activityElement.ValueKind != JsonValueKind.Object)
         {
+            _logger.LogWarning("📋 ParseActivityElement[{Index}]: Element is not an object, kind={Kind}",
+                index, activityElement.ValueKind);
+            return null;
+        }
+
+        // Log all property names for debugging
+        var propertyNames = string.Join(", ", activityElement.EnumerateObject().Select(p => p.Name));
+        _logger.LogInformation("📋 ParseActivityElement[{Index}]: Properties found: [{Properties}]", index, propertyNames);
+
+        // Case-insensitive lookup for activityId
+        var idElement = GetPropertyCaseInsensitive(activityElement, "activityId");
+        if (idElement == null)
+        {
+            _logger.LogWarning("📋 ParseActivityElement[{Index}]: 'activityId' property not found (case-insensitive)", index);
+            return null;
+        }
+
+        if (!Guid.TryParse(idElement.Value.GetString(), out var activityId))
+        {
+            _logger.LogWarning("📋 ParseActivityElement[{Index}]: Failed to parse activityId: {Value}",
+                index, idElement.Value.GetString());
             return null;
         }
 
         var activity = new ActivityProgressDto { ActivityId = activityId };
 
-        if (activityElement.TryGetProperty("type", out var typeElement))
+        // Case-insensitive lookup for type
+        var typeElement = GetPropertyCaseInsensitive(activityElement, "type");
+        if (typeElement != null)
         {
-            activity.ActivityType = typeElement.GetString() ?? "Unknown";
+            activity.ActivityType = typeElement.Value.GetString() ?? "Unknown";
         }
 
-        if (activityElement.TryGetProperty("payload", out var payloadElement))
+        // Case-insensitive lookup for payload
+        var payloadElement = GetPropertyCaseInsensitive(activityElement, "payload");
+        if (payloadElement != null)
         {
-            if (payloadElement.TryGetProperty("experiencePoints", out var xpElement))
+            var xpElement = GetPropertyCaseInsensitive(payloadElement.Value, "experiencePoints");
+            if (xpElement != null && xpElement.Value.TryGetInt32(out var xp))
             {
-                xpElement.TryGetInt32(out var xp);
                 activity.ExperiencePoints = xp;
             }
 
-            if (payloadElement.TryGetProperty("skillId", out var skillIdElement) &&
-                Guid.TryParse(skillIdElement.GetString(), out var skillId))
+            var skillIdElement = GetPropertyCaseInsensitive(payloadElement.Value, "skillId");
+            if (skillIdElement != null && Guid.TryParse(skillIdElement.Value.GetString(), out var skillId))
             {
                 activity.SkillId = skillId;
             }
 
-            // Get title based on type
+            // Get title based on type (case-insensitive property lookups)
             activity.Title = activity.ActivityType switch
             {
-                "Reading" => payloadElement.TryGetProperty("articleTitle", out var titleEl)
-                    ? titleEl.GetString() : "Reading Activity",
+                "Reading" => GetPropertyCaseInsensitive(payloadElement.Value, "articleTitle")?.GetString() ?? "Reading Activity",
                 "Quiz" => "Quiz",
-                "KnowledgeCheck" => payloadElement.TryGetProperty("topic", out var topicEl)
-                    ? topicEl.GetString() : "Knowledge Check",
-                "Coding" => payloadElement.TryGetProperty("topic", out var codingTopicEl)
-                    ? codingTopicEl.GetString() : "Coding Challenge",
+                "KnowledgeCheck" => GetPropertyCaseInsensitive(payloadElement.Value, "topic")?.GetString() ?? "Knowledge Check",
+                "Coding" => GetPropertyCaseInsensitive(payloadElement.Value, "topic")?.GetString() ?? "Coding Challenge",
                 _ => "Activity"
             };
         }
 
         return activity;
+    }
+
+    /// <summary>
+    /// Gets a property from a JSON element using case-insensitive matching.
+    /// Supports both PascalCase and camelCase property names.
+    /// </summary>
+    private static JsonElement? GetPropertyCaseInsensitive(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        return null;
     }
 }
