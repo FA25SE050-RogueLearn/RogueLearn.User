@@ -203,28 +203,32 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
             {
                 var root = doc.RootElement;
 
-                if (!root.TryGetProperty("activities", out var activitiesElement) ||
-                    activitiesElement.ValueKind != JsonValueKind.Array)
+                // Case-insensitive lookup for "activities" property
+                var activitiesElement = GetPropertyCaseInsensitive(root, "activities");
+                if (activitiesElement == null || activitiesElement.Value.ValueKind != JsonValueKind.Array)
                 {
                     _logger.LogWarning("'activities' property not found or not array for activity {ActivityId}", activityId);
                     return "Unknown";
                 }
 
-                foreach (var activityElement in activitiesElement.EnumerateArray())
+                foreach (var activityElement in activitiesElement.Value.EnumerateArray())
                 {
                     if (activityElement.ValueKind != JsonValueKind.Object)
                         continue;
 
-                    if (!activityElement.TryGetProperty("activityId", out var idElement) ||
-                        !Guid.TryParse(idElement.GetString(), out var id))
+                    // Case-insensitive lookup for "activityId" property
+                    var idElement = GetPropertyCaseInsensitive(activityElement, "activityId");
+                    if (idElement == null || !Guid.TryParse(idElement.Value.GetString(), out var id))
                         continue;
 
                     if (id != activityId)
                         continue;
 
-                    if (activityElement.TryGetProperty("type", out var typeElement))
+                    // Case-insensitive lookup for "type" property
+                    var typeElement = GetPropertyCaseInsensitive(activityElement, "type");
+                    if (typeElement != null)
                     {
-                        var activityType = typeElement.GetString() ?? "Unknown";
+                        var activityType = typeElement.Value.GetString() ?? "Unknown";
                         _logger.LogInformation("Extracted activity type: {Type} for activity {ActivityId}", activityType, activityId);
                         return activityType;
                     }
@@ -244,5 +248,25 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
             _logger.LogError(ex, "Unexpected error extracting activity type for {ActivityId}", activityId);
             return "Unknown";
         }
+    }
+
+    /// <summary>
+    /// Gets a property from a JSON element using case-insensitive matching.
+    /// Supports both PascalCase and camelCase property names.
+    /// </summary>
+    private static JsonElement? GetPropertyCaseInsensitive(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value;
+            }
+        }
+
+        return null;
     }
 }

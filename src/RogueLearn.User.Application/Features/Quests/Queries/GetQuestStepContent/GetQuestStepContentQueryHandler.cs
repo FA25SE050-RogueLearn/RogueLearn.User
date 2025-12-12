@@ -76,19 +76,23 @@ public class GetQuestStepContentQueryHandler : IRequestHandler<GetQuestStepConte
 
             var response = new QuestStepContentResponse();
 
-            if (contentObj.TryGetValue("activities", out var activitiesToken) && activitiesToken is JArray activitiesArray)
+            // FIX: Use GetValue with StringComparison.OrdinalIgnoreCase to handle both "activities" and "Activities"
+            if (contentObj.GetValue("activities", StringComparison.OrdinalIgnoreCase) is JArray activitiesArray)
             {
                 foreach (var activityToken in activitiesArray)
                 {
                     if (activityToken is JObject activityObj)
                     {
+                        // FIX: Use GetValue with StringComparison.OrdinalIgnoreCase for all properties
+                        // This ensures "ActivityId", "activityId", "Type", "type" all work
                         var activity = new QuestStepActivity
                         {
-                            ActivityId = activityObj["activityId"]?.ToString() ?? string.Empty,
-                            Type = activityObj["type"]?.ToString() ?? string.Empty,
-                            SkillId = activityObj["skillId"]?.ToString(),
+                            ActivityId = activityObj.GetValue("activityId", StringComparison.OrdinalIgnoreCase)?.ToString() ?? string.Empty,
+                            Type = activityObj.GetValue("type", StringComparison.OrdinalIgnoreCase)?.ToString() ?? string.Empty,
+                            SkillId = activityObj.GetValue("skillId", StringComparison.OrdinalIgnoreCase)?.ToString(),
+
                             // Convert payload JToken to a Dictionary that serializes properly
-                            Payload = activityObj["payload"]?.ToObject<Dictionary<string, object>>(
+                            Payload = activityObj.GetValue("payload", StringComparison.OrdinalIgnoreCase)?.ToObject<Dictionary<string, object>>(
                                 new NewtonsoftJson.JsonSerializer
                                 {
                                     Converters = { new NestedObjectConverter() }
