@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Linq;
@@ -6,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Supabase.Postgrest.Exceptions;
+using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
+using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.UnityMatches.Commands.SubmitUnityMatchResult;
 
@@ -14,17 +17,23 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
     private readonly IMatchResultRepository _matchResultRepository;
     private readonly IGameSessionRepository _gameSessionRepository;
     private readonly IMatchPlayerSummaryRepository _matchPlayerSummaryRepository;
+    private readonly ISkillRepository _skillRepository;
+    private readonly IMediator _mediator;
     private readonly ILogger<SubmitUnityMatchResultHandler> _logger;
 
     public SubmitUnityMatchResultHandler(
         IMatchResultRepository matchResultRepository,
         IGameSessionRepository gameSessionRepository,
         IMatchPlayerSummaryRepository matchPlayerSummaryRepository,
+        ISkillRepository skillRepository,
+        IMediator mediator,
         ILogger<SubmitUnityMatchResultHandler> logger)
     {
         _matchResultRepository = matchResultRepository;
         _gameSessionRepository = gameSessionRepository;
         _matchPlayerSummaryRepository = matchPlayerSummaryRepository;
+        _skillRepository = skillRepository;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -241,6 +250,8 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
             {
                 await _matchPlayerSummaryRepository.AddRangeAsync(playerSummaries, cancellationToken);
             }
+
+            await AwardSkillXpAsync(savedMatch, command, playerSummaries, cancellationToken);
         }
         catch (Exception summaryEx)
         {
@@ -517,6 +528,108 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
     {
         return node?.DeepClone();
     }
+
+    private async Task AwardSkillXpAsync(MatchResult match, SubmitUnityMatchResultCommand command, List<MatchPlayerSummary> summaries, CancellationToken cancellationToken)
+    {
+        if (summaries.Count == 0) return;
+
+        // Cache skills in-memory for quick lookup by name (case-insensitive)
+        var skills = (await _skillRepository.GetAllAsync(cancellationToken)).ToList();
+        var skillsByName = skills.ToDictionary(s => s.Name.Trim().ToLowerInvariant(), s => s);
+
+        var totalPlayers = Math.Max(command.TotalPlayers, summaries.Count);
+
+        foreach (var summary in summaries)
+        {
+            if (!summary.UserId.HasValue) continue;
+
+            var baseXp = (summary.TotalQuestions * 5) + (summary.CorrectAnswers * 5);
+            var resultFactor = command.Result?.Trim().ToLowerInvariant() == "win" ? 1.15 : 0.9;
+            var teamFactor = 1 + Math.Min(0.05 * Math.Max(totalPlayers - 1, 0), 0.2);
+
+            var totalXp = (int)Math.Round(baseXp * resultFactor * teamFactor, MidpointRounding.AwayFromZero);
+            if (totalXp <= 0) continue;
+
+            var (topics, topicTotalQuestions) = ParseTopics(summary.TopicBreakdownJson);
+            if (topics.Count == 0 || topicTotalQuestions <= 0)
+            {
+                _logger.LogDebug("[Unity Match] No topics mapped for user {UserId} in match {MatchId}; skipping skill XP", summary.UserId, match.MatchId);
+                continue;
+            }
+
+            var topicPortion = (int)Math.Round(totalXp * 0.6, MidpointRounding.AwayFromZero);
+            foreach (var topic in topics)
+            {
+                if (topic.Total <= 0) continue;
+                var share = Math.Clamp((double)topic.Total / topicTotalQuestions, 0, 1);
+                var topicXp = (int)Math.Round(topicPortion * share, MidpointRounding.AwayFromZero);
+                if (topicXp <= 0) continue;
+
+                var key = topic.Topic.Trim().ToLowerInvariant();
+                if (!skillsByName.TryGetValue(key, out var skill))
+                {
+                    _logger.LogDebug("[Unity Match] Topic '{Topic}' has no matching skill; skipping XP award", topic.Topic);
+                    continue;
+                }
+
+                var ingestCmd = new IngestXpEventCommand
+                {
+                    AuthUserId = summary.UserId.Value,
+                    SourceService = "UserService",
+                    SourceType = SkillRewardSourceType.BossFight.ToString(),
+                    SourceId = match.Id,
+                    SkillId = skill.Id,
+                    Points = topicXp,
+                    Reason = $"Boss fight: {topic.Topic}",
+                    OccurredAt = DateTimeOffset.UtcNow
+                };
+
+                try
+                {
+                    await _mediator.Send(ingestCmd, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[Unity Match] Failed to award XP for topic {Topic} skill {Skill} user {UserId}", topic.Topic, skill.Id, summary.UserId);
+                }
+            }
+        }
+    }
+
+    private static (List<TopicRow> Topics, int TotalQuestions) ParseTopics(string? topicJson)
+    {
+        var list = new List<TopicRow>();
+        if (string.IsNullOrWhiteSpace(topicJson)) return (list, 0);
+        try
+        {
+            var arr = JsonNode.Parse(topicJson) as JsonArray;
+            if (arr == null) return (list, 0);
+            foreach (var node in arr.OfType<JsonObject>())
+            {
+                var topic = node["topic"]?.ToString();
+                var total = ParseInt(node["total"]);
+                var correct = ParseInt(node["correct"]);
+                if (string.IsNullOrWhiteSpace(topic)) continue;
+                list.Add(new TopicRow(topic, total, correct));
+            }
+        }
+        catch
+        {
+            // ignore malformed topic breakdown
+        }
+        var totalQuestions = list.Sum(x => x.Total);
+        return (list, totalQuestions);
+    }
+
+    private static int ParseInt(JsonNode? node)
+    {
+        if (node == null) return 0;
+        if (node is JsonValue jv && jv.TryGetValue<int>(out var v)) return v;
+        if (int.TryParse(node.ToString(), out var parsed)) return parsed;
+        return 0;
+    }
+
+    private record TopicRow(string Topic, int Total, int Correct);
 
     private static List<MatchPlayerSummary> ExtractPlayerSummaries(string rawJson, Guid matchResultId, Guid? sessionId, Guid? defaultUserId)
     {

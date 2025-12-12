@@ -31,6 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\RogueLearn.User.Application\RogueLearn.User.Application.csproj" />
     <ProjectReference Include="..\RogueLearn.User.Infrastructure\RogueLearn.User.Infrastructure.csproj" />
   </ItemGroup>
 
