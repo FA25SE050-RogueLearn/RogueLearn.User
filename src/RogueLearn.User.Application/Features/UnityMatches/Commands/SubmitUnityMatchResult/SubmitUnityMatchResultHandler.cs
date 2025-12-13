@@ -18,6 +18,8 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
     private readonly IGameSessionRepository _gameSessionRepository;
     private readonly IMatchPlayerSummaryRepository _matchPlayerSummaryRepository;
     private readonly ISkillRepository _skillRepository;
+    private readonly ISubjectRepository _subjectRepository;
+    private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IMediator _mediator;
     private readonly ILogger<SubmitUnityMatchResultHandler> _logger;
 
@@ -26,6 +28,8 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
         IGameSessionRepository gameSessionRepository,
         IMatchPlayerSummaryRepository matchPlayerSummaryRepository,
         ISkillRepository skillRepository,
+        ISubjectRepository subjectRepository,
+        ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IMediator mediator,
         ILogger<SubmitUnityMatchResultHandler> logger)
     {
@@ -33,6 +37,8 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
         _gameSessionRepository = gameSessionRepository;
         _matchPlayerSummaryRepository = matchPlayerSummaryRepository;
         _skillRepository = skillRepository;
+        _subjectRepository = subjectRepository;
+        _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _mediator = mediator;
         _logger = logger;
     }
@@ -251,7 +257,7 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
                 await _matchPlayerSummaryRepository.AddRangeAsync(playerSummaries, cancellationToken);
             }
 
-            await AwardSkillXpAsync(savedMatch, command, playerSummaries, cancellationToken);
+            await AwardSkillXpAsync(savedMatch, resolvedSession, command, playerSummaries, cancellationToken);
         }
         catch (Exception summaryEx)
         {
@@ -529,13 +535,39 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
         return node?.DeepClone();
     }
 
-    private async Task AwardSkillXpAsync(MatchResult match, SubmitUnityMatchResultCommand command, List<MatchPlayerSummary> summaries, CancellationToken cancellationToken)
+    private async Task AwardSkillXpAsync(
+        MatchResult match,
+        GameSession? linkedSession,
+        SubmitUnityMatchResultCommand command,
+        List<MatchPlayerSummary> summaries,
+        CancellationToken cancellationToken)
     {
         if (summaries.Count == 0) return;
 
-        // Cache skills in-memory for quick lookup by name (case-insensitive)
-        var skills = (await _skillRepository.GetAllAsync(cancellationToken)).ToList();
-        var skillsByName = skills.ToDictionary(s => s.Name.Trim().ToLowerInvariant(), s => s);
+        // Require a subject-bound skill mapping; if missing, we skip XP awards
+        if (linkedSession == null || string.IsNullOrWhiteSpace(linkedSession.Subject))
+        {
+            _logger.LogWarning("[Unity Match] No session/subject context for match {MatchId}; skipping skill XP", match.MatchId);
+            return;
+        }
+
+        var subject = await _subjectRepository.GetByCodeAsync(linkedSession.Subject, cancellationToken);
+        if (subject == null)
+        {
+            _logger.LogWarning("[Unity Match] Subject {Subject} not found for match {MatchId}; skipping skill XP", linkedSession.Subject, match.MatchId);
+            return;
+        }
+
+        var mappings = (await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { subject.Id }, cancellationToken)).ToList();
+        if (!mappings.Any())
+        {
+            _logger.LogInformation("[Unity Match] No skill mappings for subject {Subject} ({SubjectId}); skipping skill XP", linkedSession.Subject, subject.Id);
+            return;
+        }
+
+        var mappedSkillIds = mappings.Select(m => m.SkillId).ToHashSet();
+        var skills = (await _skillRepository.GetAllAsync(cancellationToken)).Where(s => mappedSkillIds.Contains(s.Id)).ToList();
+        var skillsById = skills.ToDictionary(s => s.Id, s => s);
 
         var totalPlayers = Math.Max(command.TotalPlayers, summaries.Count);
 
@@ -550,27 +582,17 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
             var totalXp = (int)Math.Round(baseXp * resultFactor * teamFactor, MidpointRounding.AwayFromZero);
             if (totalXp <= 0) continue;
 
-            var (topics, topicTotalQuestions) = ParseTopics(summary.TopicBreakdownJson);
-            if (topics.Count == 0 || topicTotalQuestions <= 0)
-            {
-                _logger.LogDebug("[Unity Match] No topics mapped for user {UserId} in match {MatchId}; skipping skill XP", summary.UserId, match.MatchId);
-                continue;
-            }
+            // Distribute XP across subject-bound skills using relevance weights
+            var totalWeight = mappings.Sum(m => m.RelevanceWeight);
+            if (totalWeight <= 0) totalWeight = mappings.Count;
 
-            var topicPortion = (int)Math.Round(totalXp * 0.6, MidpointRounding.AwayFromZero);
-            foreach (var topic in topics)
+            foreach (var mapping in mappings)
             {
-                if (topic.Total <= 0) continue;
-                var share = Math.Clamp((double)topic.Total / topicTotalQuestions, 0, 1);
-                var topicXp = (int)Math.Round(topicPortion * share, MidpointRounding.AwayFromZero);
-                if (topicXp <= 0) continue;
+                if (!skillsById.TryGetValue(mapping.SkillId, out var skill)) continue;
 
-                var key = topic.Topic.Trim().ToLowerInvariant();
-                if (!skillsByName.TryGetValue(key, out var skill))
-                {
-                    _logger.LogDebug("[Unity Match] Topic '{Topic}' has no matching skill; skipping XP award", topic.Topic);
-                    continue;
-                }
+                var portion = (double)mapping.RelevanceWeight / (double)totalWeight;
+                var points = (int)Math.Round(totalXp * portion, MidpointRounding.AwayFromZero);
+                if (points <= 0) continue;
 
                 var ingestCmd = new IngestXpEventCommand
                 {
@@ -579,8 +601,8 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
                     SourceType = SkillRewardSourceType.BossFight.ToString(),
                     SourceId = match.Id,
                     SkillId = skill.Id,
-                    Points = topicXp,
-                    Reason = $"Boss fight: {topic.Topic}",
+                    Points = points,
+                    Reason = $"Boss fight: {linkedSession.Subject}",
                     OccurredAt = DateTimeOffset.UtcNow
                 };
 
@@ -590,7 +612,7 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "[Unity Match] Failed to award XP for topic {Topic} skill {Skill} user {UserId}", topic.Topic, skill.Id, summary.UserId);
+                    _logger.LogWarning(ex, "[Unity Match] Failed to award XP for skill {Skill} user {UserId}", skill.Id, summary.UserId);
                 }
             }
         }

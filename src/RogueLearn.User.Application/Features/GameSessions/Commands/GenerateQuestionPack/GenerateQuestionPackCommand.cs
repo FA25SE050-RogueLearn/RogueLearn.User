@@ -45,9 +45,13 @@ namespace RogueLearn.User.Application.Features.GameSessions.Commands.GenerateQue
             var count = request.Count.HasValue ? Math.Clamp(request.Count.Value, 1, 20) : 6;
 
             var syllabusJson = await TryReadSyllabusFromDbAsync(subject);
+            var subjectName = await TryGetSubjectNameAsync(subject);
 
             var packJson = await TryGenerateWithKernelAsync(syllabusJson, subject, topic, difficulty, count, cancellationToken)
                             ?? await BuildPackFromQuestStepsAsync(request.SessionId, subject, topic, difficulty, count, cancellationToken);
+
+            // Ensure the pack always has a meaningful subject/topic (avoids "loading" UI states)
+            packJson = NormalizePackJson(packJson, subject, subjectName);
 
             var packId = ExtractPackId(packJson, request.SessionId.ToString());
 
@@ -69,6 +73,20 @@ namespace RogueLearn.User.Application.Features.GameSessions.Commands.GenerateQue
                 var token = Newtonsoft.Json.Linq.JToken.FromObject(subj.Content);
                 var json = token.ToString(Newtonsoft.Json.Formatting.None);
                 return string.IsNullOrWhiteSpace(json) ? null : json;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task<string?> TryGetSubjectNameAsync(string? subjectCode)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(subjectCode)) return null;
+                var subj = await _subjectRepository.GetByCodeAsync(subjectCode.Trim().ToUpperInvariant());
+                return subj?.SubjectName ?? subj?.SubjectCode;
             }
             catch
             {
@@ -349,6 +367,104 @@ namespace RogueLearn.User.Application.Features.GameSessions.Commands.GenerateQue
             if (!root.TryGetProperty("packId", out var _) || !root.TryGetProperty("questions", out var qs)) return false;
             if (qs.ValueKind != JsonValueKind.Array) return false;
             return true;
+        }
+
+        private static string NormalizePackJson(string rawJson, string subjectCode, string? subjectName)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawJson);
+                var root = doc.RootElement.Clone();
+
+                var fallbackTopic = !string.IsNullOrWhiteSpace(subjectName)
+                    ? subjectName
+                    : (!string.IsNullOrWhiteSpace(subjectCode) ? subjectCode : "General");
+
+                using var output = new MemoryStream();
+                using var writer = new Utf8JsonWriter(output, new JsonWriterOptions { Indented = false });
+
+                void WriteQuestion(JsonElement q)
+                {
+                    writer.WriteStartObject();
+                    foreach (var prop in q.EnumerateObject())
+                    {
+                        if (prop.NameEquals("topic") && string.IsNullOrWhiteSpace(prop.Value.GetString()))
+                        {
+                            writer.WriteString("topic", fallbackTopic);
+                        }
+                        else
+                        {
+                            prop.WriteTo(writer);
+                        }
+                    }
+                    if (!q.TryGetProperty("topic", out var topicVal) || string.IsNullOrWhiteSpace(topicVal.GetString()))
+                    {
+                        writer.WriteString("topic", fallbackTopic);
+                    }
+                    writer.WriteEndObject();
+                }
+
+                if (root.ValueKind != JsonValueKind.Object)
+                {
+                    return rawJson;
+                }
+
+                writer.WriteStartObject();
+
+                foreach (var prop in root.EnumerateObject())
+                {
+                    if (prop.NameEquals("topic"))
+                    {
+                        var t = prop.Value.GetString();
+                        if (string.IsNullOrWhiteSpace(t) || string.Equals(t, "loading", StringComparison.OrdinalIgnoreCase))
+                        {
+                            writer.WriteString("topic", fallbackTopic);
+                        }
+                        else
+                        {
+                            prop.WriteTo(writer);
+                        }
+                    }
+                    else if (prop.NameEquals("subject") && string.IsNullOrWhiteSpace(prop.Value.GetString()))
+                    {
+                        writer.WriteString("subject", subjectCode);
+                    }
+                    else if (prop.NameEquals("questions") && prop.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        writer.WritePropertyName("questions");
+                        writer.WriteStartArray();
+                        foreach (var q in prop.Value.EnumerateArray())
+                        {
+                            WriteQuestion(q);
+                        }
+                        writer.WriteEndArray();
+                    }
+                    else
+                    {
+                        prop.WriteTo(writer);
+                    }
+                }
+
+                // Ensure topic exists at root
+                if (!root.TryGetProperty("topic", out var topicProp) || string.IsNullOrWhiteSpace(topicProp.GetString()))
+                {
+                    writer.WriteString("topic", fallbackTopic);
+                }
+
+                // Ensure subject exists at root
+                if (!root.TryGetProperty("subject", out var subjectProp) || string.IsNullOrWhiteSpace(subjectProp.GetString()))
+                {
+                    writer.WriteString("subject", subjectCode);
+                }
+
+                writer.WriteEndObject();
+                writer.Flush();
+                return Encoding.UTF8.GetString(output.ToArray());
+            }
+            catch
+            {
+                return rawJson;
+            }
         }
     }
 }
