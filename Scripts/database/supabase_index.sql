@@ -31,6 +31,7 @@ CREATE INDEX idx_note_tags_tag_id ON note_tags(tag_id);
 CREATE INDEX idx_user_skills_auth_user_id ON user_skills(auth_user_id);
 CREATE INDEX idx_user_quest_progress_auth_user_id ON user_quest_progress(auth_user_id);
 CREATE INDEX idx_user_quest_progress_quest_id ON user_quest_progress(quest_id);
+CREATE INDEX idx_user_quest_attempts_difficulty ON user_quest_attempts(assigned_difficulty);
 CREATE INDEX idx_skills_name ON skills(name);
 CREATE INDEX idx_skills_domain ON skills(domain);
 CREATE INDEX idx_skill_dependencies_skill_id ON skill_dependencies(skill_id);
@@ -45,6 +46,20 @@ CREATE INDEX idx_user_achievements_auth_user_id ON user_achievements(auth_user_i
 CREATE INDEX idx_user_achievements_achievement_id ON user_achievements(achievement_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS achievements_key_uindex ON achievements (key);
+CREATE INDEX idx_quests_expected_difficulty ON quests(expected_difficulty);
+CREATE INDEX idx_quests_subject_status ON quests(subject_status);
+CREATE INDEX idx_quest_steps_lookup ON quest_steps(quest_id, module_number, difficulty_variant);
+
+-- Game and match indexes
+CREATE INDEX idx_match_results_user_id ON match_results(user_id);
+CREATE INDEX idx_game_sessions_user_id ON game_sessions(user_id);
+CREATE INDEX idx_match_player_summaries_result_id ON match_player_summaries(match_result_id);
+
+-- Subject skill mapping and curriculum mapping indexes
+CREATE INDEX idx_subject_skill_mappings_subject_id ON subject_skill_mappings(subject_id);
+CREATE INDEX idx_subject_skill_mappings_skill_id ON subject_skill_mappings(skill_id);
+CREATE INDEX idx_curriculum_program_subjects_program_id ON curriculum_program_subjects(program_id);
+CREATE INDEX idx_curriculum_program_subjects_subject_id ON curriculum_program_subjects(subject_id);
 
 -- Notification indexes
 CREATE INDEX idx_notifications_auth_user_id ON notifications(auth_user_id);

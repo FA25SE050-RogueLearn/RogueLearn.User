@@ -218,8 +218,6 @@ CREATE TABLE quests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_quests_expected_difficulty ON quests(expected_difficulty);
-CREATE INDEX IF NOT EXISTS idx_quests_subject_status ON quests(subject_status);
 
 CREATE TABLE notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -291,7 +289,10 @@ CREATE TABLE achievements (
     rule_config JSONB,
     category TEXT,
     version INTEGER,
-    is_active BOOLEAN NOT NULL DEFAULT true
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    merit_points_reward INTEGER,
+    contribution_points_reward INTEGER,
+    is_medal BOOLEAN NOT NULL DEFAULT true
 );
 
 CREATE TABLE user_achievements (
@@ -380,7 +381,6 @@ CREATE TABLE quest_steps (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (quest_id, step_number)
 );
-CREATE INDEX IF NOT EXISTS idx_quest_steps_lookup ON quest_steps(quest_id, module_number, difficulty_variant);
 
 CREATE TABLE user_quest_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -399,7 +399,6 @@ CREATE TABLE user_quest_attempts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (auth_user_id, quest_id)
 );
-CREATE INDEX IF NOT EXISTS idx_user_quest_attempts_difficulty ON user_quest_attempts(assigned_difficulty);
 
 CREATE TABLE user_quest_step_progress (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -667,4 +666,63 @@ CREATE TABLE guild_join_requests (
     responded_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '14 days'),
     UNIQUE (guild_id, requester_id)
+);
+
+CREATE TABLE subject_skill_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    relevance_weight DECIMAL(5,2) NOT NULL DEFAULT 1.00,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (subject_id, skill_id)
+);
+
+CREATE TABLE curriculum_program_subjects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    program_id UUID NOT NULL REFERENCES curriculum_programs(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (program_id, subject_id)
+);
+
+CREATE TABLE match_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    match_id TEXT NOT NULL,
+    start_utc TIMESTAMPTZ NOT NULL,
+    end_utc TIMESTAMPTZ NOT NULL,
+    result TEXT NOT NULL,
+    scene TEXT NOT NULL,
+    total_players INTEGER NOT NULL,
+    user_id UUID REFERENCES user_profiles(auth_user_id),
+    match_data TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE game_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL,
+    user_id UUID REFERENCES user_profiles(auth_user_id),
+    relay_join_code TEXT,
+    pack_id TEXT,
+    subject TEXT,
+    topic TEXT,
+    difficulty TEXT,
+    question_pack TEXT,
+    status TEXT NOT NULL DEFAULT 'created',
+    match_result_id UUID REFERENCES match_results(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE match_player_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    match_result_id UUID NOT NULL REFERENCES match_results(id) ON DELETE CASCADE,
+    session_id UUID,
+    user_id UUID REFERENCES user_profiles(auth_user_id),
+    client_id BIGINT,
+    total_questions INTEGER NOT NULL,
+    correct_answers INTEGER NOT NULL,
+    average_time DOUBLE PRECISION,
+    topic_breakdown TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
