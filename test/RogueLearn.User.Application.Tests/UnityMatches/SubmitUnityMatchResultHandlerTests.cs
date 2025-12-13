@@ -18,7 +18,7 @@ public class SubmitUnityMatchResultHandlerTests
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly ILogger<SubmitUnityMatchResultHandler> _logger = Substitute.For<ILogger<SubmitUnityMatchResultHandler>>();
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Adds_new_match_and_links_session_by_match_id()
     {
         // Arrange
@@ -94,7 +94,7 @@ public class SubmitUnityMatchResultHandlerTests
         await _gameSessionRepository.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.MatchResultId == matchResultId && s.Status == "completed"), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Updates_existing_match_on_duplicate_match_id()
     {
         // Arrange

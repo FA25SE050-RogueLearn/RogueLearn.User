@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using Microsoft.Extensions.Logging;
 using RogueLearn.User.Api.Controllers;
 using RogueLearn.User.Application.Features.GameSessions.Commands.CompleteGameSession;
 using RogueLearn.User.Application.Features.UnityMatches.Commands.SubmitUnityMatchResult;
@@ -15,22 +16,10 @@ namespace RogueLearn.User.Api.Tests.Controllers;
 
 public class GameSessionsControllerTests
 {
-    private static GameSessionsController CreateController(
-        IMediator mediator,
-        ISubjectRepository subjectRepository,
-        IMatchResultRepository matchResultRepository,
-        IGameSessionRepository gameSessionRepository,
-        IMatchPlayerSummaryRepository matchPlayerSummaryRepository,
-        IQuestStepRepository questStepRepository)
+    private static GameSessionsController CreateController(IMediator mediator)
     {
-        var controller = new GameSessionsController(
-            mediator,
-            null!,
-            subjectRepository,
-            matchResultRepository,
-            gameSessionRepository,
-            matchPlayerSummaryRepository,
-            questStepRepository);
+        var logger = Substitute.For<ILogger<GameSessionsController>>();
+        var controller = new GameSessionsController(mediator, logger);
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         return controller;
     }

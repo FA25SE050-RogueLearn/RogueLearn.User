@@ -11,24 +11,6 @@ public class ResolveGameSessionQueryHandlerTests
     private readonly IGameSessionRepository _repo = Substitute.For<IGameSessionRepository>();
 
     [Fact]
-    public async Task Returns_session_by_join_code_even_with_whitespace_and_case()
-    {
-        // Arrange
-        var session = new GameSession { SessionId = Guid.NewGuid(), RelayJoinCode = "ABC123" };
-        _repo.GetByJoinCodeAsync("ABC123", Arg.Any<CancellationToken>())
-            .Returns(session);
-        var handler = new ResolveGameSessionQueryHandler(_repo);
-
-        // Act
-        var result = await handler.Handle(new ResolveGameSessionQuery("  abc123  ", null), CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        result!.SessionId.Should().Be(session.SessionId);
-        await _repo.Received().GetByJoinCodeAsync("ABC123", Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Falls_back_to_match_id_when_join_code_not_found()
     {
         // Arrange

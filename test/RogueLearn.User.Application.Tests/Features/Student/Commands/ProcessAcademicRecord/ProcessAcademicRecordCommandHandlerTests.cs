@@ -478,7 +478,7 @@ public class ProcessAcademicRecordCommandHandlerTests
         subjectRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { new Subject { Id = subjId, SubjectCode = "PROZ", Credits = 3, Semester = 1 } });
         var semSubRepo = Substitute.For<IStudentSemesterSubjectRepository>();
         var existing = new StudentSemesterSubject { AuthUserId = authId, SubjectId = subjId, Grade = "6.0", Status = SubjectEnrollmentStatus.Studying, AcademicYear = "2024" };
-        semSubRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentSemesterSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { existing });
+        semSubRepo.GetSemesterSubjectsByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(new List<StudentSemesterSubject> { existing });
         var storage = Substitute.For<ICurriculumImportStorage>();
         var data = new { Subjects = new[] { new { SubjectCode = "PROZ", SubjectName = "Z", Status = "passed", Mark = 8.0, Semester = 1, AcademicYear = "2024" } } };
         storage.TryGetByHashJsonAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(JsonSerializer.Serialize(data));

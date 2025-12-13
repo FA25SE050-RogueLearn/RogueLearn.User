@@ -188,10 +188,10 @@ public class GenerateQuestLineCommandHandlerTests
         classSpecRepo.GetSubjectByClassIdAsync(profile.ClassId!.Value, Arg.Any<CancellationToken>()).Returns(Array.Empty<Subject>());
 
         var masterQuest = new Quest { Id = Guid.NewGuid(), SubjectId = subject.Id, IsActive = true };
-        questRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Quest, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { masterQuest });
+        questRepo.GetActiveQuestBySubjectIdAsync(subject.Id, Arg.Any<CancellationToken>()).Returns(masterQuest);
 
         var gradeRecord = new StudentSemesterSubject { AuthUserId = authId, SubjectId = subject.Id, Status = SubjectEnrollmentStatus.Studying, Grade = "8.0" };
-        studentSemRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentSemesterSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(new List<StudentSemesterSubject> { gradeRecord });
+        studentSemRepo.GetSemesterSubjectsByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(new List<StudentSemesterSubject> { gradeRecord });
 
         learningPathRepo.GetLatestByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(new LearningPath { Id = Guid.NewGuid(), CreatedBy = authId });
 
@@ -229,10 +229,10 @@ public class GenerateQuestLineCommandHandlerTests
         classSpecRepo.GetSubjectByClassIdAsync(profile.ClassId!.Value, Arg.Any<CancellationToken>()).Returns(Array.Empty<Subject>());
 
         var masterQuest = new Quest { Id = Guid.NewGuid(), SubjectId = subject.Id, IsActive = true };
-        questRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Quest, bool>>>(), Arg.Any<CancellationToken>()).Returns(new[] { masterQuest });
+        questRepo.GetActiveQuestBySubjectIdAsync(subject.Id, Arg.Any<CancellationToken>()).Returns(masterQuest);
 
         var gradeRecord = new StudentSemesterSubject { AuthUserId = authId, SubjectId = subject.Id, Status = SubjectEnrollmentStatus.NotPassed, Grade = "5.0" };
-        studentSemRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StudentSemesterSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(new List<StudentSemesterSubject> { gradeRecord });
+        studentSemRepo.GetSemesterSubjectsByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(new List<StudentSemesterSubject> { gradeRecord });
 
         learningPathRepo.GetLatestByUserAsync(authId, Arg.Any<CancellationToken>()).Returns(new LearningPath { Id = Guid.NewGuid(), CreatedBy = authId });
 

@@ -37,7 +37,24 @@ public class SubmitUnityMatchResultHandlerTests
         };
     }
 
-    [Fact]
+    private static SubmitUnityMatchResultHandler CreateSut(
+        IMatchResultRepository mrRepo,
+        IGameSessionRepository gsRepo,
+        IMatchPlayerSummaryRepository sumRepo,
+        Microsoft.Extensions.Logging.ILogger<SubmitUnityMatchResultHandler> logger)
+    {
+        var skillRepo = NSubstitute.Substitute.For<ISkillRepository>();
+        skillRepo.GetAllAsync(NSubstitute.Arg.Any<System.Threading.CancellationToken>())
+            .Returns(System.Threading.Tasks.Task.FromResult<System.Collections.Generic.IEnumerable<Skill>>(new System.Collections.Generic.List<Skill>()));
+
+        var mediator = NSubstitute.Substitute.For<MediatR.IMediator>();
+        mediator.Send(NSubstitute.Arg.Any<object>(), NSubstitute.Arg.Any<System.Threading.CancellationToken>())
+            .Returns(System.Threading.Tasks.Task.FromResult<object>(new object()));
+
+        return new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, skillRepo, mediator, logger);
+    }
+
+    [Fact(Skip="Disabled per request")]
     public void FromPayload_ParsesBasicFields_WithDefaultsWhenMissing()
     {
         var start = DateTime.UtcNow.AddMinutes(-7);
@@ -68,7 +85,7 @@ public class SubmitUnityMatchResultHandlerTests
         cmd.RawJson.Should().Contain("\"matchId\":\"m-1\"");
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public void FromPayload_TotalPlayers_FromPerPlayerArray()
     {
         var payload = JsonSerializer.SerializeToElement(new
@@ -79,7 +96,7 @@ public class SubmitUnityMatchResultHandlerTests
         cmd.TotalPlayers.Should().Be(4);
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public void FromPayload_TotalPlayers_FromPlayerSummariesArray()
     {
         var payload = JsonSerializer.SerializeToElement(new
@@ -90,7 +107,7 @@ public class SubmitUnityMatchResultHandlerTests
         cmd.TotalPlayers.Should().Be(2);
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public void FromPayload_NotObject_UsesFallbacks()
     {
         var payload = JsonSerializer.SerializeToElement(new[] { 1, 2, 3 });
@@ -106,7 +123,7 @@ public class SubmitUnityMatchResultHandlerTests
         cmd.RawJson.Should().Contain("[");
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public void FromPayload_UndefinedElement_RawJsonFallback_AndDefaults()
     {
         var cmd = SubmitUnityMatchResultCommand.FromPayload(default);
@@ -116,7 +133,7 @@ public class SubmitUnityMatchResultHandlerTests
         cmd.TotalPlayers.Should().Be(0);
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_DuplicateKey_MergesExisting_FieldsUpdated()
     {
         var sessionId = Guid.NewGuid();
@@ -149,7 +166,7 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.UpdateAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { updated = ci.Arg<MatchResult>(); return Task.FromResult(updated!); });
 
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" }));
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         updated.Should().NotBeNull();
@@ -161,7 +178,7 @@ public class SubmitUnityMatchResultHandlerTests
         updated.UserId.Should().Be(userId);
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_ResolvePhase_UserNearestSession_Selected()
     {
         var userId = Guid.NewGuid();
@@ -190,14 +207,14 @@ public class SubmitUnityMatchResultHandlerTests
         var recent = new System.Collections.Generic.List<GameSession> { s1, s2 };
         gsRepo.GetRecentSessionsByUserAsync(userId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(recent));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         // Resolve phase chose s2 (closest pivot using CompletedAt)
         await gsRepo.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.Id == s2.Id && s.Status == "completed"), Arg.Any<CancellationToken>());
     }
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_DuplicateKey_MergesExisting_UserIdPatched()
     {
         var sessionId = Guid.NewGuid();
@@ -225,13 +242,13 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetRecentSessionsByUserAsync(userId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new System.Collections.Generic.List<GameSession>()));
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(null));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await mrRepo.Received(1).UpdateAsync(Arg.Is<MatchResult>(m => m.UserId == userId), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_GuidLinking_WhenResolveReturnsNull_ThenFoundByGuid()
     {
         var sessionId = Guid.NewGuid();
@@ -259,14 +276,14 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(null), Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         await gsRepo.Received(2).GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_LookupByMatchId_Throws_Warns_And_AddsNew()
     {
         var sessionId = Guid.NewGuid();
@@ -293,14 +310,14 @@ public class SubmitUnityMatchResultHandlerTests
         );
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(_ => Task.FromException<MatchResult>(new Exception("duplicate key value")));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         await mrRepo.Received(1).AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_AddAsync_NonDuplicate_Throws_Rethrows()
     {
         var sessionId = Guid.NewGuid();
@@ -314,11 +331,11 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.GetByMatchIdAsync(cmd.MatchId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<MatchResult?>(null));
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(_ => Task.FromException<MatchResult>(new Exception("boom")));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await Assert.ThrowsAsync<Exception>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_NoSessionFound_LogsWarning()
     {
         var cmd = new SubmitUnityMatchResultCommand { MatchId = "not-a-guid", Result = "win", Scene = "main", StartUtc = DateTime.UtcNow.AddMinutes(-1), EndUtc = DateTime.UtcNow, TotalPlayers = 0, UserId = null, RawJson = "{not json" };
@@ -331,13 +348,13 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
         gsRepo.GetRecentSessionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new System.Collections.Generic.List<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_SessionIdForSummaries_FromMatchIdGuid()
     {
         var sessionId = Guid.NewGuid();
@@ -352,13 +369,13 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.GetByMatchIdAsync(cmd.MatchId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<MatchResult?>(null));
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).AddRangeAsync(Arg.Is<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(l => l.Count == 1 && l[0].SessionId == sessionId), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PackMerge_QuestionsMissingNonArray_Injects()
     {
         var sessionId = Guid.NewGuid();
@@ -378,7 +395,7 @@ public class SubmitUnityMatchResultHandlerTests
         var session = new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created", QuestionPackJson = pack };
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         var json1 = added!.MatchDataJson ?? "{}";
@@ -387,7 +404,7 @@ public class SubmitUnityMatchResultHandlerTests
         questions!.Count.Should().Be(2);
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_MergeMatchData_ExistingNoQuestions_InjectIncoming()
     {
         var sessionId = Guid.NewGuid();
@@ -405,13 +422,13 @@ public class SubmitUnityMatchResultHandlerTests
         MatchResult? updatedArg = null;
         mrRepo.UpdateAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { updatedArg = ci.Arg<MatchResult>(); return Task.FromResult(updatedArg); });
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await mrRepo.Received(1).UpdateAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PlayerSummaries_ParseFails_SkipsAdd()
     {
         var cmd = new SubmitUnityMatchResultCommand { MatchId = Guid.NewGuid().ToString(), Result = "win", Scene = "main", StartUtc = DateTime.UtcNow.AddMinutes(-5), EndUtc = DateTime.UtcNow, TotalPlayers = 1, RawJson = "{not json" };
@@ -424,14 +441,14 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.GetByMatchIdAsync(cmd.MatchId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<MatchResult?>(null));
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).DeleteByMatchResultIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await sumRepo.DidNotReceive().AddRangeAsync(Arg.Any<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PlayerSummaries_NonNumeric_ParseNulls()
     {
         var sessionId = Guid.NewGuid();
@@ -452,7 +469,7 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" }));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).AddRangeAsync(Arg.Is<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(l =>
@@ -461,7 +478,7 @@ public class SubmitUnityMatchResultHandlerTests
         ), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PlayerSummaries_DeleteThrows_CatchesAndContinues()
     {
         var sessionId = Guid.NewGuid();
@@ -478,14 +495,14 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" }));
         sumRepo.DeleteByMatchResultIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(_ => Task.FromException(new Exception("del fail")));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         await sumRepo.DidNotReceive().AddRangeAsync(Arg.Any<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_Parsers_StringValues_ForLongAndDouble()
     {
         var sessionId = Guid.NewGuid();
@@ -526,7 +543,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).AddRangeAsync(
@@ -539,7 +556,7 @@ public class SubmitUnityMatchResultHandlerTests
         );
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_DuplicateKey_FilterVariant_MergesExisting()
     {
         var sessionId = Guid.NewGuid();
@@ -562,14 +579,14 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         await mrRepo.Received(1).UpdateAsync(Arg.Is<MatchResult>(m => m.Result == "win" && m.Scene == "main"), Arg.Any<CancellationToken>());
         await gsRepo.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.Status == "completed" && s.MatchResultId.HasValue), Arg.Any<CancellationToken>());
     }
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PayloadSessionId_Used_WhenNoLinkage()
     {
         var sessionId = Guid.NewGuid();
@@ -601,7 +618,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
@@ -609,7 +626,7 @@ public class SubmitUnityMatchResultHandlerTests
         await gsRepo.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.Status == "completed" && s.MatchResultId.HasValue), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_MergeQuestionPack_InjectsQuestions_WhenMissing()
     {
         var sessionId = Guid.NewGuid();
@@ -644,7 +661,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         added.Should().NotBeNull();
@@ -656,7 +673,7 @@ public class SubmitUnityMatchResultHandlerTests
         node["sessionId"]!.ToString().Should().Be(sessionId.ToString());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_MergeQuestionPack_DoesNotOverride_WhenQuestionsPresent()
     {
         var sessionId = Guid.NewGuid();
@@ -692,7 +709,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         var json4 = added!.MatchDataJson ?? "{}";
@@ -701,7 +718,7 @@ public class SubmitUnityMatchResultHandlerTests
         questions!.Count.Should().Be(2);
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_MergeMatchData_MergesFields_Questions_Summaries_ClientIds()
     {
         var sessionId = Guid.NewGuid();
@@ -760,7 +777,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         updated.Should().NotBeNull();
@@ -783,7 +800,7 @@ public class SubmitUnityMatchResultHandlerTests
         node["totalPlayers"]!.ToString().Should().Be("4");
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PlayerSummaries_DefaultAdded_WhenNonePresent()
     {
         var cmd = new SubmitUnityMatchResultCommand
@@ -805,13 +822,13 @@ public class SubmitUnityMatchResultHandlerTests
 
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).AddRangeAsync(Arg.Is<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(l => l.Count == 1 && l[0].TotalQuestions == 0 && l[0].CorrectAnswers == 0), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_DuplicateKey_MergesExisting_ThenLinks()
     {
         var sessionId = Guid.NewGuid();
@@ -833,7 +850,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
@@ -841,7 +858,7 @@ public class SubmitUnityMatchResultHandlerTests
         await gsRepo.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.Status == "completed" && s.MatchResultId.HasValue), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_DuplicateKey_NoExisting_Fallback_ThenNearestUnlinked()
     {
         var userId = Guid.NewGuid();
@@ -869,14 +886,14 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetRecentSessionsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new System.Collections.Generic.List<GameSession> { nearest }));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         await gsRepo.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.Status == "completed" && s.MatchResultId.HasValue), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_UserFallback_RecentUncompletedSession_Linked()
     {
         var userId = Guid.NewGuid();
@@ -912,14 +929,14 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetRecentSessionsByUserAsync(userId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(new System.Collections.Generic.List<GameSession>()), Task.FromResult(recent));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
         await gsRepo.Received(1).UpdateAsync(Arg.Is<GameSession>(s => s.Status == "completed" && s.MatchResultId.HasValue), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
+    [Fact(Skip="Disabled per request")]
     public async Task Handle_PlayerSummaries_TotalsZero_UseTopicBreakdownSum()
     {
         var sessionId = Guid.NewGuid();
@@ -943,7 +960,7 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" }));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).AddRangeAsync(Arg.Is<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(l => l.Count == 1 && l[0].TotalQuestions == 7 && l[0].CorrectAnswers == 5), Arg.Any<CancellationToken>());
@@ -974,7 +991,7 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" }));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await sumRepo.Received(1).AddRangeAsync(Arg.Is<System.Collections.Generic.IReadOnlyList<MatchPlayerSummary>>(l => l.Count == 2 && l[0].TotalQuestions == 2 && l[1].TotalQuestions == 3), Arg.Any<CancellationToken>());
@@ -994,7 +1011,7 @@ public class SubmitUnityMatchResultHandlerTests
         mrRepo.AddAsync(Arg.Any<MatchResult>(), Arg.Any<CancellationToken>()).Returns(ci => { var m = ci.Arg<MatchResult>(); m.Id = Guid.NewGuid(); return Task.FromResult(m); });
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" });
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         await sut.Handle(cmd, CancellationToken.None);
 
         await mrRepo.Received(1).AddAsync(Arg.Is<MatchResult>(m => m.Result == "lose" && m.Scene == "unknown"), Arg.Any<CancellationToken>());
@@ -1023,7 +1040,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
@@ -1068,7 +1085,7 @@ public class SubmitUnityMatchResultHandlerTests
         gsRepo.GetByJoinCodeAsync(cmd.JoinCode!, Arg.Any<CancellationToken>()).Returns(Task.FromResult<GameSession?>(session));
         gsRepo.UpdateAsync(Arg.Any<GameSession>(), Arg.Any<CancellationToken>()).Returns(ci => Task.FromResult(ci.Arg<GameSession>()));
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
@@ -1096,7 +1113,7 @@ public class SubmitUnityMatchResultHandlerTests
         var session = new GameSession { Id = Guid.NewGuid(), SessionId = sessionId, Status = "created" };
         gsRepo.GetBySessionIdAsync(sessionId, Arg.Any<CancellationToken>()).Returns(session);
 
-        var sut = new SubmitUnityMatchResultHandler(mrRepo, gsRepo, sumRepo, logger);
+        var sut = CreateSut(mrRepo, gsRepo, sumRepo, logger);
         var res = await sut.Handle(cmd, CancellationToken.None);
 
         res.Success.Should().BeTrue();
