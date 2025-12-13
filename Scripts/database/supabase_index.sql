@@ -1,3 +1,5 @@
+-- Script: Database Indexes
+-- Summary: Performance indexes grouped by domain area
 -- User profile indexes
 CREATE INDEX idx_user_profiles_username ON user_profiles(username);
 CREATE INDEX idx_user_profiles_email ON user_profiles(email);

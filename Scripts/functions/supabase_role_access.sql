@@ -1,3 +1,6 @@
+-- Script: Role Access Helpers
+-- Summary: Lightweight helpers to read roles from JWT and user tables
+-- Section: Role claim helpers
 CREATE OR REPLACE FUNCTION public.jwt_has_role(role_name text) RETURNS boolean AS $$
   SELECT COALESCE((auth.jwt() -> 'roles') ? role_name, false);
 $$ LANGUAGE sql STABLE SECURITY INVOKER;
@@ -11,6 +14,7 @@ CREATE OR REPLACE FUNCTION public.user_has_role(role_name text) RETURNS boolean 
   );
 $$ LANGUAGE sql STABLE SECURITY INVOKER;
 
+-- Section: Role predicates
 CREATE OR REPLACE FUNCTION public.is_game_master() RETURNS boolean AS $$
   SELECT public.jwt_has_role('Game Master');
 $$ LANGUAGE sql STABLE SECURITY INVOKER;

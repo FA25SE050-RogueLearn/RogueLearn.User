@@ -1,11 +1,7 @@
--- =====================================================
--- RogueLearn User Service - Supabase Storage Policies (Roadmap Imports)
--- =====================================================
--- This script creates storage policies for the roadmap-imports bucket
--- to ensure proper access control for roadmap import operations
+-- Script: Storage Policies (Roadmap Imports)
+-- Summary: Private bucket; Game Master read/write/delete
 
--- Create the roadmap-imports bucket if it doesn't exist
--- =====================================================
+-- Bucket creation (idempotent)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'roadmap-imports',
@@ -16,15 +12,12 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Enable RLS on storage objects
--- =====================================================
+-- Enable RLS on objects
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
--- Storage Policies for roadmap-imports bucket
--- =====================================================
+-- Policies
 
--- Policy for SELECT (read) operations
--- Only Game Masters can read from roadmap-imports bucket
+-- Read: Game Masters only
 DROP POLICY IF EXISTS "roadmap_imports_select_policy" ON storage.objects;
 CREATE POLICY "roadmap_imports_select_policy" ON storage.objects
   FOR SELECT 
@@ -34,7 +27,7 @@ CREATE POLICY "roadmap_imports_select_policy" ON storage.objects
     AND public.jwt_has_role('Game Master')
   );
 
--- Policy for INSERT (upload) operations  
+-- Insert: Game Masters only
 DROP POLICY IF EXISTS "roadmap_imports_insert_policy" ON storage.objects;
 CREATE POLICY "roadmap_imports_insert_policy" ON storage.objects
   FOR INSERT 
@@ -44,8 +37,7 @@ CREATE POLICY "roadmap_imports_insert_policy" ON storage.objects
     AND public.jwt_has_role('Game Master')
   );
 
--- Policy for UPDATE operations
--- Only Game Masters can update objects in roadmap-imports bucket
+-- Update: Game Masters only
 DROP POLICY IF EXISTS "roadmap_imports_update_policy" ON storage.objects;
 CREATE POLICY "roadmap_imports_update_policy" ON storage.objects
   FOR UPDATE 
@@ -60,8 +52,7 @@ CREATE POLICY "roadmap_imports_update_policy" ON storage.objects
     AND public.jwt_has_role('Game Master')
   );
 
--- Policy for DELETE operations
--- Only Game Masters can delete objects from roadmap-imports bucket
+-- Delete: Game Masters only
 DROP POLICY IF EXISTS "roadmap_imports_delete_policy" ON storage.objects;
 CREATE POLICY "roadmap_imports_delete_policy" ON storage.objects
   FOR DELETE 
@@ -71,39 +62,15 @@ CREATE POLICY "roadmap_imports_delete_policy" ON storage.objects
     AND public.jwt_has_role('Game Master')
   );
 
--- Grant necessary permissions for storage operations
--- =====================================================
+-- Grants
 
--- Grant usage on storage schema to authenticated users
+-- Schema usage
 GRANT USAGE ON SCHEMA storage TO authenticated;
 
--- Grant select on buckets table to authenticated users (needed for bucket operations)
+-- Buckets read
 GRANT SELECT ON storage.buckets TO authenticated;
 
--- Grant all operations on objects table to authenticated users (RLS will control access)
+-- Objects CRUD (guarded by RLS)
 GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
 
--- =====================================================
--- File Path Structure for roadmap-imports bucket:
--- =====================================================
--- 
--- The following file structure is expected in the roadmap-imports bucket:
---
--- ROADMAP STRUCTURE:
--- /roadmap/_hashes/{rawTextHash}.json                        - Cached roadmap JSON by hash
--- /roadmap/{classSlug}/latest.json                           - Latest roadmap JSON
--- /roadmap/{classSlug}/latest.meta.json                      - Latest roadmap metadata JSON
--- /roadmap/{classSlug}/raw/latest.txt                        - Latest raw text content
--- /roadmap/{classSlug}/versions/{rawTextHash}.json           - Versioned roadmap JSON by hash
--- /roadmap/{classSlug}/attachments/{rawTextHash}.pdf         - Attached PDF file for the import (optional)
---
--- Examples:
--- /roadmap/_hashes/abc123def456.json
--- /roadmap/backend-developer/latest.json
--- /roadmap/backend-developer/latest.meta.json
--- /roadmap/backend-developer/raw/latest.txt
--- /roadmap/backend-developer/versions/abc123def456.json
--- /roadmap/backend-developer/attachments/abc123def456.pdf
---
--- =====================================================
--- End of Roadmap Storage Policies Script
+-- Notes: Path conventions enforced by application code

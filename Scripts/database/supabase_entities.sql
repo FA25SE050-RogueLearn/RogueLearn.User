@@ -1,3 +1,5 @@
+-- Script: Database Entities
+-- Summary: Core tables for users, curriculum, quests, social, and analytics
 CREATE TABLE roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL UNIQUE,

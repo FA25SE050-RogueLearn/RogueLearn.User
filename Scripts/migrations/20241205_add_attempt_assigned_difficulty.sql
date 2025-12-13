@@ -1,3 +1,5 @@
+-- Script: Migration (Attempt Difficulty)
+-- Summary: Add assigned_difficulty to user_quest_attempts
 -- Migration: Add assigned_difficulty to user_quest_attempts
 -- Purpose: Support the "Master Quest" architecture where personalization happens at runtime via filtering.
 -- The difficulty is now a property of the *attempt* (User Context), not the *quest definition* (Shared Content).

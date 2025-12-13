@@ -1,3 +1,5 @@
+-- Script: Custom Access Token Hook
+-- Summary: Adds user's roles to JWT claims for RBAC
 CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -28,6 +30,7 @@ BEGIN
 END;
 $$;
 
+-- Section: Grants and minimal policies for auth admin
 GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
 GRANT EXECUTE ON FUNCTION public.custom_access_token_hook TO supabase_auth_admin;
 REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook FROM authenticated, anon, public;
@@ -44,6 +47,7 @@ AS PERMISSIVE FOR SELECT
 TO supabase_auth_admin
 USING (true);
 
+-- Section: Helper used in RLS to check a required role
 CREATE OR REPLACE FUNCTION public.authorize_role(required_role text)
 RETURNS boolean
 LANGUAGE plpgsql

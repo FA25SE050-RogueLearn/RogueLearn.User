@@ -1,8 +1,5 @@
--- =====================================================
--- RogueLearn User Service - Supabase Storage Policies
--- =====================================================
--- This script creates storage policies for the curriculum-imports bucket
--- to ensure proper access control for curriculum import operations
+-- Script: Storage Policies (Curriculum Imports)
+-- Summary: Private bucket; Game Master read/write/delete
 
 -- Create the curriculum-imports bucket if it doesn't exist
 -- =====================================================
@@ -117,6 +114,4 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
 -- /syllabus/BIT_SE_K17D_K18A/2024/versions/def456ghi789.json
 -- /syllabus/_temp/validation_xyz789/latest.json
 --
--- =====================================================
--- End of Storage Policies Script
--- =====================================================
+-- End

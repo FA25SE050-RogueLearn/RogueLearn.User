@@ -1,3 +1,5 @@
+-- Script: Database Enums
+-- Summary: Enum types used across RogueLearn database schema
 -- User management enums
 CREATE TYPE verification_status AS ENUM ('Pending', 'Approved', 'Rejected');
 CREATE TYPE enrollment_status AS ENUM ('Active', 'Inactive', 'Graduated', 'Dropped', 'Suspended');

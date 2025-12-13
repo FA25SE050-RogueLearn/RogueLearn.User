@@ -1,3 +1,5 @@
+-- Script: Storage Policies (Notes Media)
+-- Summary: Public read; authenticated users manage own folder; Game Master admin
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'notes-media',

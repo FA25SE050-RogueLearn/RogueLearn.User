@@ -1,3 +1,5 @@
+-- Script: Migration (Quest Step Variants)
+-- Summary: Add difficulty_variant and module_number to quest_steps
 -- Migration: Add difficulty_variant and module_number to quest_steps
 -- Purpose: Support "Parallel Steps" architecture. Each logical module (e.g., Week 1) 
 -- will have multiple step records, one for each difficulty variant.

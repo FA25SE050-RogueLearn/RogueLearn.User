@@ -1,3 +1,5 @@
+-- Script: Get Full User Info
+-- Summary: Returns a JSON bundle of profile, relations, and counts
 create or replace function public.get_full_user_info(
   p_auth_user_id uuid,
   p_page_size int,

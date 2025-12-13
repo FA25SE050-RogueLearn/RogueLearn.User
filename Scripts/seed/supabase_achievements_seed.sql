@@ -1,3 +1,5 @@
+-- Script: Seed Achievements
+-- Summary: Inserts predefined achievement records (idempotent by id)
 INSERT INTO public.achievements (
   id, name, description, icon_url, source_service, key, rule_type, rule_config, category, version, is_active, merit_points_reward, contribution_points_reward, is_medal
 ) VALUES 
