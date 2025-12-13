@@ -13,7 +13,16 @@ public class GetMyQuestsWithSubjectsQueryHandlerTests
     {
         var questRepo = Substitute.For<IQuestRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
-        var sut = new GetMyQuestsWithSubjectsQueryHandler(questRepo, subjectRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<GetMyQuestsWithSubjectsQueryHandler>>());
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+        attemptRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<System.Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<UserQuestAttempt>());
+
+        var sut = new GetMyQuestsWithSubjectsQueryHandler(
+            questRepo,
+            subjectRepo,
+            attemptRepo,
+            Substitute.For<Microsoft.Extensions.Logging.ILogger<GetMyQuestsWithSubjectsQueryHandler>>()
+        );
         var res = await sut.Handle(new GetMyQuestsWithSubjectsQuery { AuthUserId = Guid.NewGuid() }, CancellationToken.None);
         res.Should().BeEmpty();
     }
@@ -23,12 +32,37 @@ public class GetMyQuestsWithSubjectsQueryHandlerTests
     {
         var questRepo = Substitute.For<IQuestRepository>();
         var subjectRepo = Substitute.For<ISubjectRepository>();
+        var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
+
         var userId = Guid.NewGuid();
         var subjectId = Guid.NewGuid();
-        questRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Quest> { new Quest { Id = Guid.NewGuid(), CreatedBy = userId, SubjectId = subjectId, Title = "Q", IsActive = true } });
-        subjectRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Subject> { new Subject { Id = subjectId, SubjectName = "S", SubjectCode = "SC", Credits = 3 } });
+        var questId = Guid.NewGuid();
 
-        var sut = new GetMyQuestsWithSubjectsQueryHandler(questRepo, subjectRepo, Substitute.For<Microsoft.Extensions.Logging.ILogger<GetMyQuestsWithSubjectsQueryHandler>>());
+        attemptRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<System.Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<UserQuestAttempt>
+            {
+                new UserQuestAttempt { AuthUserId = userId, QuestId = questId }
+            });
+
+        questRepo.GetByIdsAsync(Arg.Is<IEnumerable<Guid>>(ids => ids.Contains(questId)), Arg.Any<CancellationToken>())
+            .Returns(new List<Quest>
+            {
+                new Quest { Id = questId, CreatedBy = userId, SubjectId = subjectId, Title = "Q", IsActive = true }
+            });
+
+        subjectRepo.GetByIdsAsync(Arg.Is<IEnumerable<Guid>>(ids => ids.Contains(subjectId)), Arg.Any<CancellationToken>())
+            .Returns(new List<Subject>
+            {
+                new Subject { Id = subjectId, SubjectName = "S", SubjectCode = "SC", Credits = 3 }
+            });
+
+        var sut = new GetMyQuestsWithSubjectsQueryHandler(
+            questRepo,
+            subjectRepo,
+            attemptRepo,
+            Substitute.For<Microsoft.Extensions.Logging.ILogger<GetMyQuestsWithSubjectsQueryHandler>>()
+        );
+
         var res = await sut.Handle(new GetMyQuestsWithSubjectsQuery { AuthUserId = userId }, CancellationToken.None);
         res.Should().ContainSingle(x => x.SubjectName == "S" && x.Title == "Q");
     }
