@@ -196,19 +196,30 @@ CREATE TABLE skill_dependencies (
 
 CREATE TABLE quests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    quest_chapter_id UUID REFERENCES quest_chapters(id) ON DELETE SET NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     quest_type quest_type NOT NULL,
     difficulty_level difficulty_level NOT NULL,
     estimated_duration_minutes INTEGER,
     experience_points_reward INTEGER NOT NULL DEFAULT 0,
+    sequence INTEGER,
     skill_tags TEXT[],
     subject_id UUID REFERENCES subjects(id),
+    quest_status quest_status DEFAULT 'NotStarted',
+    is_recommended BOOLEAN NOT NULL DEFAULT FALSE,
+    recommendation_reason TEXT,
+    expected_difficulty personalized_difficulty DEFAULT 'Standard',
+    difficulty_reason TEXT,
+    subject_grade VARCHAR(10),
+    subject_status subject_progress_status,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_by UUID NOT NULL REFERENCES user_profiles(auth_user_id),
+    created_by UUID REFERENCES user_profiles(auth_user_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_quests_expected_difficulty ON quests(expected_difficulty);
+CREATE INDEX IF NOT EXISTS idx_quests_subject_status ON quests(subject_status);
 
 CREATE TABLE notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -220,17 +231,7 @@ CREATE TABLE notes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE note_quests (
-    note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-    quest_id UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE, -- This references quests.id in the Quests Service. No FK constraint.
-    PRIMARY KEY (note_id, quest_id)
-);
-
-CREATE TABLE note_skills (
-    note_id UUID NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-    skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-    PRIMARY KEY (note_id, skill_id)
-);
+ 
 
 CREATE TABLE tags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -369,6 +370,8 @@ CREATE TABLE quest_steps (
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     step_type step_type NOT NULL,
+    difficulty_variant personalized_difficulty DEFAULT 'Standard',
+    module_number INTEGER DEFAULT 1,
     content JSONB,
     validation_criteria JSONB,
     experience_points INTEGER NOT NULL DEFAULT 0,
@@ -377,26 +380,14 @@ CREATE TABLE quest_steps (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (quest_id, step_number)
 );
-
-CREATE TABLE quest_resources (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quest_id UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
-    resource_type resource_type NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    url TEXT,
-    file_path TEXT,
-    metadata JSONB,
-    display_order INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+CREATE INDEX IF NOT EXISTS idx_quest_steps_lookup ON quest_steps(quest_id, module_number, difficulty_variant);
 
 CREATE TABLE user_quest_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     auth_user_id UUID NOT NULL REFERENCES user_profiles(auth_user_id),
     quest_id UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
     status quest_attempt_status NOT NULL DEFAULT 'InProgress',
+    assigned_difficulty personalized_difficulty DEFAULT 'Standard',
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ,
     abandoned_at TIMESTAMPTZ,
@@ -408,6 +399,7 @@ CREATE TABLE user_quest_attempts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (auth_user_id, quest_id)
 );
+CREATE INDEX IF NOT EXISTS idx_user_quest_attempts_difficulty ON user_quest_attempts(assigned_difficulty);
 
 CREATE TABLE user_quest_step_progress (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -442,20 +434,15 @@ CREATE TABLE user_learning_path_progress (
     UNIQUE (auth_user_id, learning_path_id)
 );
 
-CREATE TABLE quest_assessments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quest_id UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
-    assessment_type assessment_type NOT NULL,
-    configuration JSONB NOT NULL,
-    passing_criteria JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 CREATE TABLE quest_submissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES user_profiles(auth_user_id),
+    quest_id UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
+    step_id UUID REFERENCES quest_steps(id) ON DELETE SET NULL,
+    activity_id UUID REFERENCES party_activities(id) ON DELETE SET NULL,
     attempt_id UUID NOT NULL REFERENCES user_quest_attempts(id) ON DELETE CASCADE,
-    submission_data JSONB NOT NULL,
+    submission_data TEXT NOT NULL,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     graded_at TIMESTAMPTZ,
     grade DECIMAL(5,2),
     max_grade DECIMAL(5,2) NOT NULL,
@@ -464,22 +451,6 @@ CREATE TABLE quest_submissions (
     attempt_number INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE quest_analytics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    quest_id UUID NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
-    date_recorded DATE NOT NULL,
-    total_attempts INTEGER NOT NULL DEFAULT 0,
-    successful_completions INTEGER NOT NULL DEFAULT 0,
-    average_completion_time_minutes DECIMAL(10,2),
-    average_attempts_to_complete DECIMAL(5,2),
-    abandonment_rate DECIMAL(5,4),
-    difficulty_rating DECIMAL(3,2),
-    engagement_score DECIMAL(5,2),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (quest_id, date_recorded)
 );
 
 CREATE TABLE parties (
@@ -570,9 +541,9 @@ CREATE TABLE guilds (
     guild_type guild_type NOT NULL,
     max_members INTEGER NOT NULL DEFAULT 100,
     current_member_count INTEGER NOT NULL DEFAULT 1,
-    level INTEGER NOT NULL DEFAULT 1,
-    experience_points INTEGER NOT NULL DEFAULT 0,
+    merit_points INTEGER NOT NULL DEFAULT 0,
     is_public BOOLEAN NOT NULL DEFAULT TRUE,
+    is_lecturer_guild BOOLEAN NOT NULL DEFAULT FALSE,
     requires_approval BOOLEAN NOT NULL DEFAULT FALSE,
     banner_image_url TEXT,
     created_by UUID NOT NULL REFERENCES user_profiles(auth_user_id),

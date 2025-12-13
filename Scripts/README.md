@@ -33,7 +33,7 @@ The RogueLearn platform uses a gamified role system:
 
 #### Academic Data
 - `student_enrollments` - Route (curriculum) enrollments
-- `student_term_subjects` - Subject enrollments per term
+- `student_semester_subjects` - Subject enrollments per term
 - `lecturer_verification_requests` - Lecturer verification applications
 
 #### Reference/System Data

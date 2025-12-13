@@ -49,7 +49,7 @@ subjects as (
     'subjectId', sts.subject_id,
     'subjectCode', s.subject_code,
     'subjectName', s.subject_name,
-    'semester', s.semester,
+    'semester', sts.semester,
     'status', sts.status,
     'grade', sts.grade
   ) order by s.semester nulls last) as data

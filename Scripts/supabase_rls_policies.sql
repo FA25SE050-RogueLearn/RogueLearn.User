@@ -18,7 +18,7 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- Academic tables
 ALTER TABLE student_enrollments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_term_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_semester_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lecturer_verification_requests ENABLE ROW LEVEL SECURITY;
 
 -- System/Reference tables (usually public read)
@@ -36,8 +36,6 @@ ALTER TABLE syllabus_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE class_nodes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE class_specialization_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE note_quests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE note_skills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE note_tags ENABLE ROW LEVEL SECURITY;
 
@@ -335,67 +333,7 @@ CREATE POLICY "note_tags_delete_policy" ON note_tags
     ) OR public.is_game_master()
   );
 
--- NOTE_QUESTS
--- Restrict by owning note; allow select if note is public; Game Masters can override
-DROP POLICY IF EXISTS "note_quests_select_policy" ON note_quests;
-CREATE POLICY "note_quests_select_policy" ON note_quests
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM notes n
-      WHERE n.id = note_id AND (
-        n.is_public = true OR n.auth_user_id = auth.uid()
-      )
-    ) OR public.is_game_master()
-  );
-
-DROP POLICY IF EXISTS "note_quests_insert_policy" ON note_quests;
-CREATE POLICY "note_quests_insert_policy" ON note_quests
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM notes n
-      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
-    ) OR public.is_game_master()
-  );
-
-DROP POLICY IF EXISTS "note_quests_delete_policy" ON note_quests;
-CREATE POLICY "note_quests_delete_policy" ON note_quests
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM notes n
-      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
-    ) OR public.is_game_master()
-  );
-
--- NOTE_SKILLS
--- Restrict by owning note; allow select if note is public; Game Masters can override
-DROP POLICY IF EXISTS "note_skills_select_policy" ON note_skills;
-CREATE POLICY "note_skills_select_policy" ON note_skills
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM notes n
-      WHERE n.id = note_id AND (
-        n.is_public = true OR n.auth_user_id = auth.uid()
-      )
-    ) OR public.is_game_master()
-  );
-
-DROP POLICY IF EXISTS "note_skills_insert_policy" ON note_skills;
-CREATE POLICY "note_skills_insert_policy" ON note_skills
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM notes n
-      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
-    ) OR public.is_game_master()
-  );
-
-DROP POLICY IF EXISTS "note_skills_delete_policy" ON note_skills;
-CREATE POLICY "note_skills_delete_policy" ON note_skills
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM notes n
-      WHERE n.id = note_id AND n.auth_user_id = auth.uid()
-    ) OR public.is_game_master()
-  );
+-- NOTE_QUESTS and NOTE_SKILLS removed (unused)
 
 -- STUDENT ENROLLMENTS
 -- Players can view their own enrollments, Guild Masters and Game Masters can view relevant enrollments
@@ -419,10 +357,10 @@ CREATE POLICY "student_enrollments_update_policy" ON student_enrollments
     auth_user_id = auth.uid() OR public.is_game_master()
   );
 
--- STUDENT TERM SUBJECTS
+-- STUDENT SEMESTER SUBJECTS
 -- Players can view their own subjects, Guild Masters and Game Masters can view relevant subjects
-DROP POLICY IF EXISTS "student_term_subjects_select_policy" ON student_term_subjects;
-CREATE POLICY "student_term_subjects_select_policy" ON student_term_subjects
+DROP POLICY IF EXISTS "student_semester_subjects_select_policy" ON student_semester_subjects;
+CREATE POLICY "student_semester_subjects_select_policy" ON student_semester_subjects
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM student_enrollments se 
@@ -431,8 +369,8 @@ CREATE POLICY "student_term_subjects_select_policy" ON student_term_subjects
     ) OR public.is_game_master() OR public.is_guild_master()
   );
 
-DROP POLICY IF EXISTS "student_term_subjects_insert_policy" ON student_term_subjects;
-CREATE POLICY "student_term_subjects_insert_policy" ON student_term_subjects
+DROP POLICY IF EXISTS "student_semester_subjects_insert_policy" ON student_semester_subjects;
+CREATE POLICY "student_semester_subjects_insert_policy" ON student_semester_subjects
   FOR INSERT WITH CHECK (
     public.is_game_master() OR 
     EXISTS (
@@ -442,8 +380,8 @@ CREATE POLICY "student_term_subjects_insert_policy" ON student_term_subjects
     )
   );
 
-DROP POLICY IF EXISTS "student_term_subjects_update_policy" ON student_term_subjects;
-CREATE POLICY "student_term_subjects_update_policy" ON student_term_subjects
+DROP POLICY IF EXISTS "student_semester_subjects_update_policy" ON student_semester_subjects;
+CREATE POLICY "student_semester_subjects_update_policy" ON student_semester_subjects
   FOR UPDATE USING (
     public.is_game_master() OR public.is_guild_master()
   );
