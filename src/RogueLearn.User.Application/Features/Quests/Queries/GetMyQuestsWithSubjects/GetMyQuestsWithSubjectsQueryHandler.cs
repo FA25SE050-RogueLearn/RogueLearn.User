@@ -8,15 +8,18 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
 {
     private readonly IQuestRepository _questRepository;
     private readonly ISubjectRepository _subjectRepository;
+    private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly ILogger<GetMyQuestsWithSubjectsQueryHandler> _logger;
 
     public GetMyQuestsWithSubjectsQueryHandler(
         IQuestRepository questRepository,
         ISubjectRepository subjectRepository,
+        IUserQuestAttemptRepository attemptRepository,
         ILogger<GetMyQuestsWithSubjectsQueryHandler> logger)
     {
         _questRepository = questRepository;
         _subjectRepository = subjectRepository;
+        _attemptRepository = attemptRepository;
         _logger = logger;
     }
 
@@ -24,23 +27,34 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
     {
         _logger.LogInformation("Fetching quests for user {AuthUserId}", request.AuthUserId);
 
-        var allQuests = await _questRepository.GetAllAsync(cancellationToken);
-        var userQuests = allQuests
-            .Where(q => q.CreatedBy == request.AuthUserId && q.IsActive)
+        var attempts = (await _attemptRepository.FindAsync(a => a.AuthUserId == request.AuthUserId, cancellationToken)).ToList();
+        if (!attempts.Any())
+        {
+            _logger.LogInformation("No quest attempts found for user {AuthUserId}", request.AuthUserId);
+            return new List<MyQuestWithSubjectDto>();
+        }
+
+        var questIds = attempts.Select(a => a.QuestId).Distinct().ToList();
+        var quests = (await _questRepository.GetByIdsAsync(questIds, cancellationToken))
+            .Where(q => q.IsActive)
             .ToList();
 
-        var subjectIds = userQuests
+        if (!quests.Any())
+        {
+            _logger.LogInformation("No active quests found for attempts of user {AuthUserId}", request.AuthUserId);
+            return new List<MyQuestWithSubjectDto>();
+        }
+
+        var subjectIds = quests
             .Where(q => q.SubjectId.HasValue)
             .Select(q => q.SubjectId!.Value)
             .Distinct()
             .ToList();
 
-        var subjects = await _subjectRepository.GetAllAsync(cancellationToken);
-        var subjectMap = subjects
-            .Where(s => subjectIds.Contains(s.Id))
-            .ToDictionary(s => s.Id, s => s);
+        var subjects = await _subjectRepository.GetByIdsAsync(subjectIds, cancellationToken);
+        var subjectMap = subjects.ToDictionary(s => s.Id, s => s);
 
-        var result = userQuests.Select(q =>
+        var result = quests.Select(q =>
         {
             subjectMap.TryGetValue(q.SubjectId ?? Guid.Empty, out var subj);
             return new MyQuestWithSubjectDto
