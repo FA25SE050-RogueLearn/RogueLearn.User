@@ -1,15 +1,7 @@
--- =====================================================
--- RogueLearn User Service - Supabase Storage Policies (Lecturer Verification)
--- =====================================================
--- This script creates a new public storage bucket `lecturer-verification` and
--- enforces access policies so that:
--- - Anyone can read public proof files
--- - Each authenticated user can manage (upload/update/delete) files only inside their own folder `{auth_user_id}/...`
--- - Game Masters can manage all files as administrators
--- =====================================================
+-- Script: Storage Policies (Lecturer Verification)
+-- Summary: Public read; user owns folder; Game Master admin
 
--- Create the lecturer-verification bucket if it doesn't exist
--- =====================================================
+-- Bucket creation (idempotent)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'lecturer-verification',
@@ -20,21 +12,18 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Enable RLS on storage objects (global)
--- =====================================================
+-- Enable RLS on objects
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
--- Grants (RLS will still enforce row-level access)
--- =====================================================
+-- Grants
 GRANT USAGE ON SCHEMA storage TO authenticated, anon;
 GRANT SELECT ON storage.buckets TO authenticated, anon;
 GRANT SELECT ON storage.objects TO authenticated, anon;
 GRANT INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
 
--- Storage Policies for lecturer-verification bucket
--- =====================================================
+-- Policies
 
--- Public Read: allow anyone to read files from lecturer-verification bucket
+-- Read: public
 DROP POLICY IF EXISTS "lecturer_verification_public_read" ON storage.objects;
 CREATE POLICY "lecturer_verification_public_read" ON storage.objects
   FOR SELECT
@@ -42,8 +31,7 @@ CREATE POLICY "lecturer_verification_public_read" ON storage.objects
     bucket_id = 'lecturer-verification'
   );
 
--- Upload: authenticated users can upload to their own folder only
--- Path must start with their auth.uid(), and object owner must be auth.uid()
+-- Insert: authenticated users, own folder only
 DROP POLICY IF EXISTS "lecturer_verification_insert_own_folder" ON storage.objects;
 CREATE POLICY "lecturer_verification_insert_own_folder" ON storage.objects
   FOR INSERT TO authenticated
@@ -58,7 +46,7 @@ CREATE POLICY "lecturer_verification_insert_own_folder" ON storage.objects
     AND COALESCE(storage.extension(name),'') IN ('png','jpg','jpeg','webp','gif','pdf')
   );
 
--- Update: authenticated users can update files inside their own folder, or Game Masters can update any
+-- Update: own folder or Game Master
 DROP POLICY IF EXISTS "lecturer_verification_update_own_or_admin" ON storage.objects;
 CREATE POLICY "lecturer_verification_update_own_or_admin" ON storage.objects
   FOR UPDATE TO authenticated
@@ -90,7 +78,7 @@ CREATE POLICY "lecturer_verification_update_own_or_admin" ON storage.objects
     AND COALESCE(storage.extension(name),'') IN ('png','jpg','jpeg','webp','gif','pdf')
   );
 
--- Delete: authenticated users can delete files inside their own folder, or Game Masters can delete any
+-- Delete: own folder or Game Master
 DROP POLICY IF EXISTS "lecturer_verification_delete_own_or_admin" ON storage.objects;
 CREATE POLICY "lecturer_verification_delete_own_or_admin" ON storage.objects
   FOR DELETE TO authenticated
@@ -108,11 +96,4 @@ CREATE POLICY "lecturer_verification_delete_own_or_admin" ON storage.objects
     )
   );
 
--- =====================================================
--- Recommended File Path Structure for lecturer-verification bucket:
--- =====================================================
--- Each user's files must live under a folder equal to their auth.uid().
--- Proof files will be stored as:
--- /{auth_user_id}/{random-guid}.{ext}
--- Allowed extensions: png, jpg, jpeg, webp, gif, pdf
--- =====================================================
+-- Notes: Allowed extensions enforced in insert/update policies

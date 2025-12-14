@@ -1,10 +1,5 @@
--- Supabase Storage policies for 'achievements' bucket
--- This script will:
--- 1) Create (or update) the public 'achievements' bucket for achievement icon images
--- 2) Enable RLS on storage.objects
--- 3) Allow public read access to objects in the 'achievements' bucket
--- 4) Allow authenticated users to insert/update/delete objects in the 'achievements' bucket
---    (Service role key bypasses RLS and can always perform operations)
+-- Script: Storage Policies (Achievements)
+-- Summary: Public read; authenticated write for achievements bucket
 
 begin;
 
