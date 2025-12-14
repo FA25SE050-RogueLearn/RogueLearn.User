@@ -6,7 +6,8 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IQuestRepository : IGenericRepository<Quest>
 {
-    Task<IEnumerable<Quest>> GetQuestsByChapterIdsAsync(IEnumerable<Guid> chapterIds, CancellationToken cancellationToken = default);
+    // REMOVED: GetQuestsByChapterIdsAsync
+
     Task<IEnumerable<Quest>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
 
     // ADDED: specialized method for safe filtering by subject_id

@@ -2,6 +2,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
+using RogueLearn.User.Application.Services; // Added for IQuestDifficultyResolver
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -12,15 +13,22 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
 {
     private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly IQuestRepository _questRepository;
+    // Added dependencies for JIT difficulty calculation
+    private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
+    private readonly IQuestDifficultyResolver _difficultyResolver;
     private readonly ILogger<StartQuestCommandHandler> _logger;
 
     public StartQuestCommandHandler(
         IUserQuestAttemptRepository attemptRepository,
         IQuestRepository questRepository,
+        IStudentSemesterSubjectRepository studentSubjectRepository,
+        IQuestDifficultyResolver difficultyResolver,
         ILogger<StartQuestCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
         _questRepository = questRepository;
+        _studentSubjectRepository = studentSubjectRepository;
+        _difficultyResolver = difficultyResolver;
         _logger = logger;
     }
 
@@ -52,20 +60,37 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             };
         }
 
-        // 3. Create new attempt
+        // 3. Calculate Personalized Difficulty (Just-In-Time)
+        string assignedDifficulty = "Standard";
+        string? difficultyReason = null;
+
+        if (quest.SubjectId.HasValue)
+        {
+            // Fetch the user's specific grade record for this subject using the helper method
+            // that handles the string-based Guid conversion internally
+            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
+            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
+
+            // Use the resolver logic to determine difficulty (Challenging/Standard/Supportive)
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
+            assignedDifficulty = difficultyInfo.ExpectedDifficulty;
+            difficultyReason = difficultyInfo.DifficultyReason;
+        }
+        else
+        {
+            // Fallback for non-subject quests
+            assignedDifficulty = !string.IsNullOrEmpty(quest.ExpectedDifficulty) ? quest.ExpectedDifficulty : "Standard";
+        }
+
+        // 4. Create new attempt
         var newAttempt = new UserQuestAttempt
         {
             Id = Guid.NewGuid(),
             AuthUserId = request.AuthUserId,
             QuestId = request.QuestId,
             Status = QuestAttemptStatus.InProgress,
-
-            // Use the Quest's expected difficulty (calculated during generation) as the default
-            // If null, fallback to "Standard"
-            AssignedDifficulty = !string.IsNullOrEmpty(quest.ExpectedDifficulty)
-                ? quest.ExpectedDifficulty
-                : "Standard",
-
+            AssignedDifficulty = assignedDifficulty,
+            Notes = difficultyReason,
             StartedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -73,7 +98,7 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
 
         var createdAttempt = await _attemptRepository.AddAsync(newAttempt, cancellationToken);
 
-        _logger.LogInformation("Successfully created attempt {AttemptId} for quest {QuestId} with difficulty {Difficulty}",
+        _logger.LogInformation("Successfully created attempt {AttemptId} for quest {QuestId} with JIT calculated difficulty: {Difficulty}",
             createdAttempt.Id, request.QuestId, createdAttempt.AssignedDifficulty);
 
         return new StartQuestResponse

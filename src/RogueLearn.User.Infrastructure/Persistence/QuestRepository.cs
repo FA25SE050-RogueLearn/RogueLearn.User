@@ -13,21 +13,7 @@ public class QuestRepository : GenericRepository<Quest>, IQuestRepository
     {
     }
 
-    public async Task<IEnumerable<Quest>> GetQuestsByChapterIdsAsync(IEnumerable<Guid> chapterIds, CancellationToken cancellationToken = default)
-    {
-        var chapterIdList = chapterIds.ToList();
-        if (!chapterIdList.Any())
-            return Enumerable.Empty<Quest>();
-
-        // Use the Filter method with "In" operator to work with Supabase's PostgREST API
-        // This translates to: quest_chapter_id=in.(guid1,guid2,...)
-        var response = await _supabaseClient
-            .From<Quest>()
-            .Filter("quest_chapter_id", Operator.In, chapterIdList.Select(id => id.ToString()).ToList())
-            .Get(cancellationToken);
-
-        return response.Models;
-    }
+    // REMOVED: GetQuestsByChapterIdsAsync implementation
 
     public async Task<IEnumerable<Quest>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
     {
@@ -41,7 +27,7 @@ public class QuestRepository : GenericRepository<Quest>, IQuestRepository
 
         return response.Models;
     }
-    // ADDED: Implementation using explicit Filter to avoid LINQ NullReferenceException
+
     public async Task<Quest?> GetActiveQuestBySubjectIdAsync(Guid subjectId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient

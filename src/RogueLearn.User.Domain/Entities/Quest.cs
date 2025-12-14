@@ -10,8 +10,7 @@ namespace RogueLearn.User.Domain.Entities;
 [Table("quests")]
 public class Quest : BaseEntity
 {
-    [Column("quest_chapter_id")]
-    public Guid? QuestChapterId { get; set; }
+    // REMOVED: QuestChapterId
 
     [Column("title")]
     public string Title { get; set; } = string.Empty;
@@ -34,7 +33,7 @@ public class Quest : BaseEntity
     public int ExperiencePointsReward { get; set; } = 0;
 
     [Column("sequence")]
-    public int? Sequence { get; set; } // CHANGED: Made nullable
+    public int? Sequence { get; set; }
 
     [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
@@ -46,7 +45,6 @@ public class Quest : BaseEntity
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
-    // ⭐ UPDATED: Made nullable to support System-created Master Quests
     [Column("created_by")]
     public Guid? CreatedBy { get; set; }
 
@@ -56,7 +54,7 @@ public class Quest : BaseEntity
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     [Column("is_recommended")]
-    public bool IsRecommended { get; set; } = false;  
+    public bool IsRecommended { get; set; } = false;
 
     [Column("recommendation_reason")]
     public string? RecommendationReason { get; set; }
