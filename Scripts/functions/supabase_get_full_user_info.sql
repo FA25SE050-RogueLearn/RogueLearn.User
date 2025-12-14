@@ -54,10 +54,11 @@ subjects as (
     'semester', sts.semester,
     'status', sts.status,
     'grade', sts.grade
-  ) order by s.semester nulls last) as data
+  ) order by sts.semester nulls last) as data
   from student_semester_subjects sts
+  join student_enrollments se on se.id = sts.enrollment_id
   left join subjects s on s.id = sts.subject_id
-  where sts.auth_user_id = p_auth_user_id
+  where se.auth_user_id = p_auth_user_id
 ),
 skills as (
   select jsonb_agg(jsonb_build_object(
