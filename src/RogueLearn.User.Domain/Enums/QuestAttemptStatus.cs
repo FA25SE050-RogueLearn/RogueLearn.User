@@ -5,5 +5,6 @@ public enum QuestAttemptStatus
     InProgress,
     Completed,
     Abandoned,
-    Paused
+    Paused,
+    NotStarted
 }
