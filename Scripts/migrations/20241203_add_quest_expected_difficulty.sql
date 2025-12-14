@@ -1,3 +1,5 @@
+-- Script: Migration (Quests Difficulty & Status)
+-- Summary: Add personalized difficulty and cached subject status to quests
 -- Migration: Add expected_difficulty and difficulty_reason columns to quests table
 -- Purpose: Store per-user quest difficulty based on their academic scores for the related subject
 -- Date: 2024-12-03

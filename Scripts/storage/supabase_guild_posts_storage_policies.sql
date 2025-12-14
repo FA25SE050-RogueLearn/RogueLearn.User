@@ -1,3 +1,5 @@
+-- Script: Storage Policies (Guild Posts)
+-- Summary: Public read; authenticated write for guild-posts bucket
 begin;
 
 insert into storage.buckets (id, name, public)
