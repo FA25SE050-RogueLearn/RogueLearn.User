@@ -7,16 +7,18 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
+using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using Xunit;
 
 namespace RogueLearn.User.Application.Tests.Features.LearningPaths.Queries.GetMyLearningPath;
 
 public class GetMyLearningPathQueryHandlerTests
 {
+    // Removed ILearningPathRepository from parameters as it was removed from the handler
     private static GetMyLearningPathQueryHandler CreateSut(
-        ILearningPathRepository? lpRepo = null,
         IStudentSemesterSubjectRepository? studentRepo = null,
         ISubjectRepository? subjectRepo = null,
         IQuestRepository? questRepo = null,
@@ -24,9 +26,9 @@ public class GetMyLearningPathQueryHandlerTests
         IUserProfileRepository? userRepo = null,
         ICurriculumProgramSubjectRepository? programSubjectRepo = null,
         IClassSpecializationSubjectRepository? classSubjectRepo = null,
+        IQuestDifficultyResolver? difficultyResolver = null,
         ILogger<GetMyLearningPathQueryHandler>? logger = null)
     {
-        lpRepo ??= Substitute.For<ILearningPathRepository>();
         studentRepo ??= Substitute.For<IStudentSemesterSubjectRepository>();
         subjectRepo ??= Substitute.For<ISubjectRepository>();
         questRepo ??= Substitute.For<IQuestRepository>();
@@ -34,8 +36,19 @@ public class GetMyLearningPathQueryHandlerTests
         userRepo ??= Substitute.For<IUserProfileRepository>();
         programSubjectRepo ??= Substitute.For<ICurriculumProgramSubjectRepository>();
         classSubjectRepo ??= Substitute.For<IClassSpecializationSubjectRepository>();
+        difficultyResolver ??= Substitute.For<IQuestDifficultyResolver>();
         logger ??= Substitute.For<ILogger<GetMyLearningPathQueryHandler>>();
-        return new GetMyLearningPathQueryHandler(lpRepo, studentRepo, subjectRepo, questRepo, attemptRepo, userRepo, programSubjectRepo, classSubjectRepo, logger);
+
+        return new GetMyLearningPathQueryHandler(
+            studentRepo,
+            subjectRepo,
+            questRepo,
+            attemptRepo,
+            userRepo,
+            programSubjectRepo,
+            classSubjectRepo,
+            difficultyResolver,
+            logger);
     }
 
     [Fact]
@@ -53,9 +66,12 @@ public class GetMyLearningPathQueryHandlerTests
     public async Task IncompleteAcademicPath_ReturnsUnassignedStub()
     {
         var userRepo = Substitute.For<IUserProfileRepository>();
-        userRepo.GetByAuthIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new UserProfile { AuthUserId = Guid.NewGuid(), RouteId = null, ClassId = null, Username = "u" });
+        userRepo.GetByAuthIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new UserProfile { AuthUserId = Guid.NewGuid(), RouteId = null, ClassId = null, Username = "u", FirstName = "User" });
+
         var sut = CreateSut(userRepo: userRepo);
         var res = await sut.Handle(new GetMyLearningPathQuery { AuthUserId = Guid.NewGuid() }, CancellationToken.None);
+
         res.Should().NotBeNull();
         res!.Name.Should().Be("Unassigned Path");
         res.Chapters.Should().BeEmpty();
@@ -63,20 +79,27 @@ public class GetMyLearningPathQueryHandlerTests
     }
 
     [Fact]
-    public async Task EmptyCurriculum_ReturnsEmptyChapters()
+    public async Task EmptyCurriculum_ReturnsDescriptionForNoSubjects()
     {
         var authId = Guid.NewGuid();
         var userRepo = Substitute.For<IUserProfileRepository>();
-        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(new UserProfile { AuthUserId = authId, RouteId = Guid.NewGuid(), ClassId = Guid.NewGuid(), Username = "u" });
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>())
+            .Returns(new UserProfile { AuthUserId = authId, RouteId = Guid.NewGuid(), ClassId = Guid.NewGuid(), Username = "u", FirstName = "User" });
+
         var programSubjectRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
-        programSubjectRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CurriculumProgramSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(new List<CurriculumProgramSubject>());
+        programSubjectRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CurriculumProgramSubject, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CurriculumProgramSubject>());
+
         var classSubjectRepo = Substitute.For<IClassSpecializationSubjectRepository>();
-        classSubjectRepo.GetSubjectByClassIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(new List<Subject>());
+        classSubjectRepo.GetSubjectByClassIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Subject>());
 
         var sut = CreateSut(userRepo: userRepo, programSubjectRepo: programSubjectRepo, classSubjectRepo: classSubjectRepo);
         var res = await sut.Handle(new GetMyLearningPathQuery { AuthUserId = authId }, CancellationToken.None);
+
         res.Should().NotBeNull();
-        res!.Name.Should().Be("Empty Curriculum");
+        res!.Name.Should().Be("User's Journey");
+        res.Description.Should().Be("No subjects found in your current curriculum.");
         res.Chapters.Should().BeEmpty();
     }
 
@@ -87,13 +110,16 @@ public class GetMyLearningPathQueryHandlerTests
         var routeId = Guid.NewGuid();
         var classId = Guid.NewGuid();
         var userRepo = Substitute.For<IUserProfileRepository>();
-        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(new UserProfile { AuthUserId = authId, RouteId = routeId, ClassId = classId, Username = "user" });
+        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>())
+            .Returns(new UserProfile { AuthUserId = authId, RouteId = routeId, ClassId = classId, Username = "user", FirstName = "My" });
 
         var subj1 = Guid.NewGuid();
         var subj2 = Guid.NewGuid();
+
         var programSubjectRepo = Substitute.For<ICurriculumProgramSubjectRepository>();
         programSubjectRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<CurriculumProgramSubject, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<CurriculumProgramSubject> { new CurriculumProgramSubject { ProgramId = routeId, SubjectId = subj1 } });
+
         var classSubjectRepo = Substitute.For<IClassSpecializationSubjectRepository>();
         classSubjectRepo.GetSubjectByClassIdAsync(classId, Arg.Any<CancellationToken>())
             .Returns(new List<Subject> { new Subject { Id = subj2, Semester = null } });
@@ -111,24 +137,36 @@ public class GetMyLearningPathQueryHandlerTests
 
         var quest1 = new Quest { Id = Guid.NewGuid(), SubjectId = subj1, Title = "Q1", IsActive = true, ExpectedDifficulty = "Hard", DifficultyReason = "sync" };
         var quest2 = new Quest { Id = Guid.NewGuid(), SubjectId = subj2, Title = "Q2", IsActive = true };
+
         var questRepo = Substitute.For<IQuestRepository>();
         questRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Quest> { quest1, quest2 });
 
         var attemptRepo = Substitute.For<IUserQuestAttemptRepository>();
         attemptRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserQuestAttempt, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<UserQuestAttempt> { new UserQuestAttempt { AuthUserId = authId, QuestId = quest1.Id, Status = QuestAttemptStatus.InProgress, AssignedDifficulty = "Expert", Notes = "note" } });
+            .Returns(new List<UserQuestAttempt> {
+                new UserQuestAttempt { AuthUserId = authId, QuestId = quest1.Id, Status = QuestAttemptStatus.InProgress, Notes = "note" }
+            });
 
-        var lpRepo = Substitute.For<ILearningPathRepository>();
-        lpRepo.GetLatestByUserAsync(authId, Arg.Any<CancellationToken>()).Returns((LearningPath?)null);
+        // Mock difficulty resolver
+        var difficultyResolver = Substitute.For<IQuestDifficultyResolver>();
+        difficultyResolver.ResolveDifficulty(Arg.Any<StudentSemesterSubject?>())
+            .Returns(new QuestDifficultyInfo { ExpectedDifficulty = "Standard", DifficultyReason = "Reason" });
 
-        var sut = CreateSut(lpRepo, studentRepo, subjectRepo, questRepo, attemptRepo, userRepo, programSubjectRepo, classSubjectRepo);
+        // Removed the null first argument
+        var sut = CreateSut(studentRepo, subjectRepo, questRepo, attemptRepo, userRepo, programSubjectRepo, classSubjectRepo, difficultyResolver);
+
         var res = await sut.Handle(new GetMyLearningPathQuery { AuthUserId = authId }, CancellationToken.None);
+
         res.Should().NotBeNull();
         res!.Chapters.Should().NotBeEmpty();
         res.Chapters.Select(c => c.Title).Should().Contain(new[] { "Semester 1", "Electives / Unassigned" });
+
+        // Q1 is InProgress, Q2 has no attempt but subject is Passed -> Logic says "Completed"
+        // Total quests = 2. Q2 is completed virtually. Count = 1. Percentage = 50.
         res.CompletionPercentage.Should().Be(50);
-        res.Chapters.SelectMany(c => c.Quests).Should().Contain(q => q.Id == quest1.Id && q.Status == "InProgress" && q.ExpectedDifficulty == "Expert");
-        res.Chapters.SelectMany(c => c.Quests).Should().Contain(q => q.Id == quest2.Id && q.Status == "Completed" && q.ExpectedDifficulty == "Standard");
-        res.Name.Should().Be("My Academic Journey");
+
+        res.Chapters.SelectMany(c => c.Quests).Should().Contain(q => q.Id == quest1.Id && q.Status == "InProgress");
+        res.Chapters.SelectMany(c => c.Quests).Should().Contain(q => q.Id == quest2.Id && q.Status == "Completed");
+        res.Name.Should().Be("My's Journey");
     }
 }
