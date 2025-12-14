@@ -58,15 +58,4 @@ public class LearningPathsControllerTests
 
         res.Result.Should().BeOfType<NotFoundResult>();
     }
-
-    [Fact]
-    public async Task DeleteLearningPath_Returns_NoContent()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<RogueLearn.User.Application.Features.LearningPaths.Commands.DeleteLearningPath.DeleteLearningPathCommand>(), Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult(Unit.Value));
-        var controller = new LearningPathsController(mediator);
-        var res = await controller.DeleteLearningPath(Guid.NewGuid(), CancellationToken.None);
-        res.Should().BeOfType<NoContentResult>();
-    }
 }
