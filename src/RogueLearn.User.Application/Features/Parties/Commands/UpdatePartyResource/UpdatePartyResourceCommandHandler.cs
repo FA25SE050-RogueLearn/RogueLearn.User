@@ -32,11 +32,6 @@ public class UpdatePartyResourceCommandHandler : IRequestHandler<UpdatePartyReso
             throw new ForbiddenException("Actor is not an active party member");
         }
 
-        if (member.Role != PartyRole.Leader && item.SharedByUserId != request.ActorAuthUserId)
-        {
-            throw new ForbiddenException("Only the sharer or party leader may update this resource");
-        }
-
         item.Title = request.Request.Title;
         // Accept JSON data from frontend as-is; repository/DB will handle JSONB serialization
         item.Content = request.Request.Content;

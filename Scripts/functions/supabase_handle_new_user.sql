@@ -4,12 +4,28 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
     student_role_id UUID;
+    base_username TEXT;
+    candidate_username TEXT;
+    suffix INTEGER := 0;
 BEGIN
+    base_username := COALESCE(
+        NULLIF(NEW.raw_user_meta_data->>'username', ''),
+        NULLIF(split_part(NEW.email, '@', 1), ''),
+        'user_' || substr(NEW.id::text, 1, 8)
+    );
+
+    candidate_username := base_username;
+
+    WHILE EXISTS (SELECT 1 FROM public.user_profiles WHERE username = candidate_username) LOOP
+        suffix := suffix + 1;
+        candidate_username := base_username || '_' || suffix;
+    END LOOP;
+
     INSERT INTO public.user_profiles (auth_user_id, email, username, first_name, last_name)
     VALUES (
         NEW.id,
         NEW.email,
-        NEW.raw_user_meta_data->>'username',
+        candidate_username,
         NEW.raw_user_meta_data->>'first_name',
         NEW.raw_user_meta_data->>'last_name'
     );
