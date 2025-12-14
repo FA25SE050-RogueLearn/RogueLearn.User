@@ -4,6 +4,7 @@ using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Services; // Needed for IQuestDifficultyResolver
 using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestProgress;
@@ -11,22 +12,32 @@ namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestProgress;
 public class GetQuestProgressQueryHandler : IRequestHandler<GetQuestProgressQuery, List<QuestStepProgressDto>>
 {
     private readonly IUserQuestAttemptRepository _attemptRepository;
+    private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _stepRepository;
     private readonly IUserQuestStepProgressRepository _progressRepository;
+    // MODIFIED: Added dependencies for dynamic difficulty calculation
+    private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
+    private readonly IQuestDifficultyResolver _difficultyResolver;
 
     public GetQuestProgressQueryHandler(
         IUserQuestAttemptRepository attemptRepository,
+        IQuestRepository questRepository,
         IQuestStepRepository stepRepository,
-        IUserQuestStepProgressRepository progressRepository)
+        IUserQuestStepProgressRepository progressRepository,
+        IStudentSemesterSubjectRepository studentSubjectRepository,
+        IQuestDifficultyResolver difficultyResolver)
     {
         _attemptRepository = attemptRepository;
+        _questRepository = questRepository;
         _stepRepository = stepRepository;
         _progressRepository = progressRepository;
+        _studentSubjectRepository = studentSubjectRepository;
+        _difficultyResolver = difficultyResolver;
     }
 
     public async Task<List<QuestStepProgressDto>> Handle(GetQuestProgressQuery request, CancellationToken cancellationToken)
     {
-        // 1. Get the User's Attempt (Source of Truth for Difficulty)
+        // 1. Get the User's Attempt
         var attempt = await _attemptRepository.FirstOrDefaultAsync(
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
@@ -36,23 +47,35 @@ public class GetQuestProgressQueryHandler : IRequestHandler<GetQuestProgressQuer
             throw new NotFoundException("Quest not started. No progress available.");
         }
 
-        // 2. Get All Master Steps
+        // 2. Resolve Difficulty Dynamically
+        // MODIFIED: Changed from attempt.AssignedDifficulty to dynamic resolution
+        string assignedDifficulty = "Standard";
+        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
+
+        if (quest != null && quest.SubjectId.HasValue)
+        {
+            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
+            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
+
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
+            assignedDifficulty = difficultyInfo.ExpectedDifficulty;
+        }
+
+        // 3. Get All Master Steps
         var allSteps = await _stepRepository.GetByQuestIdAsync(request.QuestId, cancellationToken);
 
-        // 3. Filter Steps by Assigned Difficulty
+        // 4. Filter Steps by Calculated Difficulty
         var userTrackSteps = allSteps
-            .Where(s => string.Equals(s.DifficultyVariant, attempt.AssignedDifficulty, StringComparison.OrdinalIgnoreCase))
+            .Where(s => string.Equals(s.DifficultyVariant, assignedDifficulty, StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.StepNumber)
             .ToList();
 
         if (!userTrackSteps.Any())
         {
-            // Fallback: If for some reason the track is empty (e.g., generation failed for that variant),
-            // maybe fallback to Standard? For now, return empty to indicate error state.
             return new List<QuestStepProgressDto>();
         }
 
-        // 4. Get Existing Progress Records
+        // 5. Get Existing Progress Records
         var progressRecords = await _progressRepository.GetByAttemptIdAsync(attempt.Id, cancellationToken);
         var progressDict = progressRecords.ToDictionary(p => p.StepId);
 

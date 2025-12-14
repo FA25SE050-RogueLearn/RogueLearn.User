@@ -47,29 +47,23 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
 
-        // 3. Just-In-Time Difficulty Calculation logic
-        // We do this if:
-        // A) No attempt exists (Fallback)
-        // B) Attempt exists but is NotStarted (Activation)
+        // 3. Just-In-Time Difficulty Calculation logic (for return value only)
+        // MODIFIED: We calculate this to return it to the UI, but we NO LONGER persist it to the attempt.
         string finalDifficulty = "Standard";
-        string? finalReason = null;
 
-        if (existingAttempt == null || existingAttempt.Status == QuestAttemptStatus.NotStarted)
+        if (quest.SubjectId.HasValue)
         {
-            if (quest.SubjectId.HasValue)
-            {
-                var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
-                var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
+            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
+            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
 
-                var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
-                finalDifficulty = difficultyInfo.ExpectedDifficulty;
-                finalReason = difficultyInfo.DifficultyReason;
-            }
-            else
-            {
-                finalDifficulty = !string.IsNullOrEmpty(quest.ExpectedDifficulty) ? quest.ExpectedDifficulty : "Standard";
-            }
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
+            finalDifficulty = difficultyInfo.ExpectedDifficulty;
         }
+        else
+        {
+            finalDifficulty = !string.IsNullOrEmpty(quest.ExpectedDifficulty) ? quest.ExpectedDifficulty : "Standard";
+        }
+
 
         // 4. Handle State Transitions
         if (existingAttempt != null)
@@ -82,17 +76,17 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
                 {
                     AttemptId = existingAttempt.Id,
                     Status = existingAttempt.Status.ToString(),
-                    AssignedDifficulty = existingAttempt.AssignedDifficulty,
+                    AssignedDifficulty = finalDifficulty, // Dynamic
                     IsNew = false
                 };
             }
 
             // CASE B: Transitioning from NotStarted -> InProgress (Activation)
-            _logger.LogInformation("Activating NotStarted attempt for Quest {QuestId}. Locking in difficulty: {Diff}", request.QuestId, finalDifficulty);
+            _logger.LogInformation("Activating NotStarted attempt for Quest {QuestId}.", request.QuestId);
 
             existingAttempt.Status = QuestAttemptStatus.InProgress;
-            existingAttempt.AssignedDifficulty = finalDifficulty;
-            existingAttempt.Notes = finalReason; // Update reasoning with latest grade info
+            // MODIFIED: Removed assignment of AssignedDifficulty
+            existingAttempt.Notes = $"Started with calculated difficulty: {finalDifficulty}";
             existingAttempt.StartedAt = DateTimeOffset.UtcNow; // Reset start time to actual interaction
             existingAttempt.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -102,21 +96,20 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             {
                 AttemptId = existingAttempt.Id,
                 Status = existingAttempt.Status.ToString(),
-                AssignedDifficulty = existingAttempt.AssignedDifficulty,
+                AssignedDifficulty = finalDifficulty,
                 IsNew = true // Treat as new from UX perspective (it's "Fresh")
             };
         }
 
         // CASE C: No attempt exists (Fallback/Safety)
-        // Ideally GenerateQuestLine created it, but if not, create it now.
         var newAttempt = new UserQuestAttempt
         {
             Id = Guid.NewGuid(),
             AuthUserId = request.AuthUserId,
             QuestId = request.QuestId,
             Status = QuestAttemptStatus.InProgress,
-            AssignedDifficulty = finalDifficulty,
-            Notes = finalReason,
+            // MODIFIED: Removed assignment of AssignedDifficulty
+            Notes = $"Started with calculated difficulty: {finalDifficulty}",
             StartedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -124,14 +117,13 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
 
         var createdAttempt = await _attemptRepository.AddAsync(newAttempt, cancellationToken);
 
-        _logger.LogInformation("Created fresh attempt for Quest {QuestId} with JIT difficulty: {Difficulty}",
-            createdAttempt.Id, createdAttempt.AssignedDifficulty);
+        _logger.LogInformation("Created fresh attempt for Quest {QuestId}", createdAttempt.Id);
 
         return new StartQuestResponse
         {
             AttemptId = createdAttempt.Id,
             Status = createdAttempt.Status.ToString(),
-            AssignedDifficulty = createdAttempt.AssignedDifficulty,
+            AssignedDifficulty = finalDifficulty,
             IsNew = true
         };
     }

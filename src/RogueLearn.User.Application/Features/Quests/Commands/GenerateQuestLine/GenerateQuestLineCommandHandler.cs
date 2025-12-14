@@ -15,7 +15,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
     private readonly ISubjectRepository _subjectRepository;
     private readonly IClassSpecializationSubjectRepository _classSpecializationSubjectRepository;
     private readonly IStudentSemesterSubjectRepository _studentSemesterSubjectRepository;
-    private readonly ILearningPathRepository _learningPathRepository;
+    // REMOVED: ILearningPathRepository dependency (No DB table used)
     private readonly IQuestRepository _questRepository;
     private readonly IUserQuestAttemptRepository _userQuestAttemptRepository;
     private readonly IQuestDifficultyResolver _difficultyResolver;
@@ -26,7 +26,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         ISubjectRepository subjectRepository,
         IClassSpecializationSubjectRepository classSpecializationSubjectRepository,
         IStudentSemesterSubjectRepository studentSemesterSubjectRepository,
-        ILearningPathRepository learningPathRepository,
+        // REMOVED: ILearningPathRepository
         IQuestRepository questRepository,
         IUserQuestAttemptRepository userQuestAttemptRepository,
         IQuestDifficultyResolver difficultyResolver,
@@ -36,7 +36,6 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         _subjectRepository = subjectRepository;
         _classSpecializationSubjectRepository = classSpecializationSubjectRepository;
         _studentSemesterSubjectRepository = studentSemesterSubjectRepository;
-        _learningPathRepository = learningPathRepository;
         _questRepository = questRepository;
         _userQuestAttemptRepository = userQuestAttemptRepository;
         _difficultyResolver = difficultyResolver;
@@ -47,25 +46,16 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
     {
         _logger.LogInformation("Generating quest line for user {AuthUserId}", request.AuthUserId);
 
+        // 1. Validation & Profile Loading
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
         if (userProfile is null) throw new BadRequestException("Invalid User Profile");
         if (userProfile.RouteId is null || userProfile.ClassId is null) throw new BadRequestException("Please select a route and class first.");
 
-        // 1. Get or Create Personal Learning Path (Container)
-        var learningPath = await _learningPathRepository.GetLatestByUserAsync(request.AuthUserId, cancellationToken);
-        if (learningPath == null)
-        {
-            learningPath = new LearningPath
-            {
-                Name = $"{userProfile.Username}'s Path",
-                PathType = PathType.Course,
-                IsPublished = false,
-                CreatedBy = userProfile.AuthUserId
-            };
-            learningPath = await _learningPathRepository.AddAsync(learningPath, cancellationToken);
-        }
+        // NOTE: We no longer create a physical "LearningPath" record in the database.
+        // The path is now a virtual concept derived from the user's Route and Class.
+        // We will return the AuthUserId as the LearningPathId to satisfy the API contract.
 
-        // 2. Identify Target Subjects
+        // 2. Identify Target Subjects (From Route + Class)
         var routeSubjects = await _subjectRepository.GetSubjectsByRoute(userProfile.RouteId.Value, cancellationToken);
         var classSubjects = await _classSpecializationSubjectRepository.GetSubjectByClassIdAsync(userProfile.ClassId.Value, cancellationToken);
 
@@ -78,19 +68,19 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         // 3. Get User's Academic History (Grades) for Difficulty Preview
         var gradeRecords = (await _studentSemesterSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken)).ToList();
 
-        // 4. Process Each Subject -> Link to Master Quest & Create "NotStarted" Attempt
+        // 4. The Core Loop: Link Subjects -> Quests & Assign Difficulty (Gap Analysis)
         foreach (var subject in idealSubjects)
         {
             // A. Find the Master Quest for this subject
             var masterQuest = await _questRepository.GetActiveQuestBySubjectIdAsync(subject.Id, cancellationToken);
 
+            // If admin hasn't generated a quest for this subject yet, skip it.
             if (masterQuest == null)
             {
                 continue;
             }
 
-            // B. Calculate Preview Difficulty
-            // We calculate this now so the UI can display "Recommended: Challenging" even before starting
+            // B. Calculate Personalized Difficulty (The Gap Analysis Logic)
             var gradeRecord = gradeRecords.FirstOrDefault(g => g.SubjectId == subject.Id);
             var difficultyInfo = _difficultyResolver.ResolveDifficulty(gradeRecord);
 
@@ -101,33 +91,33 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
 
             if (existingAttempt == null)
             {
+                // Create new attempt 
+                // MODIFIED: 'AssignedDifficulty' removed. Difficulty is now resolved dynamically at read-time.
                 var newAttempt = new UserQuestAttempt
                 {
                     AuthUserId = request.AuthUserId,
                     QuestId = masterQuest.Id,
-                    // KEY CHANGE: Set status to NotStarted. This ensures it shows up in "My Quests" lists
-                    // but doesn't start the timer or lock in the logic irrevocably.
+                    // IMPORTANT: Set status to NotStarted. This ensures it shows up in "My Quests" lists
+                    // but the timer doesn't start yet.
                     Status = QuestAttemptStatus.NotStarted,
-                    AssignedDifficulty = difficultyInfo.ExpectedDifficulty,
-                    Notes = difficultyInfo.DifficultyReason,
+                    Notes = difficultyInfo.DifficultyReason, // Keep reason for history/debug
                     StartedAt = DateTimeOffset.UtcNow
                 };
                 await _userQuestAttemptRepository.AddAsync(newAttempt, cancellationToken);
-                _logger.LogInformation("Generated NotStarted attempt for Quest {QuestId}. Preview Difficulty: {Diff}", masterQuest.Id, difficultyInfo.ExpectedDifficulty);
+                _logger.LogInformation("Generated NotStarted attempt for Quest {QuestId}.", masterQuest.Id);
             }
             else
             {
-                // If exists but hasn't really started, update the difficulty preview in case grades changed
-                if (existingAttempt.Status == QuestAttemptStatus.NotStarted &&
-                    existingAttempt.AssignedDifficulty != difficultyInfo.ExpectedDifficulty)
+                // If exists but hasn't really started, we can update notes if needed, but logic is lighter now.
+                if (existingAttempt.Status == QuestAttemptStatus.NotStarted)
                 {
-                    existingAttempt.AssignedDifficulty = difficultyInfo.ExpectedDifficulty;
                     existingAttempt.Notes = $"Difficulty updated (Preview): {difficultyInfo.DifficultyReason}";
                     await _userQuestAttemptRepository.UpdateAsync(existingAttempt, cancellationToken);
                 }
             }
         }
 
-        return new GenerateQuestLineResponse { LearningPathId = learningPath.Id };
+        // Return AuthUserId as the virtual LearningPathId
+        return new GenerateQuestLineResponse { LearningPathId = request.AuthUserId };
     }
 }

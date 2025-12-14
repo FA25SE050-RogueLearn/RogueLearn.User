@@ -1,10 +1,11 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestById/GetQuestByIdQueryHandler.cs
 using AutoMapper;
 using MediatR;
-using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById; // Fix namespace resolution
+using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Services; // Needed for IQuestDifficultyResolver
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 
@@ -13,17 +14,24 @@ public class GetQuestByIdQueryHandler : IRequestHandler<GetQuestByIdQuery, Quest
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _questStepRepository;
     private readonly IUserQuestAttemptRepository _userQuestAttemptRepository;
+    // MODIFIED: Added dependencies for dynamic difficulty calculation
+    private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
+    private readonly IQuestDifficultyResolver _difficultyResolver;
     private readonly IMapper _mapper;
 
     public GetQuestByIdQueryHandler(
         IQuestRepository questRepository,
         IQuestStepRepository questStepRepository,
         IUserQuestAttemptRepository userQuestAttemptRepository,
+        IStudentSemesterSubjectRepository studentSubjectRepository,
+        IQuestDifficultyResolver difficultyResolver,
         IMapper mapper)
     {
         _questRepository = questRepository;
         _questStepRepository = questStepRepository;
         _userQuestAttemptRepository = userQuestAttemptRepository;
+        _studentSubjectRepository = studentSubjectRepository;
+        _difficultyResolver = difficultyResolver;
         _mapper = mapper;
     }
 
@@ -32,40 +40,32 @@ public class GetQuestByIdQueryHandler : IRequestHandler<GetQuestByIdQuery, Quest
         var quest = await _questRepository.GetByIdAsync(request.Id, cancellationToken);
         if (quest == null)
         {
-            // MediatR pipeline might expect null or exception. Returning null allows Controller to 404.
             return null!;
         }
 
         // Default difficulty strategy
         string targetDifficulty = "Standard";
 
-        // 1. Determine the difficulty filter based on user context
-        if (request.AuthUserId != Guid.Empty)
+        // 1. Determine the difficulty filter based on user context dynamically
+        if (request.AuthUserId != Guid.Empty && quest.SubjectId.HasValue)
         {
-            // Check if the user has an existing attempt (Active or Completed)
-            // The attempt holds the "AssignedDifficulty" which locks the user to a specific track
-            var attempt = await _userQuestAttemptRepository.FirstOrDefaultAsync(
-                x => x.QuestId == request.Id && x.AuthUserId == request.AuthUserId,
-                cancellationToken);
+            // MODIFIED: Logic changed from reading stored value to dynamic calculation
+            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
+            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
 
-            if (attempt != null && !string.IsNullOrEmpty(attempt.AssignedDifficulty))
-            {
-                targetDifficulty = attempt.AssignedDifficulty;
-            }
-            else if (!string.IsNullOrEmpty(quest.ExpectedDifficulty))
-            {
-                // If no attempt yet, preview the difficulty tailored to their academic history
-                // This 'ExpectedDifficulty' is calculated during GenerateQuestLine
-                targetDifficulty = quest.ExpectedDifficulty;
-            }
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
+            targetDifficulty = difficultyInfo.ExpectedDifficulty;
+        }
+        else if (!string.IsNullOrEmpty(quest.ExpectedDifficulty))
+        {
+            // Fallback to quest default if no user context or subject link
+            targetDifficulty = quest.ExpectedDifficulty;
         }
 
         // 2. Fetch all steps for this Master Quest
         var allSteps = await _questStepRepository.GetByQuestIdAsync(request.Id, cancellationToken);
 
-        // 3. Filter steps to show ONLY the track matching the user's difficulty
-        // The Master Quest contains steps for all 3 variants (Standard, Supportive, Challenging)
-        // We case-insensitive match just to be safe
+        // 3. Filter steps to show ONLY the track matching the calculated difficulty
         var filteredSteps = allSteps
             .Where(s => string.Equals(s.DifficultyVariant, targetDifficulty, StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.StepNumber)

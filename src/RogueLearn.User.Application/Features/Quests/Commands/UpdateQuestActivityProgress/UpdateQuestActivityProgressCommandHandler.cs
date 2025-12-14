@@ -6,7 +6,8 @@ using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent; // Added namespace
+using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
+using RogueLearn.User.Application.Services; // Needed for IQuestDifficultyResolver
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 
@@ -18,7 +19,10 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     private readonly IUserSkillRepository _userSkillRepository;
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IQuestRepository _questRepository;
-    private readonly IMediator _mediator; // Added Mediator
+    private readonly IMediator _mediator;
+    // MODIFIED: Added dependencies for dynamic difficulty calculation
+    private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
+    private readonly IQuestDifficultyResolver _difficultyResolver;
     private readonly ILogger<UpdateQuestActivityProgressCommandHandler> _logger;
 
     public UpdateQuestActivityProgressCommandHandler(
@@ -28,7 +32,9 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         IUserSkillRepository userSkillRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IQuestRepository questRepository,
-        IMediator mediator, // Added Mediator injection
+        IMediator mediator,
+        IStudentSemesterSubjectRepository studentSubjectRepository,
+        IQuestDifficultyResolver difficultyResolver,
         ILogger<UpdateQuestActivityProgressCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
@@ -38,6 +44,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _questRepository = questRepository;
         _mediator = mediator;
+        _studentSubjectRepository = studentSubjectRepository;
+        _difficultyResolver = difficultyResolver;
         _logger = logger;
     }
 
@@ -61,10 +69,26 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             throw new NotFoundException("Quest not started. Please start the quest before tracking progress.");
         }
 
-        // 3. Verify Track Match
-        if (!string.Equals(step.DifficultyVariant, attempt.AssignedDifficulty, StringComparison.OrdinalIgnoreCase))
+        // 3. Resolve Difficulty Dynamically (Replaces attempt.AssignedDifficulty)
+        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
+        string calculatedDifficulty = "Standard";
+
+        if (quest != null && quest.SubjectId.HasValue)
         {
-            _logger.LogWarning("Difficulty mismatch: Step is {StepVar}, User is {UserVar}.", step.DifficultyVariant, attempt.AssignedDifficulty);
+            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
+            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
+            calculatedDifficulty = difficultyInfo.ExpectedDifficulty;
+        }
+        else if (quest != null && !string.IsNullOrEmpty(quest.ExpectedDifficulty))
+        {
+            calculatedDifficulty = quest.ExpectedDifficulty;
+        }
+
+        // Verify Track Match using calculated difficulty
+        if (!string.Equals(step.DifficultyVariant, calculatedDifficulty, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Difficulty mismatch: Step is {StepVar}, User Calculated is {UserVar}. User might be accessing a different track than assigned.", step.DifficultyVariant, calculatedDifficulty);
         }
 
         // 4. Get or Create Step Progress (In Memory)
@@ -120,8 +144,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
                 // --- NEW: DISTRIBUTE XP TO USER PROFILE & SKILLS ---
                 // We assume the quest is linked to a Subject, which is linked to Skills.
-                // If the Quest has a SubjectId, we fetch related skills to award XP.
-                var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
                 if (quest != null && quest.SubjectId.HasValue)
                 {
                     // Fetch skill mappings for this subject
@@ -131,11 +153,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                     if (skillMappings.Any())
                     {
                         // Distribute the step's XP across the skills based on relevance weight
-                        // Logic matches GradeExperienceCalculator but for quest XP
                         int totalXpToDistribute = step.ExperiencePoints;
 
-                        // Simple distribution: Award the full step XP to *each* relevant skill, 
-                        // weighted by relevance. (e.g. 100 XP step * 0.8 weight = 80 XP to Skill A)
                         foreach (var mapping in skillMappings)
                         {
                             int pointsForSkill = (int)(totalXpToDistribute * mapping.RelevanceWeight);

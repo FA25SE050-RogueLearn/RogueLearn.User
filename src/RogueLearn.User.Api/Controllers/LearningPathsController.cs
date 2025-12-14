@@ -3,7 +3,6 @@ using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using RogueLearn.User.Application.Features.LearningPaths.Commands.DeleteLearningPath;
 using RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
 using RogueLearn.User.Api.Attributes;
 
@@ -41,17 +40,4 @@ public class LearningPathsController : ControllerBase
     // MODIFICATION: The 'AnalyzeLearningGap' endpoint has been removed.
 
     // MODIFICATION: The 'ForgeLearningPath' endpoint has been removed.
-
-    /// <summary>
-    /// Admin-only: Deletes a learning path by its ID, including related quest chapters and quests.
-    /// </summary>
-    [HttpDelete("~/api/admin/learning-paths/{id}")]
-    [AdminOnly]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteLearningPath(Guid id, CancellationToken cancellationToken)
-    {
-        await _mediator.Send(new DeleteLearningPathCommand { Id = id }, cancellationToken);
-        return NoContent();
-    }
 }

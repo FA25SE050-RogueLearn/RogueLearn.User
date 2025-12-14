@@ -25,7 +25,6 @@ public class GetAcademicStatusQueryHandler : IRequestHandler<GetAcademicStatusQu
         _semesterSubjectRepository = semesterSubjectRepository;
         _subjectRepository = subjectRepository;
         _classRepository = classRepository;
-
         _logger = logger;
     }
 
@@ -51,6 +50,8 @@ public class GetAcademicStatusQueryHandler : IRequestHandler<GetAcademicStatusQu
         var response = new GetAcademicStatusResponse
         {
             EnrollmentId = enrollment.Id,
+            // VIRTUAL ID: Use UserID
+            LearningPathId = request.AuthUserId
         };
 
         // Calculate GPA and subject counts
@@ -75,7 +76,6 @@ public class GetAcademicStatusQueryHandler : IRequestHandler<GetAcademicStatusQu
             response.CurrentGpa = totalCredits > 0 ? Math.Round(totalWeightedGrade / totalCredits, 2) : 0;
         }
 
-        // Build response...
         return response;
     }
 }

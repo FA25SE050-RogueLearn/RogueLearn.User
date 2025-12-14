@@ -1,3 +1,4 @@
+// RogueLearn.User/src/RogueLearn.User.Domain/Entities/UserQuestAttempt.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -40,10 +41,8 @@ public class UserQuestAttempt : BaseEntity
     [Column("notes")]
     public string? Notes { get; set; }
 
-    // ADDED: The personalized difficulty assigned to this specific attempt.
-    // Used by the API to filter the Master Quest content at runtime.
-    [Column("assigned_difficulty")]
-    public string AssignedDifficulty { get; set; } = "Standard";
+    // REMOVED: AssignedDifficulty column. 
+    // Difficulty is now dynamically calculated based on StudentSemesterSubject grades via QuestDifficultyResolver.
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

@@ -25,6 +25,7 @@
 
 	<ItemGroup>
 		<Folder Include="Features\CurriculumImport\Prompts\" />
+		<Folder Include="Features\LearningPaths\Commands\" />
 	</ItemGroup>
 
 	<!-- MODIFICATION START: Instruct the build system to copy prompt files -->

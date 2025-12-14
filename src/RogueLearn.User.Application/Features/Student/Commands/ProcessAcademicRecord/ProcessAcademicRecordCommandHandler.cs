@@ -37,13 +37,13 @@ public class FapSubjectData
 public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcademicRecordCommand, ProcessAcademicRecordResponse>
 {
     private static readonly HashSet<string> ExcludedSubjectCodes = new(StringComparer.OrdinalIgnoreCase)
-{
-    "VOV114", "VOV124", "VOV134", // Vovinam
-    "TMI101",                     // Traditional musical instrument
-    "OTP101",                     // Orientation
-    "TRS601",                      // English 6 (University success), add more codes as needed
-    "PEN",
-};
+    {
+        "VOV114", "VOV124", "VOV134", // Vovinam
+        "TMI101",                     // Traditional musical instrument
+        "OTP101",                     // Orientation
+        "TRS601",                      // English 6 (University success), add more codes as needed
+        "PEN",
+    };
     private readonly IFapExtractionPlugin _fapPlugin;
     private readonly IStudentEnrollmentRepository _enrollmentRepository;
     private readonly IStudentSemesterSubjectRepository _semesterSubjectRepository;
@@ -62,6 +62,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IGradeExperienceCalculator _gradeExperienceCalculator;
 
+    // NOTE: ILearningPathRepository has been removed from here.
 
     public ProcessAcademicRecordCommandHandler(
         IFapExtractionPlugin fapPlugin,
@@ -197,7 +198,6 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _logger.LogInformation("Built combined subject catalog for program and class with {Count} subjects.", subjectCatalog.Count);
 
         // Fetch existing records using specialized method to avoid Guid LINQ issues
-        // We use GetSemesterSubjectsByUserAsync which internally uses string-based filters
         var existingSemesterSubjects = (await _semesterSubjectRepository.GetSemesterSubjectsByUserAsync(
             request.AuthUserId, cancellationToken)
             ).ToList();
@@ -273,11 +273,12 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             xpAwarded.TotalXp, xpAwarded.SkillsAffected, request.AuthUserId);
 
         _logger.LogInformation("Dispatching GenerateQuestLine command for user {AuthUserId} to create learning path structure.", request.AuthUserId);
+
+        // This command will now perform the JIT difficulty calculation preview and create "NotStarted" attempts
+        // It returns the AuthUserId as the virtual LearningPathId
         var questLineResponse = await _mediator.Send(new GenerateQuestLine { AuthUserId = request.AuthUserId }, cancellationToken);
 
-        _logger.LogInformation("✅ Academic records processed successfully. Quests marked as recommended. " +
-            "Users can now manually trigger step generation via the generateQuestSteps endpoint. " +
-            "No background jobs scheduled.");
+        _logger.LogInformation("✅ Academic records processed successfully. Quests updated with difficulty previews.");
 
         return new ProcessAcademicRecordResponse
         {
@@ -290,6 +291,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             XpAwarded = xpAwarded.SkillAwards.Any() ? xpAwarded : null
         };
     }
+
     private static bool IsExcludedSubject(FapSubjectData subject)
     {
         // Check by code first

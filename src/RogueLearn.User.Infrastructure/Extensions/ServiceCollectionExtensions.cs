@@ -106,9 +106,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISkillRepository, SkillRepository>();
         services.AddScoped<ISkillDependencyRepository, SkillDependencyRepository>();
 
-        // Quest and Learning Path Repositories
-        services.AddScoped<ILearningPathRepository, LearningPathRepository>();
-        services.AddScoped<IQuestChapterRepository, QuestChapterRepository>();
+        // Quests Repositories
         services.AddScoped<IQuestRepository, QuestRepository>();
         services.AddScoped<IQuestStepRepository, QuestStepRepository>();
         services.AddScoped<IUserQuestAttemptRepository, UserQuestAttemptRepository>();
