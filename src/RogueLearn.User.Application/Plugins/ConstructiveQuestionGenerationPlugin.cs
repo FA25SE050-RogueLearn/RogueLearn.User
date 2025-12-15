@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿// src/RogueLearn.User.Application/Plugins/ConstructiveQuestionGenerationPlugin.cs
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Models;
 using System.Text.Json;
@@ -26,34 +27,58 @@ public class ConstructiveQuestionGenerationPlugin : IConstructiveQuestionGenerat
             return new List<ConstructiveQuestion>();
         }
 
-        try
+        if (!File.Exists(_promptPath))
         {
-            if (!File.Exists(_promptPath))
+            _logger.LogError("Critical Error: Constructive Question Generation prompt file not found at {Path}", _promptPath);
+            throw new FileNotFoundException("The question generation prompt template file is missing.", _promptPath);
+        }
+
+        var promptTemplate = await File.ReadAllTextAsync(_promptPath, cancellationToken);
+        var allQuestions = new List<ConstructiveQuestion>();
+
+        // BATCHING FIX: Process sessions in small chunks to avoid AI timeouts on large syllabi
+        int batchSize = 25;
+        var chunks = sessionSchedule.Chunk(batchSize).ToList();
+
+        _logger.LogInformation("Generating questions for {TotalSessions} sessions in {ChunkCount} batches...", sessionSchedule.Count, chunks.Count);
+
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            var chunk = chunks[i];
+            _logger.LogInformation("Processing question batch {BatchIndex}/{TotalBatches} ({SessionCount} sessions)", i + 1, chunks.Count, chunk.Length);
+
+            try
             {
-                _logger.LogError("Critical Error: Constructive Question Generation prompt file not found at {Path}", _promptPath);
-                throw new FileNotFoundException("The question generation prompt template file is missing.", _promptPath);
+                var scheduleJson = JsonSerializer.Serialize(chunk, new JsonSerializerOptions { WriteIndented = true });
+                var prompt = promptTemplate.Replace("{{SESSION_SCHEDULE_JSON}}", scheduleJson);
+
+                var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+                var rawResponse = result.GetValue<string>() ?? "[]";
+                var cleanedJson = CleanToJson(rawResponse);
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };
+                var chunkQuestions = JsonSerializer.Deserialize<List<ConstructiveQuestion>>(cleanedJson, options);
+
+                if (chunkQuestions != null)
+                {
+                    allQuestions.AddRange(chunkQuestions);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate questions for batch {BatchIndex}. Skipping batch.", i + 1);
+                // Continue to next batch instead of failing completely
             }
 
-            var promptTemplate = await File.ReadAllTextAsync(_promptPath, cancellationToken);
-            var scheduleJson = JsonSerializer.Serialize(sessionSchedule, new JsonSerializerOptions { WriteIndented = true });
-            var prompt = promptTemplate.Replace("{{SESSION_SCHEDULE_JSON}}", scheduleJson);
-
-            var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
-            var rawResponse = result.GetValue<string>() ?? "[]";
-
-            _logger.LogInformation("Constructive Question Generation raw AI response: {RawResponse}", rawResponse);
-
-            var cleanedJson = CleanToJson(rawResponse);
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, Converters = { new JsonStringEnumConverter() } };
-            var questions = JsonSerializer.Deserialize<List<ConstructiveQuestion>>(cleanedJson, options);
-
-            return questions ?? new List<ConstructiveQuestion>();
+            // Small delay to be nice to the API rate limits
+            if (i < chunks.Count - 1)
+            {
+                await Task.Delay(1000, cancellationToken);
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to generate constructive questions using AI.");
-            return new List<ConstructiveQuestion>();
-        }
+
+        _logger.LogInformation("Completed question generation. Total questions: {Count}", allQuestions.Count);
+        return allQuestions;
     }
 
     private static string CleanToJson(string rawResponse)
