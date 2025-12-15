@@ -7,7 +7,7 @@ using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
-using RogueLearn.User.Application.Services; // Needed for IQuestDifficultyResolver
+using RogueLearn.User.Application.Services;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 
@@ -20,7 +20,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IQuestRepository _questRepository;
     private readonly IMediator _mediator;
-    // MODIFIED: Added dependencies for dynamic difficulty calculation
     private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
     private readonly IQuestDifficultyResolver _difficultyResolver;
     private readonly ILogger<UpdateQuestActivityProgressCommandHandler> _logger;
@@ -53,23 +52,16 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     {
         // 1. Fetch the Quest Step
         var step = await _questStepRepository.GetByIdAsync(request.StepId, cancellationToken);
-        if (step == null)
-        {
-            throw new NotFoundException($"Quest Step {request.StepId} not found");
-        }
+        if (step == null) throw new NotFoundException($"Quest Step {request.StepId} not found");
 
-        // 2. Fetch the User's Quest Attempt (Must already exist)
+        // 2. Fetch the User's Quest Attempt
         var attempt = await _attemptRepository.FirstOrDefaultAsync(
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
 
-        if (attempt == null)
-        {
-            _logger.LogWarning("User {UserId} tried to update progress for Quest {QuestId} but hasn't started it.", request.AuthUserId, request.QuestId);
-            throw new NotFoundException("Quest not started. Please start the quest before tracking progress.");
-        }
+        if (attempt == null) throw new NotFoundException("Quest not started.");
 
-        // 3. Resolve Difficulty Dynamically (Replaces attempt.AssignedDifficulty)
+        // 3. Resolve Difficulty
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
         string calculatedDifficulty = "Standard";
 
@@ -85,13 +77,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             calculatedDifficulty = quest.ExpectedDifficulty;
         }
 
-        // Verify Track Match using calculated difficulty
-        if (!string.Equals(step.DifficultyVariant, calculatedDifficulty, StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogWarning("Difficulty mismatch: Step is {StepVar}, User Calculated is {UserVar}. User might be accessing a different track than assigned.", step.DifficultyVariant, calculatedDifficulty);
-        }
-
-        // 4. Get or Create Step Progress (In Memory)
+        // 4. Get or Create Step Progress
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
             p => p.AttemptId == attempt.Id && p.StepId == request.StepId,
             cancellationToken);
@@ -121,60 +107,85 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         bool isAlreadyCompleted = completedList.Contains(request.ActivityId);
         bool progressChanged = false;
 
+        // ==========================================================================================
+        // CORE LOGIC: Activity Completion & XP Awarding
+        // ==========================================================================================
         if (request.Status == StepCompletionStatus.Completed && !isAlreadyCompleted)
         {
             completedList.Add(request.ActivityId);
             stepProgress.CompletedActivityIds = completedList.ToArray();
             progressChanged = true;
 
-            // Mastery Override Logic
+            // A. EXTRACT ACTIVITY METADATA
+            _logger.LogInformation(" extracting activity details for {ActivityId}", request.ActivityId);
+            var (activityXp, activitySkillId, activityTitle) = ExtractActivityDetails(step.Content, request.ActivityId);
+
+            _logger.LogInformation("XP EXTRACTION RESULT: XP={Xp}, SkillId={SkillId}, Title={Title}", activityXp, activitySkillId, activityTitle);
+
+            // B. AWARD XP IMMEDIATELY (Incremental Progress)
+            if (activityXp > 0)
+            {
+                // Update total on the Attempt
+                attempt.TotalExperienceEarned += activityXp;
+                await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+
+                // Distribute to Skills
+                if (activitySkillId.HasValue)
+                {
+                    _logger.LogInformation("🎯 Precision XP Award: {Xp} XP to Skill {SkillId}", activityXp, activitySkillId);
+
+                    await _mediator.Send(new IngestXpEventCommand
+                    {
+                        AuthUserId = request.AuthUserId,
+                        SkillId = activitySkillId.Value,
+                        Points = activityXp,
+                        SourceService = "QuestSystem",
+                        SourceType = "ActivityComplete",
+                        SourceId = request.ActivityId,
+                        Reason = $"Completed: {activityTitle ?? "Quest Activity"}"
+                    }, cancellationToken);
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ Fallback XP Award: Activity {ActivityId} has no SkillId.", request.ActivityId);
+
+                    if (quest != null && quest.SubjectId.HasValue)
+                    {
+                        var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
+                        var primaryMapping = skillMappings.OrderByDescending(m => m.RelevanceWeight).FirstOrDefault();
+
+                        if (primaryMapping != null)
+                        {
+                            _logger.LogInformation("⚠️ Fallback Resolved: Awarding {Xp} XP to Primary Skill {SkillId}", activityXp, primaryMapping.SkillId);
+
+                            await _mediator.Send(new IngestXpEventCommand
+                            {
+                                AuthUserId = request.AuthUserId,
+                                SkillId = primaryMapping.SkillId,
+                                Points = activityXp,
+                                SourceService = "QuestSystem",
+                                SourceType = "ActivityComplete",
+                                SourceId = request.ActivityId,
+                                Reason = $"Completed: {activityTitle ?? "Quest Activity"} (Primary Skill Fallback)"
+                            }, cancellationToken);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogWarning("❌ ZERO XP EXTRACTED. Check JSON structure for 'experiencePoints'.");
+            }
+
+            // C. CHECK FOR STEP COMPLETION
             bool isQuiz = IsQuizActivity(step, request.ActivityId);
             bool isCompleteByCount = CheckIfStepIsComplete(step, completedList);
 
             if (isQuiz || isCompleteByCount)
             {
-                _logger.LogInformation("Step {StepId} COMPLETE. Reason: {Reason}", step.Id, isQuiz ? "Quiz Mastery" : "All Activities Done");
-
+                _logger.LogInformation("Step {StepId} COMPLETE.", step.Id);
                 stepProgress.Status = StepCompletionStatus.Completed;
                 stepProgress.CompletedAt = DateTimeOffset.UtcNow;
-
-                // Award XP to Attempt total
-                attempt.TotalExperienceEarned += step.ExperiencePoints;
-                await _attemptRepository.UpdateAsync(attempt, cancellationToken);
-
-                // --- NEW: DISTRIBUTE XP TO USER PROFILE & SKILLS ---
-                // We assume the quest is linked to a Subject, which is linked to Skills.
-                if (quest != null && quest.SubjectId.HasValue)
-                {
-                    // Fetch skill mappings for this subject
-                    var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(
-                        new[] { quest.SubjectId.Value }, cancellationToken);
-
-                    if (skillMappings.Any())
-                    {
-                        // Distribute the step's XP across the skills based on relevance weight
-                        int totalXpToDistribute = step.ExperiencePoints;
-
-                        foreach (var mapping in skillMappings)
-                        {
-                            int pointsForSkill = (int)(totalXpToDistribute * mapping.RelevanceWeight);
-                            if (pointsForSkill > 0)
-                            {
-                                await _mediator.Send(new IngestXpEventCommand
-                                {
-                                    AuthUserId = request.AuthUserId,
-                                    SkillId = mapping.SkillId,
-                                    Points = pointsForSkill,
-                                    SourceService = "QuestSystem",
-                                    SourceType = "QuestComplete", // Using generic type for step completion
-                                    SourceId = request.StepId,    // Idempotency key: StepId
-                                    Reason = $"Completed step: {step.Title}"
-                                }, cancellationToken);
-                            }
-                        }
-                    }
-                }
-                // ---------------------------------------------------
             }
             else
             {
@@ -186,24 +197,146 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             completedList.Remove(request.ActivityId);
             stepProgress.CompletedActivityIds = completedList.ToArray();
             progressChanged = true;
-
             stepProgress.Status = StepCompletionStatus.InProgress;
             stepProgress.CompletedAt = null;
         }
 
-        // 5. Persist Changes
+        // 5. Persist Step Progress
         if (isNewStepProgress)
         {
             stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
             await _stepProgressRepository.AddAsync(stepProgress, cancellationToken);
-            _logger.LogInformation("Created NEW progress record for Step {StepId}", stepProgress.StepId);
         }
         else if (progressChanged)
         {
             stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
             await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
-            _logger.LogInformation("Updated EXISTING progress record for Step {StepId}", stepProgress.StepId);
         }
+
+        // 6. Update Overall Quest Percentage
+        await UpdateQuestCompletionPercentage(attempt, request.QuestId, calculatedDifficulty, cancellationToken);
+    }
+
+    // --- HELPER METHODS ---
+
+    private async Task UpdateQuestCompletionPercentage(UserQuestAttempt attempt, Guid questId, string difficultyVariant, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var allSteps = await _questStepRepository.GetByQuestIdAsync(questId, cancellationToken);
+            var userTrackSteps = allSteps
+                .Where(s => string.Equals(s.DifficultyVariant, difficultyVariant, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var allProgress = await _stepProgressRepository.GetByAttemptIdAsync(attempt.Id, cancellationToken);
+            var progressDict = allProgress.ToDictionary(p => p.StepId);
+
+            int totalActivities = 0;
+            int completedActivities = 0;
+
+            foreach (var trackStep in userTrackSteps)
+            {
+                int stepActivityCount = ExtractActivityCount(trackStep.Content);
+                totalActivities += stepActivityCount;
+
+                if (progressDict.TryGetValue(trackStep.Id, out var prog))
+                {
+                    if (prog.Status == StepCompletionStatus.Completed)
+                    {
+                        completedActivities += stepActivityCount;
+                    }
+                    else
+                    {
+                        completedActivities += prog.CompletedActivityIds?.Length ?? 0;
+                    }
+                }
+            }
+
+            if (totalActivities > 0)
+            {
+                attempt.CompletionPercentage = Math.Round((decimal)completedActivities / totalActivities * 100, 2);
+                if (attempt.CompletionPercentage >= 100 && attempt.Status != QuestAttemptStatus.Completed)
+                {
+                    attempt.Status = QuestAttemptStatus.Completed;
+                    attempt.CompletedAt = DateTimeOffset.UtcNow;
+                }
+            }
+
+            attempt.UpdatedAt = DateTimeOffset.UtcNow;
+            await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update completion percentage for attempt {AttemptId}", attempt.Id);
+        }
+    }
+
+    private (int xp, Guid? skillId, string? title) ExtractActivityDetails(object? content, Guid targetActivityId)
+    {
+        try
+        {
+            var jsonString = ExtractJsonString(content);
+            _logger.LogInformation("JSON Content Preview (First 500 chars): {Preview}", jsonString.Substring(0, Math.Min(500, jsonString.Length)));
+
+            using var doc = JsonDocument.Parse(jsonString);
+            var activities = TryGetActivitiesElement(doc);
+
+            if (activities.HasValue)
+            {
+                foreach (var activity in activities.Value.EnumerateArray())
+                {
+                    var idEl = GetPropertyCaseInsensitive(activity, "activityId");
+
+                    // Log found IDs to debug mismatch
+                    // _logger.LogInformation("Checking Activity in JSON: {Id}", idEl?.GetString());
+
+                    if (idEl != null && Guid.TryParse(idEl.Value.GetString(), out var id) && id == targetActivityId)
+                    {
+                        int xp = 0;
+                        Guid? skillId = null;
+                        string? title = "Activity";
+
+                        // 1. Get Skill ID
+                        var skillEl = GetPropertyCaseInsensitive(activity, "skillId");
+                        if (skillEl != null && Guid.TryParse(skillEl.Value.GetString(), out var sid))
+                        {
+                            skillId = sid;
+                        }
+
+                        // 2. Get Payload info
+                        var payload = GetPropertyCaseInsensitive(activity, "payload");
+                        if (payload.HasValue)
+                        {
+                            var xpEl = GetPropertyCaseInsensitive(payload.Value, "experiencePoints");
+                            if (xpEl != null)
+                            {
+                                if (xpEl.Value.ValueKind == JsonValueKind.Number && xpEl.Value.TryGetInt32(out var points))
+                                {
+                                    xp = points;
+                                }
+                                else if (xpEl.Value.ValueKind == JsonValueKind.String && int.TryParse(xpEl.Value.GetString(), out var pointsParsed))
+                                {
+                                    xp = pointsParsed;
+                                }
+                            }
+
+                            var titleEl = GetPropertyCaseInsensitive(payload.Value, "articleTitle")
+                                       ?? GetPropertyCaseInsensitive(payload.Value, "topic");
+                            if (titleEl != null)
+                            {
+                                title = titleEl.Value.GetString();
+                            }
+                        }
+                        return (xp, skillId, title);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CRASH in ExtractActivityDetails for ActivityId {Id}", targetActivityId);
+        }
+        return (0, null, null);
     }
 
     private static string ExtractJsonString(object? content)
@@ -211,11 +344,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         if (content is null) return "{}";
         if (content is string s) return s;
         if (content is JsonElement je) return je.GetRawText();
-
         var typeName = content.GetType().Name;
-        if (typeName == "JObject" || typeName == "JArray" || typeName == "JToken")
-            return content.ToString()!;
-
+        if (typeName == "JObject" || typeName == "JArray" || typeName == "JToken") return content.ToString()!;
         return JsonSerializer.Serialize(content);
     }
 
@@ -223,14 +353,23 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     {
         var root = doc.RootElement;
         if (root.ValueKind == JsonValueKind.Array) return root;
+
+        // Case-insensitive check for "activities" property
         if (root.ValueKind == JsonValueKind.Object)
         {
-            foreach (var prop in root.EnumerateObject())
+            return GetPropertyCaseInsensitive(root, "activities");
+        }
+        return null;
+    }
+
+    private static JsonElement? GetPropertyCaseInsensitive(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
             {
-                if (string.Equals(prop.Name, "activities", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (prop.Value.ValueKind == JsonValueKind.Array) return prop.Value;
-                }
+                return property.Value;
             }
         }
         return null;
@@ -241,48 +380,21 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         try
         {
             var jsonString = ExtractJsonString(step.Content);
-            _logger.LogInformation("🔍 IsQuizActivity: Checking activity {ActivityId} in step content", activityId);
-
             using var doc = JsonDocument.Parse(jsonString);
-
             var activitiesElement = TryGetActivitiesElement(doc);
-            if (activitiesElement == null)
-            {
-                _logger.LogWarning("🔍 IsQuizActivity: No activities element found in step content");
-                return false;
-            }
+            if (activitiesElement == null) return false;
 
             foreach (var activity in activitiesElement.Value.EnumerateArray())
             {
-                if (activity.ValueKind != JsonValueKind.Object)
-                    continue;
-
-                // Case-insensitive lookup for activityId
                 var idEl = GetPropertyCaseInsensitive(activity, "activityId");
-                if (idEl == null || !Guid.TryParse(idEl.Value.GetString(), out var id))
-                    continue;
-
-                if (id == activityId)
+                if (idEl != null && Guid.TryParse(idEl.Value.GetString(), out var id) && id == activityId)
                 {
-                    // Case-insensitive lookup for type
                     var typeEl = GetPropertyCaseInsensitive(activity, "type");
-                    if (typeEl != null)
-                    {
-                        var type = typeEl.Value.GetString();
-                        var isQuiz = string.Equals(type, "Quiz", StringComparison.OrdinalIgnoreCase);
-                        _logger.LogInformation("🔍 IsQuizActivity: Found activity {ActivityId}, Type={Type}, IsQuiz={IsQuiz}",
-                            activityId, type, isQuiz);
-                        return isQuiz;
-                    }
+                    return typeEl != null && string.Equals(typeEl.Value.GetString(), "Quiz", StringComparison.OrdinalIgnoreCase);
                 }
             }
-
-            _logger.LogWarning("🔍 IsQuizActivity: Activity {ActivityId} not found in activities array", activityId);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "🔍 IsQuizActivity: Error checking if activity {ActivityId} is quiz", activityId);
-        }
+        catch { }
         return false;
     }
 
@@ -291,69 +403,37 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         try
         {
             var jsonString = ExtractJsonString(step.Content);
-            _logger.LogInformation("📊 CheckIfStepIsComplete: Checking step {StepId}, CompletedActivityIds count: {Count}",
-                step.Id, completedActivityIds.Count);
-
             using var doc = JsonDocument.Parse(jsonString);
-
             var activitiesElement = TryGetActivitiesElement(doc);
 
-            if (activitiesElement.HasValue && activitiesElement.Value.ValueKind == JsonValueKind.Array)
+            if (activitiesElement.HasValue)
             {
-                int totalActivities = activitiesElement.Value.GetArrayLength();
-                int matchedCount = 0;
-
+                int total = activitiesElement.Value.GetArrayLength();
+                int matched = 0;
                 foreach (var activity in activitiesElement.Value.EnumerateArray())
                 {
-                    if (activity.ValueKind != JsonValueKind.Object)
-                        continue;
-
-                    // Case-insensitive lookup for activityId
-                    var idElement = GetPropertyCaseInsensitive(activity, "activityId");
-                    if (idElement != null && Guid.TryParse(idElement.Value.GetString(), out var activityGuid))
+                    var idEl = GetPropertyCaseInsensitive(activity, "activityId");
+                    if (idEl != null && Guid.TryParse(idEl.Value.GetString(), out var guid) && completedActivityIds.Contains(guid))
                     {
-                        if (completedActivityIds.Contains(activityGuid))
-                        {
-                            matchedCount++;
-                        }
+                        matched++;
                     }
                 }
-
-                var isComplete = matchedCount >= totalActivities;
-                _logger.LogInformation("📊 CheckIfStepIsComplete: Step {StepId} - Matched {Matched}/{Total}, IsComplete={IsComplete}",
-                    step.Id, matchedCount, totalActivities, isComplete);
-
-                return isComplete;
-            }
-            else
-            {
-                _logger.LogWarning("📊 CheckIfStepIsComplete: No activities element found for step {StepId}", step.Id);
+                return matched >= total;
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "📊 CheckIfStepIsComplete: Error checking step completion for Step {StepId}", step.Id);
-        }
+        catch { }
         return false;
     }
 
-    /// <summary>
-    /// Gets a property from a JSON element using case-insensitive matching.
-    /// Supports both PascalCase and camelCase property names.
-    /// </summary>
-    private static JsonElement? GetPropertyCaseInsensitive(JsonElement element, string propertyName)
+    private int ExtractActivityCount(object? content)
     {
-        if (element.ValueKind != JsonValueKind.Object)
-            return null;
-
-        foreach (var property in element.EnumerateObject())
+        try
         {
-            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                return property.Value;
-            }
+            var jsonString = ExtractJsonString(content);
+            using var doc = JsonDocument.Parse(jsonString);
+            var activitiesElement = TryGetActivitiesElement(doc);
+            return activitiesElement?.GetArrayLength() ?? 0;
         }
-
-        return null;
+        catch { return 0; }
     }
 }
