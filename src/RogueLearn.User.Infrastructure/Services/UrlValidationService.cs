@@ -1,4 +1,4 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/UrlValidationService.cs
+// src/RogueLearn.User.Infrastructure/Services/UrlValidationService.cs
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -12,10 +12,16 @@ namespace RogueLearn.User.Infrastructure.Services;
 /// </summary>
 public class UrlValidationService : IUrlValidationService
 {
+    // =========================================================================
+    // CONFIGURATION: VALIDATION BYPASS
+    // =========================================================================
+    // Set to TRUE to assume all URLs are valid without checking (Super Fast).
+    // Set to FALSE to perform actual HTTP HEAD/GET requests (Production).
+    private const bool DEMO_MODE_SKIP_NETWORK_CHECKS = false;
+    // =========================================================================
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UrlValidationService> _logger;
-
-
 
     public UrlValidationService(IHttpClientFactory httpClientFactory, ILogger<UrlValidationService> logger)
     {
@@ -39,6 +45,14 @@ public class UrlValidationService : IUrlValidationService
             _logger.LogWarning("URL validation failed: Invalid or empty URL.");
             return false;
         }
+
+        // --- SPEED OPTIMIZATION: BYPASS CHECK ---
+        //if (DEMO_MODE_SKIP_NETWORK_CHECKS)
+        //{
+        //    _logger.LogInformation("🚀 DEMO MODE: Skipping network validation for '{Url}'. Assuming valid.", url);
+        //    return true;
+        //}
+        // ----------------------------------------
 
         try
         {

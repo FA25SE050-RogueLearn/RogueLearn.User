@@ -1,3 +1,4 @@
+// src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommandHandler.cs
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,14 @@ namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFr
 /// </summary>
 public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubjectFromTextCommand, CreateSubjectResponse>
 {
+    // ============================================================================
+    // CONFIGURATION: SPEED CONTROL
+    // ============================================================================
+    // Set this to a low number (e.g., 5) for demos/dev to only enrich the first few sessions.
+    // Set to int.MaxValue for production to enrich everything.
+    private const int MAX_SESSIONS_TO_ENRICH = 5;
+    // ============================================================================
+
     private readonly ISyllabusExtractionPlugin _syllabusExtractionPlugin;
     private readonly IConstructiveQuestionGenerationPlugin _questionGenerationPlugin;
     private readonly ISubjectRepository _subjectRepository;
@@ -77,7 +86,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         }
 
         var rawTextHash = ComputeSha256Hash(cleanText);
-    
+
         string? extractedJson = await _storage.TryGetCachedSyllabusDataAsync(rawTextHash, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(extractedJson))
@@ -204,9 +213,11 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         SyllabusData syllabusData,
         CancellationToken cancellationToken)
     {
+        var totalSessions = syllabusData.Content.SessionSchedule!.Count;
+
         _logger.LogInformation(
-            "🔍 PHASE 3: Starting URL enrichment with batch query generation for {Count} sessions",
-            syllabusData.Content.SessionSchedule!.Count);
+            "🔍 PHASE 3: Starting URL enrichment for {Count} sessions (LIMIT: {Limit})",
+            totalSessions, MAX_SESSIONS_TO_ENRICH);
 
         // STEP 1: Classify subject category
         var subjectCategory = await _aiQueryService.ClassifySubjectAsync(
@@ -229,12 +240,17 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
                 ? string.Join(", ", technologyKeywords)
                 : "none");
 
-        // STEP 3: BATCH QUERY GENERATION (all sessions at once)
-        _logger.LogInformation(
-            "🤖 Generating AI queries for ALL {Count} sessions (batch mode)...",
-            syllabusData.Content.SessionSchedule.Count);
+        // STEP 3: BATCH QUERY GENERATION
+        // PERFORMANCE FIX: Only generate queries for the sessions we intend to enrich
+        var sessionsToEnrich = syllabusData.Content.SessionSchedule
+            .Take(MAX_SESSIONS_TO_ENRICH)
+            .ToList();
 
-        var sessionDtos = syllabusData.Content.SessionSchedule
+        _logger.LogInformation(
+            "🤖 Generating AI queries for top {Count} sessions (batch mode)...",
+            sessionsToEnrich.Count);
+
+        var sessionDtos = sessionsToEnrich
             .Select(s => new RogueLearn.User.Application.Models.SyllabusSessionDto
             {
                 SessionNumber = s.SessionNumber,
@@ -255,7 +271,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
             _logger.LogInformation(
                 "✅ AI generated queries for {Count}/{Total} sessions",
                 batchQueries.Count,
-                syllabusData.Content.SessionSchedule.Count);
+                sessionsToEnrich.Count);
         }
         catch (Exception ex)
         {
@@ -269,14 +285,14 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         _logger.LogInformation(
             "🔄 Processing {Count} sessions with parallel URL search (max 5 concurrent)...",
-            syllabusData.Content.SessionSchedule.Count);
+            sessionsToEnrich.Count);
 
         // ⭐ RATE LIMITING: Reduce from 5 to 2 concurrent searches
         // This prevents hammering Google API with 15+ simultaneous requests
         var semaphore = new SemaphoreSlim(2, 2);
 
-
-        var enrichmentTasks = syllabusData.Content.SessionSchedule.Select(async session =>
+        // PERFORMANCE FIX: Only iterate over the subset we want to enrich
+        var enrichmentTasks = sessionsToEnrich.Select(async session =>
         {
             await semaphore.WaitAsync(cancellationToken);
             try
@@ -348,14 +364,19 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
 
         // RESULTS LOGGING
         var uniqueUrlCount = usedUrls.Count;
-        var successRate = syllabusData.Content.SessionSchedule.Count > 0
-            ? (int)(usedUrls.Count * 100.0 / syllabusData.Content.SessionSchedule.Count)
+        var successRate = sessionsToEnrich.Count > 0
+            ? (int)(usedUrls.Count * 100.0 / sessionsToEnrich.Count)
             : 0;
 
         _logger.LogInformation("🎯 URL enrichment COMPLETE:");
         _logger.LogInformation("   ✅ Unique URLs: {Unique}/{Total}",
-            uniqueUrlCount, syllabusData.Content.SessionSchedule.Count);
+            uniqueUrlCount, sessionsToEnrich.Count);
         _logger.LogInformation("   📊 Coverage: {Percent}%", successRate);
+        if (totalSessions > MAX_SESSIONS_TO_ENRICH)
+        {
+            _logger.LogWarning("   ⏩ Skipped {SkippedCount} sessions due to MAX_SESSIONS_TO_ENRICH limit.",
+                totalSessions - MAX_SESSIONS_TO_ENRICH);
+        }
     }
 
     /// <summary>
