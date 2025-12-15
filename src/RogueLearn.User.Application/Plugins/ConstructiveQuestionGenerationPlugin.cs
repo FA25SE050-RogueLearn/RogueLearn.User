@@ -37,7 +37,7 @@ public class ConstructiveQuestionGenerationPlugin : IConstructiveQuestionGenerat
         var allQuestions = new List<ConstructiveQuestion>();
 
         // BATCHING FIX: Process sessions in small chunks to avoid AI timeouts on large syllabi
-        int batchSize = 20;
+        int batchSize = 35;
         var chunks = sessionSchedule.Chunk(batchSize).ToList();
 
         _logger.LogInformation("Generating questions for {TotalSessions} sessions in {ChunkCount} batches...", sessionSchedule.Count, chunks.Count);
