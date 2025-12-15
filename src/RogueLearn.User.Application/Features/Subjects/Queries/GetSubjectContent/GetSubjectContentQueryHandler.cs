@@ -1,4 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Queries/GetSubjectContent/GetSubjectContentQueryHandler.cs
+﻿// src/RogueLearn.User.Application/Features/Subjects/Queries/GetSubjectContent/GetSubjectContentQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -6,6 +6,7 @@ using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json; // Keep for Deserialization
 using System.Text.Json.Serialization;
+using RogueLearn.User.Application.Common; // For SyllabusSessionDtoConverter
 
 // Alias Newtonsoft to avoid ambiguity
 using NewtonsoftJson = Newtonsoft.Json;
@@ -69,11 +70,17 @@ public class GetSubjectContentQueryHandler : IRequestHandler<GetSubjectContentQu
             // to ensure all [JsonPropertyName] attributes on your DTOs are respected.
             var options = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true,
-                Converters = { new JsonStringEnumConverter() },
+                PropertyNameCaseInsensitive = true, // Critical for case-insensitive matching
                 ReadCommentHandling = JsonCommentHandling.Skip,
                 AllowTrailingCommas = true
             };
+
+            // Add global converters
+            options.Converters.Add(new JsonStringEnumConverter());
+
+            // ADDED: Register the custom converter for SyllabusSessionDto to handle
+            // both PascalCase keys AND the {"ValueKind": 7} corruption issue.
+            options.Converters.Add(new SyllabusSessionDtoConverter());
 
             var content = JsonSerializer.Deserialize<SyllabusContent>(jsonString, options);
 
