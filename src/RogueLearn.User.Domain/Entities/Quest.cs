@@ -32,9 +32,6 @@ public class Quest : BaseEntity
     [Column("experience_points_reward")]
     public int ExperiencePointsReward { get; set; } = 0;
 
-    [Column("sequence")]
-    public int? Sequence { get; set; }
-
     [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
     public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
