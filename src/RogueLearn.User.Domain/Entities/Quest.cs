@@ -67,16 +67,4 @@ public class Quest : BaseEntity
     [Column("difficulty_reason")]
     public string? DifficultyReason { get; set; }
 
-    /// <summary>
-    /// Cached grade from student_semester_subjects at time of quest creation/sync.
-    /// </summary>
-    [Column("subject_grade")]
-    public string? SubjectGrade { get; set; }
-
-    /// <summary>
-    /// Cached enrollment status: Passed, NotPassed, Studying, NotStarted
-    /// </summary>
-    [Column("subject_status")]
-    public string? SubjectStatus { get; set; }
-
 }

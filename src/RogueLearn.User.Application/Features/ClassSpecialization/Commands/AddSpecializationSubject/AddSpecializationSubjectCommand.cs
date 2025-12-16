@@ -10,6 +10,6 @@ public class AddSpecializationSubjectCommand : IRequest<SpecializationSubjectDto
     [JsonIgnore]
     public Guid ClassId { get; set; }
     public Guid SubjectId { get; set; }
-    public string PlaceholderSubjectCode { get; set; } = string.Empty;
+    // Removed PlaceholderSubjectCode
     public int Semester { get; set; }
 }

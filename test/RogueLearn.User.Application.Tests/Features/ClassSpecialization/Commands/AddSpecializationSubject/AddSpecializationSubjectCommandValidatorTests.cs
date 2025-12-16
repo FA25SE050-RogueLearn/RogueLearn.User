@@ -15,8 +15,8 @@ public class AddSpecializationSubjectCommandValidatorTests
         {
             ClassId = Guid.NewGuid(),
             SubjectId = Guid.NewGuid(),
-            Semester = 1,
-            PlaceholderSubjectCode = "CODE"
+            Semester = 1
+     
         };
         var result = v.Validate(cmd);
         result.IsValid.Should().BeTrue();
@@ -30,8 +30,7 @@ public class AddSpecializationSubjectCommandValidatorTests
         {
             ClassId = Guid.Empty,
             SubjectId = Guid.Empty,
-            Semester = 0,
-            PlaceholderSubjectCode = new string('x', 51)
+            Semester = 0
         };
         var result = v.Validate(cmd);
         result.IsValid.Should().BeFalse();
