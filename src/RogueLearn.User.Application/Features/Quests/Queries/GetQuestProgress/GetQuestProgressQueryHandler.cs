@@ -4,8 +4,8 @@ using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Application.Services; // Needed for IQuestDifficultyResolver
 using System.Text.Json;
+using Microsoft.Extensions.Logging; // Added Logger
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestProgress;
 
@@ -15,24 +15,20 @@ public class GetQuestProgressQueryHandler : IRequestHandler<GetQuestProgressQuer
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _stepRepository;
     private readonly IUserQuestStepProgressRepository _progressRepository;
-    // MODIFIED: Added dependencies for dynamic difficulty calculation
-    private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
-    private readonly IQuestDifficultyResolver _difficultyResolver;
+    private readonly ILogger<GetQuestProgressQueryHandler> _logger; // Added Logger
 
     public GetQuestProgressQueryHandler(
         IUserQuestAttemptRepository attemptRepository,
         IQuestRepository questRepository,
         IQuestStepRepository stepRepository,
         IUserQuestStepProgressRepository progressRepository,
-        IStudentSemesterSubjectRepository studentSubjectRepository,
-        IQuestDifficultyResolver difficultyResolver)
+        ILogger<GetQuestProgressQueryHandler> logger) // Added Logger
     {
         _attemptRepository = attemptRepository;
         _questRepository = questRepository;
         _stepRepository = stepRepository;
         _progressRepository = progressRepository;
-        _studentSubjectRepository = studentSubjectRepository;
-        _difficultyResolver = difficultyResolver;
+        _logger = logger;
     }
 
     public async Task<List<QuestStepProgressDto>> Handle(GetQuestProgressQuery request, CancellationToken cancellationToken)
@@ -44,27 +40,25 @@ public class GetQuestProgressQueryHandler : IRequestHandler<GetQuestProgressQuer
 
         if (attempt == null)
         {
+            // If no attempt, we cannot show progress. 
+            // In a robust system, we might return an empty list or throw.
+            // Throwing NotFound implies "Start the quest first".
             throw new NotFoundException("Quest not started. No progress available.");
         }
 
-        // 2. Resolve Difficulty Dynamically
-        // MODIFIED: Changed from attempt.AssignedDifficulty to dynamic resolution
-        string assignedDifficulty = "Standard";
-        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
+        // 2. Use the LOCKED difficulty from the attempt
+        // DEBUG LOGGING: Check what is actually in the DB
+        string assignedDifficulty = !string.IsNullOrEmpty(attempt.AssignedDifficulty)
+            ? attempt.AssignedDifficulty
+            : "Standard"; // Default fallback if column is null
 
-        if (quest != null && quest.SubjectId.HasValue)
-        {
-            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
-            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
+        _logger.LogInformation("GetQuestProgress: User {UserId}, Quest {QuestId}, Locked Difficulty: '{Difficulty}'",
+            request.AuthUserId, request.QuestId, assignedDifficulty);
 
-            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
-            assignedDifficulty = difficultyInfo.ExpectedDifficulty;
-        }
-
-        // 3. Get All Master Steps
+        // 3. Get All Master Steps for this Quest
         var allSteps = await _stepRepository.GetByQuestIdAsync(request.QuestId, cancellationToken);
 
-        // 4. Filter Steps by Calculated Difficulty
+        // 4. Filter Steps by the Locked Difficulty
         var userTrackSteps = allSteps
             .Where(s => string.Equals(s.DifficultyVariant, assignedDifficulty, StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.StepNumber)
@@ -72,6 +66,7 @@ public class GetQuestProgressQueryHandler : IRequestHandler<GetQuestProgressQuer
 
         if (!userTrackSteps.Any())
         {
+            _logger.LogWarning("No steps found for Quest {QuestId} with difficulty {Difficulty}", request.QuestId, assignedDifficulty);
             return new List<QuestStepProgressDto>();
         }
 

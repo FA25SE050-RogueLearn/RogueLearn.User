@@ -47,47 +47,48 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
 
-        // 3. Just-In-Time Difficulty Calculation logic (for return value only)
-        // MODIFIED: We calculate this to return it to the UI, but we NO LONGER persist it to the attempt.
-        string finalDifficulty = "Standard";
-
+        // 3. Resolve Difficulty (Current Calculation)
+        string calculatedDifficulty = "Standard";
         if (quest.SubjectId.HasValue)
         {
             var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
             var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
 
             var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
-            finalDifficulty = difficultyInfo.ExpectedDifficulty;
+            calculatedDifficulty = difficultyInfo.ExpectedDifficulty;
         }
-        else
+        else if (!string.IsNullOrEmpty(quest.ExpectedDifficulty))
         {
-            finalDifficulty = !string.IsNullOrEmpty(quest.ExpectedDifficulty) ? quest.ExpectedDifficulty : "Standard";
+            calculatedDifficulty = quest.ExpectedDifficulty;
         }
-
 
         // 4. Handle State Transitions
         if (existingAttempt != null)
         {
             // CASE A: Already Active/Completed
+            // We respect the HISTORICAL difficulty locked in the attempt, ignoring the new calculation.
             if (existingAttempt.Status != QuestAttemptStatus.NotStarted)
             {
-                _logger.LogInformation("Quest {QuestId} already active/completed for user. Returning existing status.", request.QuestId);
+                _logger.LogInformation("Quest {QuestId} already active. Maintaining locked difficulty: {Difficulty}",
+                    request.QuestId, existingAttempt.AssignedDifficulty);
+
                 return new StartQuestResponse
                 {
                     AttemptId = existingAttempt.Id,
                     Status = existingAttempt.Status.ToString(),
-                    AssignedDifficulty = finalDifficulty, // Dynamic
+                    AssignedDifficulty = existingAttempt.AssignedDifficulty, // Return the snapshot
                     IsNew = false
                 };
             }
 
-            // CASE B: Transitioning from NotStarted -> InProgress (Activation)
-            _logger.LogInformation("Activating NotStarted attempt for Quest {QuestId}.", request.QuestId);
+            // CASE B: Transitioning from NotStarted -> InProgress (First Activation)
+            // We LOCK IN the currently calculated difficulty now.
+            _logger.LogInformation("Activating NotStarted attempt. Locking difficulty to: {Difficulty}", calculatedDifficulty);
 
             existingAttempt.Status = QuestAttemptStatus.InProgress;
-            // MODIFIED: Removed assignment of AssignedDifficulty
-            existingAttempt.Notes = $"Started with calculated difficulty: {finalDifficulty}";
-            existingAttempt.StartedAt = DateTimeOffset.UtcNow; // Reset start time to actual interaction
+            existingAttempt.AssignedDifficulty = calculatedDifficulty; // SNAPSHOT HAPPENS HERE
+            existingAttempt.Notes = $"Started on {DateTime.UtcNow}. Difficulty locked.";
+            existingAttempt.StartedAt = DateTimeOffset.UtcNow;
             existingAttempt.UpdatedAt = DateTimeOffset.UtcNow;
 
             await _attemptRepository.UpdateAsync(existingAttempt, cancellationToken);
@@ -96,20 +97,21 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             {
                 AttemptId = existingAttempt.Id,
                 Status = existingAttempt.Status.ToString(),
-                AssignedDifficulty = finalDifficulty,
-                IsNew = true // Treat as new from UX perspective (it's "Fresh")
+                AssignedDifficulty = calculatedDifficulty,
+                IsNew = true
             };
         }
 
-        // CASE C: No attempt exists (Fallback/Safety)
+        // CASE C: No attempt exists (Fresh Start)
+        // Create new attempt and LOCK IN the difficulty.
         var newAttempt = new UserQuestAttempt
         {
             Id = Guid.NewGuid(),
             AuthUserId = request.AuthUserId,
             QuestId = request.QuestId,
             Status = QuestAttemptStatus.InProgress,
-            // MODIFIED: Removed assignment of AssignedDifficulty
-            Notes = $"Started with calculated difficulty: {finalDifficulty}",
+            AssignedDifficulty = calculatedDifficulty, // SNAPSHOT HAPPENS HERE
+            Notes = "First attempt",
             StartedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -117,13 +119,14 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
 
         var createdAttempt = await _attemptRepository.AddAsync(newAttempt, cancellationToken);
 
-        _logger.LogInformation("Created fresh attempt for Quest {QuestId}", createdAttempt.Id);
+        _logger.LogInformation("Created fresh attempt for Quest {QuestId} with locked difficulty {Difficulty}",
+            createdAttempt.Id, calculatedDifficulty);
 
         return new StartQuestResponse
         {
             AttemptId = createdAttempt.Id,
             Status = createdAttempt.Status.ToString(),
-            AssignedDifficulty = finalDifficulty,
+            AssignedDifficulty = calculatedDifficulty,
             IsNew = true
         };
     }
