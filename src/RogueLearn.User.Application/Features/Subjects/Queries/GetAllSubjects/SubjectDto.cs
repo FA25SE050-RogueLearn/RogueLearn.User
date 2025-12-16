@@ -7,6 +7,7 @@ public class SubjectDto
     public string SubjectName { get; set; } = string.Empty;
     public int Credits { get; set; }
     public string? Description { get; set; }
+    public int? Semester { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
