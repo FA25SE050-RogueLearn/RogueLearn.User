@@ -72,7 +72,6 @@ public class EnsureMasterQuestsCommandHandlerTests
             q.Title.StartsWith(s2.SubjectCode) &&
             q.Status == QuestStatus.NotStarted &&
             q.IsActive == true &&
-            q.CreatedBy == null &&
             q.DifficultyLevel == DifficultyLevel.Intermediate &&
             q.QuestType == QuestType.Practice), Arg.Any<CancellationToken>());
     }

@@ -60,10 +60,6 @@ public class EnsureMasterQuestsCommandHandler : IRequestHandler<EnsureMasterQues
                 Status = QuestStatus.NotStarted, // Default state
                 IsActive = true,
 
-                // ⭐ FIX: Set to null so Postgrest doesn't try to insert 00000000-0000...
-                // This requires Quest.CreatedBy to be nullable Guid?
-                CreatedBy = null,
-
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
 

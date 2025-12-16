@@ -44,12 +44,6 @@ public class GetMyQuestsWithSubjectsQueryHandlerTests
                 new UserQuestAttempt { AuthUserId = userId, QuestId = questId }
             });
 
-        questRepo.GetByIdsAsync(Arg.Is<IEnumerable<Guid>>(ids => ids.Contains(questId)), Arg.Any<CancellationToken>())
-            .Returns(new List<Quest>
-            {
-                new Quest { Id = questId, CreatedBy = userId, SubjectId = subjectId, Title = "Q", IsActive = true }
-            });
-
         subjectRepo.GetByIdsAsync(Arg.Is<IEnumerable<Guid>>(ids => ids.Contains(subjectId)), Arg.Any<CancellationToken>())
             .Returns(new List<Subject>
             {

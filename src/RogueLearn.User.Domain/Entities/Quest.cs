@@ -45,9 +45,6 @@ public class Quest : BaseEntity
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
 
-    [Column("created_by")]
-    public Guid? CreatedBy { get; set; }
-
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
