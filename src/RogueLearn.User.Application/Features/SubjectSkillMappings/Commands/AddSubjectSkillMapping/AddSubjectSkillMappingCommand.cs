@@ -9,5 +9,6 @@ public class AddSubjectSkillMappingCommand : IRequest<AddSubjectSkillMappingResp
     [JsonIgnore]
     public Guid SubjectId { get; set; }
     public Guid SkillId { get; set; }
+    [JsonPropertyName("relevance")]
     public decimal RelevanceWeight { get; set; } = 1.00m;
 }
