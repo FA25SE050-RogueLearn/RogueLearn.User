@@ -21,6 +21,8 @@ using RogueLearn.User.Api.HealthChecks;
 using OpenAI;
 using OpenAI.Audio;
 using System.ClientModel;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 // Load environment variables from .env file
 
@@ -58,7 +60,7 @@ try
         options.ListenAnyIP(6968, listenOptions =>
         {
             listenOptions.Protocols = HttpProtocols.Http1AndHttp2;
-             //listenOptions.UseHttps();
+            //listenOptions.UseHttps();
         });
 
         // Port 6969: HTTP/2 only for pure gRPC clients
@@ -81,6 +83,15 @@ try
 
     // Add our shared, centralized authentication and authorization services.
     builder.Services.AddRogueLearnAuthentication(builder.Configuration);
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("GameApiKey", policy =>
+        {
+            policy.Requirements.Add(new GameApiKeyRequirement());
+        });
+    });
+    builder.Services.AddSingleton<IAuthorizationHandler, GameApiKeyHandler>();
 
     var supabaseConnStr = builder.Configuration["Supabase:ConnStr"];
     //  ADD THIS INSTEAD:
@@ -303,3 +314,46 @@ finally
 }
 
 public partial class Program { }
+
+internal sealed class GameApiKeyRequirement : IAuthorizationRequirement
+{
+}
+
+internal sealed class GameApiKeyHandler : AuthorizationHandler<GameApiKeyRequirement>
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, GameApiKeyRequirement requirement)
+    {
+        var expected = Environment.GetEnvironmentVariable("RL_GAME_API_KEY")
+            ?? Environment.GetEnvironmentVariable("GAME_API_KEY");
+
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+
+        var httpContext = context.Resource switch
+        {
+            Microsoft.AspNetCore.Http.HttpContext hc => hc,
+            AuthorizationFilterContext afc => afc.HttpContext,
+            _ => null
+        };
+
+        if (httpContext == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!httpContext.Request.Headers.TryGetValue("X-Game-Api-Key", out var provided))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (string.Equals(provided.ToString(), expected, StringComparison.Ordinal))
+        {
+            context.Succeed(requirement);
+        }
+
+        return Task.CompletedTask;
+    }
+}
