@@ -172,7 +172,6 @@ public class UpdateMyProfileCommandHandlerTests
         profile.FirstName.Should().BeNull();
         profile.LastName.Should().Be("NewL");
         profile.Bio.Should().Be("");
-        profile.Preferences.Should().NotBeNull();
         await userRepo.Received(1).UpdateAsync(profile, Arg.Any<CancellationToken>());
     }
 
@@ -206,7 +205,6 @@ public class UpdateMyProfileCommandHandlerTests
         var cmd = new UpdateMyProfileCommand { AuthUserId = authId, PreferencesJson = "   " };
         var res = await sut.Handle(cmd, CancellationToken.None);
         res.Should().NotBeNull();
-        profile.Preferences.Should().BeNull();
     }
 
     [Fact]

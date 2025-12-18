@@ -230,7 +230,7 @@ public class GetFullUserInfoQueryHandlerTests
         var authId = Guid.NewGuid();
         var profile = new UserProfile {
             Id = Guid.NewGuid(), AuthUserId = authId, Username = "u", Email = "e@x.com",
-            FirstName = "F", LastName = "L", Level = 2, ExperiencePoints = 100,
+            FirstName = "F", LastName = "L",
             ClassId = Guid.NewGuid(), RouteId = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
             ProfileImageUrl = "https://cdn/u.png", OnboardingCompleted = true
         };

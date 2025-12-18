@@ -45,7 +45,7 @@ public class UserContextPromptBuilderTests
     public async Task GenerateAsync_WithRecords_ComputesGpa_AndFormatsSections()
     {
         var authId = Guid.NewGuid();
-        var user = new UserProfile { AuthUserId = authId, Username = "student", FirstName = "A", LastName = "B", Level = 3, ExperiencePoints = 120 };
+        var user = new UserProfile { AuthUserId = authId, Username = "student", FirstName = "A", LastName = "B" };
         var @class = new Class { Name = "Intro CS", Description = "desc", DifficultyLevel = DifficultyLevel.Beginner, EstimatedDurationMonths = 4, SkillFocusAreas = new[] { "Algorithms", "Data Structures" } };
         var context = new AcademicContext { CurrentGpa = 3.2 };
 

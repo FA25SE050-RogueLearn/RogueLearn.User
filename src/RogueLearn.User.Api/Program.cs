@@ -18,6 +18,9 @@ using System.Text;
 using RogueLearn.User.Api.Utilities;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Api.HealthChecks;
+using OpenAI;
+using OpenAI.Audio;
+using System.ClientModel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -101,7 +104,6 @@ try
     builder.Services.AddScoped<IQuestStepGenerationService, QuestStepGenerationService>();
     builder.Services.AddHangfireServer();
 
-    builder.Services.AddHangfireServer();
     // --- SEMANTIC KERNEL (AI) SERVICE CONFIGURATION ---
     builder.Services.AddScoped(sp =>
     {
@@ -177,6 +179,32 @@ try
     });
 
     builder.Services.AddApiServices();
+
+    builder.Services.AddSingleton(sp =>
+    {
+        var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("OpenAIAudio");
+        var apiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY")
+            ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+            ?? string.Empty;
+        var endpoint = Environment.GetEnvironmentVariable("GROQ_BASE_URL") ?? "https://api.groq.com/openai";
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            logger.LogWarning("OpenAI API key missing; AudioClient will not be usable.");
+            return null;
+        }
+
+        var client = new OpenAIClient(
+            new ApiKeyCredential(apiKey),
+            new OpenAIClientOptions
+            {
+                Endpoint = new Uri(endpoint)
+            });
+
+        var audioClient = client.GetAudioClient("whisper-large-v3");
+        logger.LogInformation("AudioClient configured with endpoint {Endpoint} and model whisper-large-v3", endpoint);
+        return audioClient;
+    });
 
     builder.Services.AddGrpc();
 

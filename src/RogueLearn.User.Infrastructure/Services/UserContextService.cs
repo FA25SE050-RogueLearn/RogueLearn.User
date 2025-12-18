@@ -63,7 +63,6 @@ public class UserContextService : IUserContextService
             DisplayName = displayName,
             ProfileImageUrl = profile.ProfileImageUrl,
             Bio = profile.Bio,
-            PreferencesJson = profile.Preferences != null ? JsonSerializer.Serialize(profile.Preferences) : null
         };
 
         // Roles
