@@ -1,5 +1,6 @@
 ﻿// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/HtmlCleaningService.cs
 using System.Text;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
@@ -7,11 +8,29 @@ using RogueLearn.User.Application.Interfaces;
 namespace RogueLearn.User.Infrastructure.Services;
 
 /// <summary>
-/// Implements HTML cleaning using HtmlAgilityPack to prepare text for AI processing.
+/// Implements strict HTML cleaning to reduce payload size and remove noise for AI processing.
+/// Converts ASP.NET/Legacy HTML into clean, semantic HTML5.
 /// </summary>
 public class HtmlCleaningService : IHtmlCleaningService
 {
     private readonly ILogger<HtmlCleaningService> _logger;
+
+    // Allowed tags based on requirements
+    private static readonly HashSet<string> AllowedTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "body", "h1", "h2", "h3", "h4", "h5", "h6", "head", "hr", "html", "i", "img",
+        "li", "ol", "p", "ruby", "strong", "table", "tbody", "td", "th", "title", "tr", "ul",
+        "em", "br"
+    };
+
+    // Allowed attributes per tag
+    private static readonly Dictionary<string, HashSet<string>> AllowedAttributes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "a", new HashSet<string> { "href" } },
+        { "img", new HashSet<string> { "src", "width", "height", "alt" } },
+        { "td", new HashSet<string> { "colspan", "rowspan" } },
+        { "th", new HashSet<string> { "colspan", "rowspan" } }
+    };
 
     public HtmlCleaningService(ILogger<HtmlCleaningService> logger)
     {
@@ -27,97 +46,192 @@ public class HtmlCleaningService : IHtmlCleaningService
 
         try
         {
-            var htmlDoc = new HtmlDocument();
-            htmlDoc.LoadHtml(rawHtml);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(rawHtml);
 
-            // ARCHITECTURAL REFINEMENT: Instead of cleaning the whole document,
-            // we now use a specific XPath to target ONLY the grade report table.
-            // This is more robust and drastically reduces the text sent to the AI, preventing timeouts.
-            var gradeTableNode = htmlDoc.DocumentNode.SelectSingleNode("//div[@id='ctl00_mainContent_divGrade']//table");
+            // 1. Pre-cleaning: Remove noise nodes entirely
+            RemoveUnwantedNodes(doc.DocumentNode);
 
-            if (gradeTableNode == null)
-            {
-                _logger.LogWarning("Could not find the main grade report table node ('ctl00_mainContent_divGrade'). Falling back to body text.");
-                // Fallback to the old method if the specific table isn't found.
-                return ExtractFromGeneralNode(htmlDoc.DocumentNode.SelectSingleNode("//body") ?? htmlDoc.DocumentNode);
-            }
+            // 2. Recursive Sanitization: Rename tags, strip attributes, unwrap unknown tags
+            SanitizeNode(doc.DocumentNode);
 
-            _logger.LogInformation("Successfully isolated the grade report table. Extracting its text content.");
-            var sb = new StringBuilder();
-            ExtractTableContent(sb, gradeTableNode);
+            // 3. Post-processing: Formatting and cleanup
+            var bodyNode = doc.DocumentNode.SelectSingleNode("//body") ?? doc.DocumentNode;
 
-            var result = sb.ToString();
-            if (string.IsNullOrWhiteSpace(result))
-            {
-                _logger.LogWarning("Targeted table extraction yielded no content. Falling back to full inner text of the table node.");
-                return Sanitize(gradeTableNode.InnerText);
-            }
+            // Convert to string
+            var result = bodyNode.OuterHtml;
 
-            return result;
+            // Collapse multiple empty lines and spaces using Regex
+            result = Regex.Replace(result, @"\n\s*\n", "\n");
+            // Remove spaces between tags like "> <" to compact the HTML
+            result = Regex.Replace(result, @">\s+<", "><");
+
+            return result.Trim();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred during HTML cleaning. Returning raw text as a fallback.");
-            return rawHtml;
+            _logger.LogError(ex, "Error occurred during HTML cleaning. Returning empty string.");
+            return string.Empty;
         }
     }
 
-    // This is the old, less precise method, now used as a fallback.
-    private string ExtractFromGeneralNode(HtmlNode mainContentNode)
+    private void RemoveUnwantedNodes(HtmlNode node)
     {
-        var sb = new StringBuilder();
-        foreach (var node in mainContentNode.Descendants())
+        // 1. Handle FORM tags specially: Unwrap them (keep content), don't delete them
+        var formNodes = node.SelectNodes("//form");
+        if (formNodes != null)
         {
-            if (node.NodeType == HtmlNodeType.Text && IsBlockLevelParent(node.ParentNode))
+            foreach (var form in formNodes)
             {
-                var text = Sanitize(node.InnerText);
-                if (!string.IsNullOrWhiteSpace(text))
+                UnwrapNode(form);
+            }
+        }
+
+        // 2. Select nodes that are definitely trash to delete completely
+        // Removed //form from this list
+        var nodesToRemove = node.SelectNodes("//script|//style|//link|//meta|//input|//comment()|//iframe|//svg|//noscript|//button|//select|//option");
+
+        if (nodesToRemove != null)
+        {
+            foreach (var n in nodesToRemove)
+            {
+                n.Remove();
+            }
+        }
+
+        // 3. Remove elements with class 'aspNetHidden' explicitly if they survived
+        var hiddenNodes = node.SelectNodes("//*[contains(@class, 'aspNetHidden')]");
+        if (hiddenNodes != null)
+        {
+            foreach (var n in hiddenNodes)
+            {
+                n.Remove();
+            }
+        }
+    }
+
+    private void SanitizeNode(HtmlNode node)
+    {
+        // Iterate backwards to allow modification of the collection
+        for (int i = node.ChildNodes.Count - 1; i >= 0; i--)
+        {
+            SanitizeNode(node.ChildNodes[i]);
+        }
+
+        // --- Tag Logic ---
+
+        // 1. Text Nodes: Keep if not empty
+        if (node.NodeType == HtmlNodeType.Text)
+        {
+            if (string.IsNullOrWhiteSpace(node.InnerText))
+            {
+                // Remove empty text nodes to clean up formatting
+                node.Remove();
+            }
+            return;
+        }
+
+        // 2. Element Nodes
+        if (node.NodeType == HtmlNodeType.Element)
+        {
+            var tagName = node.Name.ToLowerInvariant();
+
+            // Transformations
+            if (tagName == "b")
+            {
+                node.Name = "strong";
+                tagName = "strong";
+            }
+            else if (tagName == "div")
+            {
+                // Unwrap DIVs that only contain other block elements to flatten structure
+                // Otherwise convert to P
+                if (HasBlockChildren(node))
                 {
-                    sb.AppendLine(text);
+                    UnwrapNode(node);
+                    return;
+                }
+
+                node.Name = "p";
+                tagName = "p";
+            }
+            else if (tagName == "span" || tagName == "font" || tagName == "center")
+            {
+                // Unwrap presentational tags
+                UnwrapNode(node);
+                return; // Node is gone, stop processing it
+            }
+
+            // Whitelist Check
+            if (!AllowedTags.Contains(tagName))
+            {
+                // If tag is not allowed, unwrap it (keep content, remove tags)
+                UnwrapNode(node);
+                return;
+            }
+
+            // --- Attribute Logic ---
+
+            if (node.HasAttributes)
+            {
+                // Get list of attributes to remove (cannot modify collection while iterating)
+                var attributesToRemove = new List<string>();
+
+                foreach (var attr in node.Attributes)
+                {
+                    bool keep = false;
+                    if (AllowedAttributes.ContainsKey(tagName))
+                    {
+                        if (AllowedAttributes[tagName].Contains(attr.Name.ToLowerInvariant()))
+                        {
+                            keep = true;
+                            // Special Logic: Ensure alt exists for img
+                            if (tagName == "img" && attr.Name == "alt" && string.IsNullOrWhiteSpace(attr.Value))
+                            {
+                                attr.Value = "image";
+                            }
+                        }
+                    }
+
+                    if (!keep)
+                    {
+                        attributesToRemove.Add(attr.Name);
+                    }
+                }
+
+                foreach (var attrName in attributesToRemove)
+                {
+                    node.Attributes.Remove(attrName);
+                }
+
+                // Add missing required attributes
+                if (tagName == "img" && !node.Attributes.Contains("alt"))
+                {
+                    node.Attributes.Add("alt", "image");
                 }
             }
-            else if (node.Name == "table")
-            {
-                ExtractTableContent(sb, node);
-            }
         }
-        if (sb.Length == 0)
+    }
+
+    private void UnwrapNode(HtmlNode node)
+    {
+        var parent = node.ParentNode;
+        if (parent == null) return;
+
+        // Move all children to parent
+        // Use ToList() to create a copy because ChildNodes changes as we move them
+        foreach (var child in node.ChildNodes.ToList())
         {
-            return Sanitize(mainContentNode.InnerText);
+            parent.InsertBefore(child, node);
         }
-        return sb.ToString();
+
+        // Remove the original tag
+        parent.RemoveChild(node);
     }
 
-    private void ExtractTableContent(StringBuilder sb, HtmlNode tableNode)
+    private bool HasBlockChildren(HtmlNode node)
     {
-        var rows = tableNode.SelectNodes(".//tr");
-        if (rows == null) return;
-
-        sb.AppendLine("--- TABLE START ---");
-        foreach (var row in rows)
-        {
-            var cells = row.SelectNodes(".//th|.//td");
-            if (cells != null)
-            {
-                // Join cell text with a clear separator for the AI to parse.
-                var rowText = string.Join(" | ", cells.Select(c => Sanitize(c.InnerText)));
-                sb.AppendLine(rowText);
-            }
-        }
-        sb.AppendLine("--- TABLE END ---");
-    }
-
-    private bool IsBlockLevelParent(HtmlNode node)
-    {
-        if (node == null) return false;
-        string[] blockTags = { "p", "h1", "h2", "h3", "h4", "h5", "h6", "div", "li", "td", "th", "blockquote" };
-        return blockTags.Contains(node.Name);
-    }
-
-    private string Sanitize(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        // Decode HTML entities (e.g., &amp; -> &) and normalize all whitespace to a single space.
-        return System.Text.RegularExpressions.Regex.Replace(HtmlEntity.DeEntitize(text).Trim(), @"\s+", " ");
+        var blockTags = new HashSet<string> { "p", "div", "table", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6" };
+        return node.ChildNodes.Any(c => c.NodeType == HtmlNodeType.Element && blockTags.Contains(c.Name));
     }
 }

@@ -32,9 +32,6 @@ public class Quest : BaseEntity
     [Column("experience_points_reward")]
     public int ExperiencePointsReward { get; set; } = 0;
 
-    [Column("sequence")]
-    public int? Sequence { get; set; }
-
     [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
     public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
@@ -44,9 +41,6 @@ public class Quest : BaseEntity
 
     [Column("is_active")]
     public bool IsActive { get; set; } = true;
-
-    [Column("created_by")]
-    public Guid? CreatedBy { get; set; }
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -72,17 +66,5 @@ public class Quest : BaseEntity
     /// </summary>
     [Column("difficulty_reason")]
     public string? DifficultyReason { get; set; }
-
-    /// <summary>
-    /// Cached grade from student_semester_subjects at time of quest creation/sync.
-    /// </summary>
-    [Column("subject_grade")]
-    public string? SubjectGrade { get; set; }
-
-    /// <summary>
-    /// Cached enrollment status: Passed, NotPassed, Studying, NotStarted
-    /// </summary>
-    [Column("subject_status")]
-    public string? SubjectStatus { get; set; }
 
 }

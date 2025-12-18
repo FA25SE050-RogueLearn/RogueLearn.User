@@ -74,12 +74,14 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
         ImportSubjectFromTextCommand request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("📚 Starting subject import");
+        //_logger.LogInformation("📚 Starting subject import with ", request.RawText);
 
         // ============================================================================
         // PHASE 1: Extract & Validate
         // ============================================================================
         var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.RawText);
+        // ⭐ LOGGING: Log the cleaned HTML before AI processing
+        //_logger.LogInformation("📝 Cleaned HTML (Ready for AI):\n{CleanedHtml}", cleanText);
         if (string.IsNullOrWhiteSpace(cleanText))
         {
             throw new BadRequestException("Failed to extract meaningful text content from the provided HTML.");

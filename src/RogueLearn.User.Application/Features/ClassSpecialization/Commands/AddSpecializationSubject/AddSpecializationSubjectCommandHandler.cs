@@ -48,8 +48,8 @@ public class AddSpecializationSubjectCommandHandler : IRequestHandler<AddSpecial
     /// <exception cref="BadRequestException">Thrown when the mapping already exists.</exception>
     public async Task<SpecializationSubjectDto> Handle(AddSpecializationSubjectCommand request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Handling AddSpecializationSubjectCommand for ClassId={ClassId}, SubjectId={SubjectId}, PlaceholderCode={PlaceholderCode}, Semester={Semester}",
-            request.ClassId, request.SubjectId, request.PlaceholderSubjectCode, request.Semester);
+        _logger.LogInformation("Handling AddSpecializationSubjectCommand for ClassId={ClassId}, SubjectId={SubjectId}, Semester={Semester}",
+            request.ClassId, request.SubjectId, request.Semester);
 
         // Validate that both the class and subject exist
         if (!await _classRepository.ExistsAsync(request.ClassId, cancellationToken))
@@ -58,7 +58,9 @@ public class AddSpecializationSubjectCommandHandler : IRequestHandler<AddSpecial
             throw new NotFoundException(nameof(Class), request.ClassId);
         }
 
-        if (!await _subjectRepository.ExistsAsync(request.SubjectId, cancellationToken))
+        // Fetch subject to ensure it exists (and later we might use details for response enrichment if needed)
+        var subject = await _subjectRepository.GetByIdAsync(request.SubjectId, cancellationToken);
+        if (subject == null)
         {
             _logger.LogWarning("Subject not found: {SubjectId}", request.SubjectId);
             throw new NotFoundException(nameof(Subject), request.SubjectId);
@@ -72,10 +74,22 @@ public class AddSpecializationSubjectCommandHandler : IRequestHandler<AddSpecial
             throw new BadRequestException("This subject is already mapped to this specialization class.");
         }
 
-        var newMapping = _mapper.Map<ClassSpecializationSubject>(request);
+        // Map command to entity
+        var newMapping = new ClassSpecializationSubject
+        {
+            ClassId = request.ClassId,
+            SubjectId = request.SubjectId,
+            Semester = request.Semester
+        };
+
         var createdMapping = await _repository.AddAsync(newMapping, cancellationToken);
 
         _logger.LogInformation("Created specialization subject mapping: MappingId={MappingId} for ClassId={ClassId}, SubjectId={SubjectId}", createdMapping.Id, request.ClassId, request.SubjectId);
+
+        // Map back to DTO
+        // Ideally, the DTO should probably include Subject Name/Code joined from the DB,
+        // but for the immediate "Add" response, returning the ID is sufficient standard practice.
+        // The GetSpecializationSubjectsQuery handles the full join logic.
         return _mapper.Map<SpecializationSubjectDto>(createdMapping);
     }
 }

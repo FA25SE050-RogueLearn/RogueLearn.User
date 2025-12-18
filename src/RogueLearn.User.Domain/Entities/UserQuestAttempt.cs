@@ -41,8 +41,10 @@ public class UserQuestAttempt : BaseEntity
     [Column("notes")]
     public string? Notes { get; set; }
 
-    // REMOVED: AssignedDifficulty column. 
-    // Difficulty is now dynamically calculated based on StudentSemesterSubject grades via QuestDifficultyResolver.
+    // ADDED: Snapshot of the difficulty track assigned at start time.
+    // Prevents progress loss if user's grades change later.
+    [Column("assigned_difficulty")]
+    public string AssignedDifficulty { get; set; } = "Standard";
 
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

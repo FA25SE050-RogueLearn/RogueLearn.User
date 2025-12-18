@@ -7,7 +7,6 @@ using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
-using RogueLearn.User.Application.Services;
 
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 
@@ -16,35 +15,26 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     private readonly IUserQuestAttemptRepository _attemptRepository;
     private readonly IUserQuestStepProgressRepository _stepProgressRepository;
     private readonly IQuestStepRepository _questStepRepository;
-    private readonly IUserSkillRepository _userSkillRepository;
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IQuestRepository _questRepository;
     private readonly IMediator _mediator;
-    private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
-    private readonly IQuestDifficultyResolver _difficultyResolver;
     private readonly ILogger<UpdateQuestActivityProgressCommandHandler> _logger;
 
     public UpdateQuestActivityProgressCommandHandler(
         IUserQuestAttemptRepository attemptRepository,
         IUserQuestStepProgressRepository stepProgressRepository,
         IQuestStepRepository questStepRepository,
-        IUserSkillRepository userSkillRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IQuestRepository questRepository,
         IMediator mediator,
-        IStudentSemesterSubjectRepository studentSubjectRepository,
-        IQuestDifficultyResolver difficultyResolver,
         ILogger<UpdateQuestActivityProgressCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
         _stepProgressRepository = stepProgressRepository;
         _questStepRepository = questStepRepository;
-        _userSkillRepository = userSkillRepository;
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _questRepository = questRepository;
         _mediator = mediator;
-        _studentSubjectRepository = studentSubjectRepository;
-        _difficultyResolver = difficultyResolver;
         _logger = logger;
     }
 
@@ -61,21 +51,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
         if (attempt == null) throw new NotFoundException("Quest not started.");
 
-        // 3. Resolve Difficulty
-        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
-        string calculatedDifficulty = "Standard";
-
-        if (quest != null && quest.SubjectId.HasValue)
-        {
-            var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
-            var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
-            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
-            calculatedDifficulty = difficultyInfo.ExpectedDifficulty;
-        }
-        else if (quest != null && !string.IsNullOrEmpty(quest.ExpectedDifficulty))
-        {
-            calculatedDifficulty = quest.ExpectedDifficulty;
-        }
+        // 3. Resolve Difficulty (Now using stored value)
+        string currentDifficulty = attempt.AssignedDifficulty ?? "Standard";
 
         // 4. Get or Create Step Progress
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
@@ -107,33 +84,22 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         bool isAlreadyCompleted = completedList.Contains(request.ActivityId);
         bool progressChanged = false;
 
-        // ==========================================================================================
-        // CORE LOGIC: Activity Completion & XP Awarding
-        // ==========================================================================================
+        // ... [Remaining logic for XP awarding and completion checks is unchanged] ...
         if (request.Status == StepCompletionStatus.Completed && !isAlreadyCompleted)
         {
             completedList.Add(request.ActivityId);
             stepProgress.CompletedActivityIds = completedList.ToArray();
             progressChanged = true;
 
-            // A. EXTRACT ACTIVITY METADATA
-            _logger.LogInformation(" extracting activity details for {ActivityId}", request.ActivityId);
             var (activityXp, activitySkillId, activityTitle) = ExtractActivityDetails(step.Content, request.ActivityId);
 
-            _logger.LogInformation("XP EXTRACTION RESULT: XP={Xp}, SkillId={SkillId}, Title={Title}", activityXp, activitySkillId, activityTitle);
-
-            // B. AWARD XP IMMEDIATELY (Incremental Progress)
             if (activityXp > 0)
             {
-                // Update total on the Attempt
                 attempt.TotalExperienceEarned += activityXp;
                 await _attemptRepository.UpdateAsync(attempt, cancellationToken);
 
-                // Distribute to Skills
                 if (activitySkillId.HasValue)
                 {
-                    _logger.LogInformation("🎯 Precision XP Award: {Xp} XP to Skill {SkillId}", activityXp, activitySkillId);
-
                     await _mediator.Send(new IngestXpEventCommand
                     {
                         AuthUserId = request.AuthUserId,
@@ -147,17 +113,14 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 }
                 else
                 {
-                    _logger.LogWarning("⚠️ Fallback XP Award: Activity {ActivityId} has no SkillId.", request.ActivityId);
-
+                    // Fallback logic for primary skill
+                    var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
                     if (quest != null && quest.SubjectId.HasValue)
                     {
                         var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
                         var primaryMapping = skillMappings.OrderByDescending(m => m.RelevanceWeight).FirstOrDefault();
-
                         if (primaryMapping != null)
                         {
-                            _logger.LogInformation("⚠️ Fallback Resolved: Awarding {Xp} XP to Primary Skill {SkillId}", activityXp, primaryMapping.SkillId);
-
                             await _mediator.Send(new IngestXpEventCommand
                             {
                                 AuthUserId = request.AuthUserId,
@@ -172,18 +135,12 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                     }
                 }
             }
-            else
-            {
-                _logger.LogWarning("❌ ZERO XP EXTRACTED. Check JSON structure for 'experiencePoints'.");
-            }
 
-            // C. CHECK FOR STEP COMPLETION
             bool isQuiz = IsQuizActivity(step, request.ActivityId);
             bool isCompleteByCount = CheckIfStepIsComplete(step, completedList);
 
             if (isQuiz || isCompleteByCount)
             {
-                _logger.LogInformation("Step {StepId} COMPLETE.", step.Id);
                 stepProgress.Status = StepCompletionStatus.Completed;
                 stepProgress.CompletedAt = DateTimeOffset.UtcNow;
             }
@@ -201,7 +158,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             stepProgress.CompletedAt = null;
         }
 
-        // 5. Persist Step Progress
         if (isNewStepProgress)
         {
             stepProgress.UpdatedAt = DateTimeOffset.UtcNow;
@@ -213,17 +169,17 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             await _stepProgressRepository.UpdateAsync(stepProgress, cancellationToken);
         }
 
-        // 6. Update Overall Quest Percentage
-        await UpdateQuestCompletionPercentage(attempt, request.QuestId, calculatedDifficulty, cancellationToken);
+        // Pass the locked difficulty to the percentage updater
+        await UpdateQuestCompletionPercentage(attempt, request.QuestId, currentDifficulty, cancellationToken);
     }
 
-    // --- HELPER METHODS ---
-
+    // [Helper methods unchanged]
     private async Task UpdateQuestCompletionPercentage(UserQuestAttempt attempt, Guid questId, string difficultyVariant, CancellationToken cancellationToken)
     {
         try
         {
             var allSteps = await _questStepRepository.GetByQuestIdAsync(questId, cancellationToken);
+            // Filter steps using the SNAPSHOTTED difficulty
             var userTrackSteps = allSteps
                 .Where(s => string.Equals(s.DifficultyVariant, difficultyVariant, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -276,8 +232,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         try
         {
             var jsonString = ExtractJsonString(content);
-            _logger.LogInformation("JSON Content Preview (First 500 chars): {Preview}", jsonString.Substring(0, Math.Min(500, jsonString.Length)));
-
             using var doc = JsonDocument.Parse(jsonString);
             var activities = TryGetActivitiesElement(doc);
 
@@ -287,23 +241,18 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 {
                     var idEl = GetPropertyCaseInsensitive(activity, "activityId");
 
-                    // Log found IDs to debug mismatch
-                    // _logger.LogInformation("Checking Activity in JSON: {Id}", idEl?.GetString());
-
                     if (idEl != null && Guid.TryParse(idEl.Value.GetString(), out var id) && id == targetActivityId)
                     {
                         int xp = 0;
                         Guid? skillId = null;
                         string? title = "Activity";
 
-                        // 1. Get Skill ID
                         var skillEl = GetPropertyCaseInsensitive(activity, "skillId");
                         if (skillEl != null && Guid.TryParse(skillEl.Value.GetString(), out var sid))
                         {
                             skillId = sid;
                         }
 
-                        // 2. Get Payload info
                         var payload = GetPropertyCaseInsensitive(activity, "payload");
                         if (payload.HasValue)
                         {
@@ -353,12 +302,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     {
         var root = doc.RootElement;
         if (root.ValueKind == JsonValueKind.Array) return root;
-
-        // Case-insensitive check for "activities" property
-        if (root.ValueKind == JsonValueKind.Object)
-        {
-            return GetPropertyCaseInsensitive(root, "activities");
-        }
+        if (root.ValueKind == JsonValueKind.Object) return GetPropertyCaseInsensitive(root, "activities");
         return null;
     }
 
@@ -367,10 +311,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         if (element.ValueKind != JsonValueKind.Object) return null;
         foreach (var property in element.EnumerateObject())
         {
-            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                return property.Value;
-            }
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase)) return property.Value;
         }
         return null;
     }
@@ -383,7 +324,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             using var doc = JsonDocument.Parse(jsonString);
             var activitiesElement = TryGetActivitiesElement(doc);
             if (activitiesElement == null) return false;
-
             foreach (var activity in activitiesElement.Value.EnumerateArray())
             {
                 var idEl = GetPropertyCaseInsensitive(activity, "activityId");
@@ -405,7 +345,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             var jsonString = ExtractJsonString(step.Content);
             using var doc = JsonDocument.Parse(jsonString);
             var activitiesElement = TryGetActivitiesElement(doc);
-
             if (activitiesElement.HasValue)
             {
                 int total = activitiesElement.Value.GetArrayLength();
