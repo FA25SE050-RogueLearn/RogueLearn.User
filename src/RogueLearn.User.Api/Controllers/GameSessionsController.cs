@@ -17,13 +17,13 @@ using RogueLearn.User.Application.Features.GameSessions.Queries.GetGameSessionPa
 using RogueLearn.User.Application.Features.GameSessions.Queries.GetGameSessionPlayers;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Api.Controllers
 {
     [ApiController]
     [Route("api/quests/game/sessions")]
-    // For demo flow, allow anonymous posts with optional API key; tighten later if needed.
-    [AllowAnonymous]
     public class GameSessionsController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -57,6 +57,7 @@ namespace RogueLearn.User.Api.Controllers
         // POST /api/quests/game/sessions/create
         [HttpPost("create")]
         [Consumes("application/json")]
+        [Authorize]
         public async Task<IActionResult> CreateSession([FromBody] CreateSessionRequest request)
         {
             var sessionId = Guid.NewGuid();
@@ -131,6 +132,7 @@ namespace RogueLearn.User.Api.Controllers
 
         [HttpPost("{sessionId:guid}/complete")]
         [Consumes("application/json")]
+        [Authorize(Policy = "GameApiKey")]
         public async Task<IActionResult> CompleteSession(Guid sessionId, [FromBody] JsonElement body)
         {
             try
@@ -155,6 +157,7 @@ namespace RogueLearn.User.Api.Controllers
         // POST /api/quests/game/sessions/unity-match-result
         [HttpPost("unity-match-result")]
         [Consumes("application/json")]
+        [Authorize(Policy = "GameApiKey")]
         public async Task<IActionResult> SubmitUnityMatchResult()
         {
             try
@@ -197,6 +200,7 @@ namespace RogueLearn.User.Api.Controllers
         }
 
         [HttpGet("/api/player/{userId}/last-summary")]
+        [Authorize]
         public async Task<IActionResult> GetLastSummary(string userId)
         {
             var json = await _mediator.Send(new GetLastPlayerSummaryQuery(userId));
@@ -210,6 +214,7 @@ namespace RogueLearn.User.Api.Controllers
         // MVP: Get question pack from database
         // GET /api/quests/game/sessions/{sessionId}/pack
         [HttpGet("{sessionId:guid}/pack")]
+        [Authorize(Policy = "GameApiKey")]
         public async Task<IActionResult> GetPack(Guid sessionId)
         {
             try
@@ -229,6 +234,7 @@ namespace RogueLearn.User.Api.Controllers
         // MVP: Get player summaries from database
         // GET /api/quests/game/sessions/{sessionId}/players
         [HttpGet("{sessionId:guid}/players")]
+        [Authorize]
         public async Task<IActionResult> GetPlayers(Guid sessionId)
         {
             var players = await _mediator.Send(new GetGameSessionPlayersQuery(sessionId));
@@ -238,6 +244,7 @@ namespace RogueLearn.User.Api.Controllers
         // MVP: Resolve join code to session (from database)
         // GET /api/quests/game/sessions/resolve?code=ABCDEF
         [HttpGet("resolve")]
+        [Authorize(Policy = "GameApiKey")]
         public async Task<IActionResult> ResolveByJoinCode([FromQuery] string code)
         {
             if (string.IsNullOrWhiteSpace(code))
@@ -269,6 +276,7 @@ namespace RogueLearn.User.Api.Controllers
         // GET /api/quests/game/sessions/unity-matches?limit=10&userId=xxx
         [HttpGet("unity-matches")]
         [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+        [Authorize]
         public async Task<IActionResult> GetUnityMatches([FromQuery] int limit = 10, [FromQuery] string? userId = null)
         {
             var json = await _mediator.Send(new GetUnityMatchesQuery(limit, userId));
@@ -279,6 +287,7 @@ namespace RogueLearn.User.Api.Controllers
         // MVP: Get specific Unity match by ID
         // GET /api/quests/game/sessions/unity-matches/{matchId}
         [HttpGet("unity-matches/{matchId}")]
+        [Authorize]
         public async Task<IActionResult> GetUnityMatch(string matchId)
         {
             var json = await _mediator.Send(new GetUnityMatchFileQuery(matchId));
@@ -290,7 +299,7 @@ namespace RogueLearn.User.Api.Controllers
         // POST /api/quests/game/sessions/host
         [HttpPost("host")]
         [Consumes("application/json")]
-        [AllowAnonymous] // tighten with auth when ready
+        [Authorize(Policy = "GameApiKey")]
         public async Task<IActionResult> StartHost([FromBody] HostRequest? request, CancellationToken cancellationToken)
         {
             var result = await _mediator.Send(new StartHostCommand(request?.UserId), cancellationToken);
@@ -308,6 +317,64 @@ namespace RogueLearn.User.Api.Controllers
                 raw = result.RawLog,
                 wsUrl = result.WsUrl
             });
+        }
+
+        [HttpDelete("host/{hostId}")]
+        [Authorize(Policy = "GameApiKey")]
+        public async Task<IActionResult> StopHost([FromRoute] string hostId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(hostId))
+            {
+                return BadRequest(new { ok = false, error = "Missing hostId" });
+            }
+
+            if (!Regex.IsMatch(hostId, @"^[a-zA-Z0-9_.-]+$"))
+            {
+                return BadRequest(new { ok = false, error = "Invalid hostId" });
+            }
+
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "docker",
+                    Arguments = $"rm -f {hostId}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var proc = Process.Start(psi);
+                if (proc == null)
+                {
+                    return StatusCode(500, new { ok = false, error = "Failed to start docker process" });
+                }
+
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+
+                await proc.WaitForExitAsync(cancellationToken);
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+
+                if (proc.ExitCode != 0)
+                {
+                    _logger.LogWarning("[Host] docker rm -f failed for {HostId}: {Error}", hostId, stderr);
+                    return StatusCode(500, new { ok = false, hostId, error = stderr });
+                }
+
+                return Ok(new { ok = true, hostId, message = stdout });
+            }
+            catch (OperationCanceledException)
+            {
+                return StatusCode(504, new { ok = false, hostId, error = "StopHost timed out" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Host] Failed to stop host {HostId}", hostId);
+                return StatusCode(500, new { ok = false, hostId, error = ex.Message });
+            }
         }
 
         public class HostRequest
