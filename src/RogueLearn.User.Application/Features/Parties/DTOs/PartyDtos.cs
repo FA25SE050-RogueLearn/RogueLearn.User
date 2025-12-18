@@ -17,8 +17,6 @@ public record PartyMemberDto(
     string? FirstName,
     string? LastName,
     string? ProfileImageUrl,
-    int Level,
-    int ExperiencePoints,
     string? Bio
 );
 public record PartyInvitationDto(

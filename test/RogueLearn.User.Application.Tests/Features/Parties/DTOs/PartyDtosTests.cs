@@ -23,8 +23,6 @@ public class PartyDtosTests
             "First",
             "Last",
             "http://img",
-            3,
-            100,
             "bio");
 
         var json = JsonSerializer.Serialize(dto);

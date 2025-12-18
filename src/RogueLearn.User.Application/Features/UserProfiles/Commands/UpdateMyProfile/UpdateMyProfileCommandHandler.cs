@@ -80,13 +80,6 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
         if (request.FirstName != null) profile.FirstName = string.IsNullOrWhiteSpace(request.FirstName) ? null : request.FirstName;
         if (request.LastName != null) profile.LastName = string.IsNullOrWhiteSpace(request.LastName) ? null : request.LastName;
         if (request.Bio != null) profile.Bio = request.Bio; // allow empty string to clear bio
-        if (request.PreferencesJson != null)
-        {
-            // Preferences are stored as JSONB; deserialize safe JSON object to dictionary
-            profile.Preferences = string.IsNullOrWhiteSpace(request.PreferencesJson)
-                ? null
-                : JsonSerializer.Deserialize<Dictionary<string, object>>(request.PreferencesJson);
-        }
 
         // ADDED: Academic path updates with validation
         if (request.ClassId.HasValue)

@@ -57,8 +57,6 @@ public class GetUserProfileByAuthIdQueryHandlerTests
             LastName = "Doe",
             ClassId = Guid.NewGuid(),
             RouteId = Guid.NewGuid(),
-            Level = 3,
-            ExperiencePoints = 1200,
             OnboardingCompleted = true,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -72,8 +70,6 @@ public class GetUserProfileByAuthIdQueryHandlerTests
             Email = profile.Email,
             FirstName = profile.FirstName,
             LastName = profile.LastName,
-            Level = profile.Level,
-            ExperiencePoints = profile.ExperiencePoints,
             OnboardingCompleted = profile.OnboardingCompleted,
             CreatedAt = profile.CreatedAt,
             ProfileImageUrl = profile.ProfileImageUrl,

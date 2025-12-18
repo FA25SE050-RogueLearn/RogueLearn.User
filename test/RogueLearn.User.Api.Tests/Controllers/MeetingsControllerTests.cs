@@ -67,7 +67,7 @@ public class MeetingsControllerTests
     {
         var mediator = Substitute.For<IMediator>();
         var controller = CreateController(mediator, Guid.NewGuid());
-        var res = await controller.ProcessArtifactsAndSummarize(Guid.NewGuid(), new List<ArtifactInputDto>(), CancellationToken.None);
+        var res = await controller.ProcessArtifactsAndSummarize(Guid.NewGuid(), new ProcessArtifactsRequest { AccessToken = "token", Artifacts = new List<ArtifactInputDto>() }, CancellationToken.None);
         res.Should().BeOfType<OkResult>();
     }
 

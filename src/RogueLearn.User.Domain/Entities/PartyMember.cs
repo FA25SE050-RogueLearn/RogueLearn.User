@@ -25,10 +25,4 @@ public class PartyMember : BaseEntity
 
     [Column("joined_at")]
     public DateTimeOffset JoinedAt { get; set; } = DateTimeOffset.UtcNow;
-
-    [Column("left_at")]
-    public DateTimeOffset? LeftAt { get; set; }
-
-    [Column("contribution_score")]
-    public int ContributionScore { get; set; } = 0;
 }

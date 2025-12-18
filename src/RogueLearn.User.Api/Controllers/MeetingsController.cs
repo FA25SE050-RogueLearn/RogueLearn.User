@@ -47,10 +47,10 @@ public class MeetingsController : ControllerBase
     }
 
     [HttpPost("{meetingId}/artifacts")]
-    public async Task<ActionResult> ProcessArtifactsAndSummarize([FromRoute] Guid meetingId, [FromBody] List<ArtifactInputDto> artifacts, CancellationToken cancellationToken)
+    public async Task<ActionResult> ProcessArtifactsAndSummarize([FromRoute] Guid meetingId, [FromBody] ProcessArtifactsRequest request, CancellationToken cancellationToken)
     {
-        if (artifacts == null) return BadRequest("Invalid body");
-        await _mediator.Send(new ProcessArtifactsAndSummarizeCommand(meetingId, artifacts), cancellationToken);
+        if (request == null || request.Artifacts == null) return BadRequest("Invalid body");
+        await _mediator.Send(new ProcessArtifactsAndSummarizeCommand(meetingId, request.Artifacts, request.AccessToken ?? string.Empty), cancellationToken);
         return Ok();
     }
 
@@ -87,4 +87,10 @@ public class MeetingsController : ControllerBase
 public class CreateSummaryRequest
 {
     public string Content { get; set; } = string.Empty;
+}
+
+public class ProcessArtifactsRequest
+{
+    public string? AccessToken { get; set; }
+    public List<ArtifactInputDto> Artifacts { get; set; } = new();
 }

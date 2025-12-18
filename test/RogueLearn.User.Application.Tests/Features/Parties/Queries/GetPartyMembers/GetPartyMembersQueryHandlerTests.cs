@@ -26,11 +26,11 @@ public class GetPartyMembersQueryHandlerTests
 
         var member = new PartyMember { Id = System.Guid.NewGuid(), PartyId = query.PartyId, AuthUserId = System.Guid.NewGuid(), Role = PartyRole.Member, Status = MemberStatus.Active };
         memberRepo.GetMembersByPartyAsync(query.PartyId, Arg.Any<CancellationToken>()).Returns(new List<PartyMember> { member });
-        var profile = new UserProfile { AuthUserId = member.AuthUserId, Username = "u", Email = "e@example.com", FirstName = "F", LastName = "L", ProfileImageUrl = "img", Level = 2, ExperiencePoints = 100, Bio = "bio" };
+        var profile = new UserProfile { AuthUserId = member.AuthUserId, Username = "u", Email = "e@example.com", FirstName = "F", LastName = "L", ProfileImageUrl = "img", Bio = "bio" };
         profileRepo.GetByAuthIdAsync(member.AuthUserId, Arg.Any<CancellationToken>()).Returns(profile);
 
         mapper.Map<PartyMemberDto>(Arg.Any<PartyMember>()).Returns(ci =>
-            new PartyMemberDto(member.Id, member.PartyId, member.AuthUserId, member.Role, member.Status, member.JoinedAt, profile.Username, profile.Email, profile.FirstName, profile.LastName, profile.ProfileImageUrl, profile.Level, profile.ExperiencePoints, profile.Bio)
+            new PartyMemberDto(member.Id, member.PartyId, member.AuthUserId, member.Role, member.Status, member.JoinedAt, profile.Username, profile.Email, profile.FirstName, profile.LastName, profile.ProfileImageUrl, profile.Bio)
         );
 
         var result = await sut.Handle(query, CancellationToken.None);

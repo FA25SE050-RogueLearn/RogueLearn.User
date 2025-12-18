@@ -37,14 +37,12 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-        // UserProfile mappings
-        CreateMap<UserProfile, UserProfileDto>()
-          .ForMember(dest => dest.PreferencesJson, opt => opt.MapFrom(src => src.Preferences != null ? JsonSerializer.Serialize(src.Preferences, (JsonSerializerOptions)null!) : null));
-
         // Role mappings
         CreateMap<Role, RoleDto>();
         CreateMap<Role, CreateRoleResponse>();
         CreateMap<Role, UpdateRoleResponse>();
+
+        CreateMap<UserProfile, UserProfileDto>();
 
         // UserRole mappings - custom mapping for UserRoleDto
         CreateMap<UserRole, UserRoleDto>()
@@ -112,8 +110,6 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.FirstName, opt => opt.Ignore())
             .ForMember(dest => dest.LastName, opt => opt.Ignore())
             .ForMember(dest => dest.ProfileImageUrl, opt => opt.Ignore())
-            .ForMember(dest => dest.Level, opt => opt.Ignore())
-            .ForMember(dest => dest.ExperiencePoints, opt => opt.Ignore())
             .ForMember(dest => dest.Bio, opt => opt.Ignore());
         CreateMap<PartyInvitation, PartyInvitationDto>()
             .ForCtorParam("JoinLink", opt => opt.MapFrom(_ => (string?)null))

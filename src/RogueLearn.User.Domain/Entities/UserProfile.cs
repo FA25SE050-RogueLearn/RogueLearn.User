@@ -27,21 +27,11 @@ public class UserProfile : BaseEntity
 	[Column("route_id")]
 	public Guid? RouteId { get; set; }
 
-	[Column("level")]
-	public int Level { get; set; } = 1;
-
-	[Column("experience_points")]
-	public int ExperiencePoints { get; set; } = 0;
-
 	[Column("profile_image_url")]
 	public string? ProfileImageUrl { get; set; }
 
 	[Column("bio")]
 	public string? Bio { get; set; }
-
-	// Stored as JSONB in database; represented as a dictionary in the entity to match JSON object
-	[Column("preferences")]
-	public Dictionary<string, object>? Preferences { get; set; }
 
 	[Column("onboarding_completed")]
 	public bool OnboardingCompleted { get; set; } = false;

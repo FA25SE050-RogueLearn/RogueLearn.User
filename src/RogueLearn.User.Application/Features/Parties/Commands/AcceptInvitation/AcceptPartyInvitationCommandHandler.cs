@@ -64,7 +64,6 @@ public class AcceptPartyInvitationCommandHandler : IRequestHandler<AcceptPartyIn
         {
             existingMember.Status = MemberStatus.Active;
             existingMember.JoinedAt = DateTimeOffset.UtcNow;
-            existingMember.LeftAt = null;
             await _memberRepository.UpdateAsync(existingMember, cancellationToken);
         }
         else

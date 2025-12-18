@@ -11,7 +11,7 @@ public class ProcessArtifactsAndSummarizeCommandValidatorTests
     [Fact]
     public void Valid_Passes()
     {
-        var cmd = new ProcessArtifactsAndSummarizeCommand(System.Guid.NewGuid(), new List<ArtifactInputDto> { new ArtifactInputDto { ArtifactType = "note", Url = "https://example.com/1" } });
+        var cmd = new ProcessArtifactsAndSummarizeCommand(System.Guid.NewGuid(), new List<ArtifactInputDto> { new ArtifactInputDto { ArtifactType = "note", Url = "https://example.com/1" } }, string.Empty);
         var validator = new ProcessArtifactsAndSummarizeCommandValidator();
         var result = validator.Validate(cmd);
         result.IsValid.Should().BeTrue();
@@ -20,7 +20,7 @@ public class ProcessArtifactsAndSummarizeCommandValidatorTests
     [Fact]
     public void Invalid_Url_Fails()
     {
-        var cmd = new ProcessArtifactsAndSummarizeCommand(System.Guid.NewGuid(), new List<ArtifactInputDto> { new ArtifactInputDto { ArtifactType = "note", Url = "bad" } });
+        var cmd = new ProcessArtifactsAndSummarizeCommand(System.Guid.NewGuid(), new List<ArtifactInputDto> { new ArtifactInputDto { ArtifactType = "note", Url = "bad" } }, string.Empty);
         var validator = new ProcessArtifactsAndSummarizeCommandValidator();
         var result = validator.Validate(cmd);
         result.IsValid.Should().BeFalse();
