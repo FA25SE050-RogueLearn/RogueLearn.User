@@ -68,8 +68,10 @@ public static class ServiceCollectionExtensions
                 logger);
         });
 
-        // Register extraction plugins with new, separated responsibilities.
-        services.AddScoped<ICurriculumExtractionPlugin, CurriculumExtractionPlugin>();
+        // Register extraction plugins
+        // MODIFICATION: Swapped CurriculumExtractionPlugin for HtmlCurriculumExtractionService (Non-AI)
+        services.AddScoped<ICurriculumExtractionPlugin, HtmlCurriculumExtractionService>();
+
         services.AddScoped<ISyllabusExtractionPlugin, SyllabusExtractionPlugin>();
         // Register Roadmap SK plugin
         services.AddScoped<IRoadmapExtractionPlugin, RoadmapExtractionPlugin>();
@@ -86,9 +88,7 @@ public static class ServiceCollectionExtensions
         // ADDED: Register the new plugin for quest step generation.
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
         services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
-        // MODIFICATION START: Register the new plugin for constructive question generation.
         services.AddScoped<IConstructiveQuestionGenerationPlugin, ConstructiveQuestionGenerationPlugin>();
-        // MODIFICATION END
 
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
@@ -107,8 +107,6 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddApiServices(this IServiceCollection services)
     {
-        // MODIFICATION: The services.AddControllers() call was moved to Program.cs to configure NewtonsoftJson.
-        // This method now only configures Swagger and CORS.
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(c =>
         {
