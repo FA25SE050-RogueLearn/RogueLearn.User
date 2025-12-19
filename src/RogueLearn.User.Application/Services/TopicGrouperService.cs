@@ -126,20 +126,36 @@ public class TopicGrouperService : ITopicGrouperService
     {
         // Generate a title based on the most frequent or first topic
         var topics = module.Sessions
-            .Select(s => NormalizeTopic(s.Topic))
-            .GroupBy(t => t)
-            .OrderByDescending(g => g.Count())
-            .Select(g => g.Key)
+            .Select(s => CleanTitle(s.Topic)) // Use simplified title cleaner
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         module.KeyTopics = topics;
 
-        // Simple title strategy: Top 1-2 topics
+        // Smart Title Strategy:
         if (topics.Count > 0)
         {
-            module.Title = topics.Count > 1
-                ? $"{topics[0]} & {topics[1]}"
-                : topics[0];
+            // 1. Pick the first topic as the primary candidate
+            var bestTitle = topics[0];
+
+            // 2. If it's short (< 30 chars) AND we have a second distinct topic, consider combining ONLY if short
+            if (topics.Count > 1 && bestTitle.Length < 25 && topics[1].Length < 25)
+            {
+                // Check if they are redundant (e.g. "Java Basics" & "Java Syntax")
+                if (!IsRedundant(bestTitle, topics[1]))
+                {
+                    bestTitle = $"{bestTitle} & {topics[1]}";
+                }
+            }
+
+            // 3. Final safety truncate to ensure DB compliance (though CleanTitle helps)
+            if (bestTitle.Length > 100)
+            {
+                bestTitle = bestTitle.Substring(0, 97) + "...";
+            }
+
+            module.Title = bestTitle;
         }
         else
         {
@@ -150,20 +166,61 @@ public class TopicGrouperService : ITopicGrouperService
     private string NormalizeTopic(string topic)
     {
         if (string.IsNullOrWhiteSpace(topic)) return "General";
-
-        // Basic normalization: remove punctuation, lower case, trim
-        // "Introduction to C#" -> "introduction to c#"
         var cleaned = topic.Trim().ToLowerInvariant();
-
-        // Remove common prefixes like "Chapter 1:", "Unit 2:"
         cleaned = Regex.Replace(cleaned, @"^(chapter|unit|lesson|session)\s*\d+\s*[:.-]\s*", "");
-
         return cleaned;
+    }
+
+    /// <summary>
+    /// Cleans academic titles to be short and readable.
+    /// Removes technical specs, versions, and redundant prefixes.
+    /// </summary>
+    private string CleanTitle(string topic)
+    {
+        if (string.IsNullOrWhiteSpace(topic)) return string.Empty;
+
+        // 1. Split by common separators (colon, dash, pipe, plus) and take the first meaningful part
+        var parts = Regex.Split(topic, @"\s*[:|\-–+]\s*");
+        var title = parts[0].Trim();
+
+        // 2. Remove common noise like "Introduction to..." if it makes it too long, but keep it if short
+        // actually "Introduction to Java" is fine. "Introduction to Java Web Application Development..." is not.
+
+        // 3. Remove version numbers (e.g., "JDK 1.8", "Tomcat 10")
+        title = Regex.Replace(title, @"\s+v?\d+(\.\d+)*.*", "");
+
+        // 4. Remove parentheticals
+        title = Regex.Replace(title, @"\s*\(.*?\)", "");
+
+        // 5. Hard truncate if the *first part* itself was huge
+        if (title.Length > 60)
+        {
+            var words = title.Split(' ');
+            if (words.Length > 6)
+            {
+                title = string.Join(" ", words.Take(6));
+            }
+        }
+
+        return title.Trim();
+    }
+
+    private bool IsRedundant(string title1, string title2)
+    {
+        var t1 = title1.ToLowerInvariant();
+        var t2 = title2.ToLowerInvariant();
+        // If one contains the other, or they share > 50% words
+        if (t1.Contains(t2) || t2.Contains(t1)) return true;
+
+        var w1 = t1.Split(' ').ToHashSet();
+        var w2 = t2.Split(' ').ToHashSet();
+        var common = w1.Intersect(w2).Count();
+
+        return common >= Math.Min(w1.Count, w2.Count) / 2.0;
     }
 
     private bool IsTopicRelated(HashSet<string> currentTopics, string newTopic)
     {
-        // Simple heuristic: do they share significant words?
         var newWords = newTopic.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Where(w => w.Length > 3).ToHashSet();
 

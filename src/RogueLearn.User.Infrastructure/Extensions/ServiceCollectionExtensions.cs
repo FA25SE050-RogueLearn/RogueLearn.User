@@ -135,7 +135,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INoteRepository, NoteRepository>();
         services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<INoteTagRepository, NoteTagRepository>();
-        
+
         // Social/Party repositories
         services.AddScoped<IPartyRepository, PartyRepository>();
         services.AddScoped<IPartyMemberRepository, PartyMemberRepository>();
@@ -181,6 +181,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ActivityValidationService>();
         services.AddScoped<IQuizValidationService, QuizValidationService>();
         services.AddScoped<IKnowledgeCheckValidationService, KnowledgeCheckValidationService>();
+        services.AddScoped<ICodingValidationService, CodingValidationService>(); // ADDED
         services.AddScoped<IQuestSubmissionRepository, QuestSubmissionRepository>();
 
         return services;

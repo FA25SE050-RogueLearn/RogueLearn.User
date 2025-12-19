@@ -101,21 +101,6 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- If NO URL provided → Use `summary` field with detailed content");
         prompt.AppendLine("- Always include `articleTitle`, `summary`, and `experiencePoints`");
         prompt.AppendLine();
-        prompt.AppendLine("**Example:**");
-        prompt.AppendLine("```json");
-        prompt.AppendLine("{");
-        prompt.AppendLine("  \"type\": \"Reading\",");
-        prompt.AppendLine("  \"activityId\": \"placeholder-id\",");
-        prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
-        prompt.AppendLine("  \"payload\": {");
-        prompt.AppendLine("    \"url\": \"https://www.geeksforgeeks.org/c-programming/\",");
-        prompt.AppendLine("    \"articleTitle\": \"Introduction to C Programming\",");
-        prompt.AppendLine("    \"summary\": \"Learn the basics of C programming...\",");
-        prompt.AppendLine("    \"experiencePoints\": 15");
-        prompt.AppendLine("  }");
-        prompt.AppendLine("}");
-        prompt.AppendLine("```");
-        prompt.AppendLine();
 
         prompt.AppendLine("### ✅ KnowledgeCheck Activities");
         prompt.AppendLine("**Purpose:** Quick comprehension checks after reading material");
@@ -137,35 +122,52 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("    \"questions\": [");
         prompt.AppendLine("      {");
         prompt.AppendLine("        \"question\": \"What is a compiler?\",");
-        prompt.AppendLine("        \"options\": [\"A\", \"B\", \"C\", \"D\"],");
-        prompt.AppendLine("        \"answer\": \"A\",");
+        prompt.AppendLine("        \"options\": [\"It converts code to machine language\", \"It runs code\", \"It deletes code\", \"It writes code\"],");
+        prompt.AppendLine("        \"answer\": \"It converts code to machine language\","); // Example showing full text
         prompt.AppendLine("        \"explanation\": \"...\"");
         prompt.AppendLine("      },");
-        prompt.AppendLine("      {");
-        prompt.AppendLine("        \"question\": \"Question 2...\",");
-        prompt.AppendLine("        \"options\": [...],");
-        prompt.AppendLine("        \"answer\": \"...\",");
-        prompt.AppendLine("        \"explanation\": \"...\"");
-        prompt.AppendLine("      }");
+        prompt.AppendLine("      // ... more questions");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
+        prompt.AppendLine("**IMPORTANT:** The `answer` field MUST contain the EXACT text string of the correct option. Do NOT use 'A', 'B', 'C', 'D' or indices (0, 1).");
         prompt.AppendLine();
 
-        prompt.AppendLine("### 🎓 Quiz Activities");
+        prompt.AppendLine("### 💻 Coding Activities (CHALLENGING TRACK ONLY)");
+        prompt.AppendLine("**Purpose:** Hands-on application of code concepts.");
+        prompt.AppendLine("**XP Value:** 50-70 XP");
+        prompt.AppendLine("**Use Case:** Only if the subject involves Programming (C, Java, C#, Web, etc).");
+        prompt.AppendLine("**Payload Structure:**");
+        prompt.AppendLine("```json");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"type\": \"Coding\",");
+        prompt.AppendLine("  \"activityId\": \"placeholder-id\",");
+        prompt.AppendLine("  \"skillId\": \"skill-uuid\",");
+        prompt.AppendLine("  \"payload\": {");
+        prompt.AppendLine("    \"language\": \"csharp\","); // e.g. c, java, python, javascript
+        prompt.AppendLine("    \"topic\": \"Recursion\",");
+        prompt.AppendLine("    \"description\": \"Write a function to calculate Fibonacci...\",");
+        prompt.AppendLine("    \"starterCode\": \"public int Fib(int n) { \\n // TODO \\n }\",");
+        prompt.AppendLine("    \"validationCriteria\": \"Must use recursion, not loops. Handle n=0.\","); // Hidden from user, used by AI grader
+        prompt.AppendLine("    \"experiencePoints\": 60");
+        prompt.AppendLine("  }");
+        prompt.AppendLine("}");
+        prompt.AppendLine("```");
+        prompt.AppendLine("**IMPORTANT FOR STARTER CODE:**");
+        prompt.AppendLine("- Provide ONLY valid code text inside the string.");
+        prompt.AppendLine("- Do NOT use markdown code fences (like ```java) INSIDE the JSON string.");
+        prompt.AppendLine("- Do NOT use descriptive text like 'the newline character'. Use actual escape sequence `\\n`.");
+        prompt.AppendLine("- Keep it simple: One file/class only if possible.");
+        prompt.AppendLine();
+
+        prompt.AppendLine("### 🎓 Quiz Activities (BOSS FIGHT)");
         prompt.AppendLine("**Purpose:** Comprehensive assessment of the entire module (MANDATORY FINAL ACTIVITY)");
-        prompt.AppendLine("**XP Value:** 50-100 XP (Higher for challenging track)");
-        prompt.AppendLine();
+        prompt.AppendLine("**XP Value:** 50-100 XP");
         prompt.AppendLine("⚠️ **CRITICAL REQUIREMENT:** EVERY quest step MUST end with a Quiz activity. NO EXCEPTIONS.");
-        prompt.AppendLine();
-        prompt.AppendLine("**Requirements:**");
-        prompt.AppendLine("- **SUPPORTIVE Track:** 7-8 questions (foundational, 70% passing grade)");
-        prompt.AppendLine("- **STANDARD Track:** 8-9 questions (balanced difficulty, 70% passing grade)");
-        prompt.AppendLine("- **CHALLENGING Track:** 9-10 questions (advanced/application level, 70% passing grade)");
-        prompt.AppendLine("- MUST be placed as the LAST activity in the sequence");
-        prompt.AppendLine("- Consolidate all questions into a SINGLE Quiz activity");
-        prompt.AppendLine("- Cover all major topics from the module comprehensively");
+        prompt.AppendLine("- **SUPPORTIVE:** 7-8 questions, foundational");
+        prompt.AppendLine("- **STANDARD:** 8-9 questions, balanced");
+        prompt.AppendLine("- **CHALLENGING:** 9-10 questions, advanced/application");
         prompt.AppendLine();
         prompt.AppendLine("**Payload Structure (Array of Questions):**");
         prompt.AppendLine("```json");
@@ -178,8 +180,8 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("    \"questions\": [");
         prompt.AppendLine("      {");
         prompt.AppendLine("        \"question\": \"Quiz Question 1?\",");
-        prompt.AppendLine("        \"options\": [\"A\", \"B\", \"C\", \"D\"],");
-        prompt.AppendLine("        \"answer\": \"Correct answer\",");
+        prompt.AppendLine("        \"options\": [\"Option 1 text\", \"Option 2 text\", \"Option 3 text\", \"Option 4 text\"],");
+        prompt.AppendLine("        \"answer\": \"Option 2 text\","); // Example showing full text
         prompt.AppendLine("        \"explanation\": \"Explanation...\"");
         prompt.AppendLine("      },");
         prompt.AppendLine("      // ... 6-9 more questions depending on track");
@@ -187,6 +189,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine("```");
+        prompt.AppendLine("**IMPORTANT:** The `answer` field MUST contain the EXACT text string of the correct option. Do NOT use 'A', 'B', 'C', 'D' or indices (0, 1).");
         prompt.AppendLine();
 
         // 5. The "Three-Lane" Requirement
@@ -200,6 +203,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, simple recall focus");
         prompt.AppendLine("- **Quiz:** MANDATORY - 7-8 questions, straightforward, foundational understanding");
         prompt.AppendLine("- **Total Activities:** 6-8 activities (including the mandatory Quiz)");
+        prompt.AppendLine("- **Coding:** DO NOT include Coding activities.");
         prompt.AppendLine();
 
         prompt.AppendLine("### 🟡 STANDARD Track (The balanced path)");
@@ -209,12 +213,13 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- **Quiz:** MANDATORY - 8-9 questions, balanced difficulty, mixed question types");
         prompt.AppendLine("- **Total Activities:** 7-9 activities (including the mandatory Quiz)");
         prompt.AppendLine("- **MUST use APPROVED RESOURCE URLs** when available for Reading activities");
+        prompt.AppendLine("- **Coding:** DO NOT include Coding activities (keep it for Challenging).");
         prompt.AppendLine();
 
         prompt.AppendLine("### 🔴 CHALLENGING Track (For advanced students)");
         prompt.AppendLine("**Philosophy:** Deeper exploration, edge cases, real-world complexity");
         prompt.AppendLine("- **Reading:** Advanced patterns, industry best practices, performance considerations");
-        prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, scenario-based, requires analysis");
+        prompt.AppendLine("- **Coding:** REPLACE 1-2 KnowledgeChecks with Coding Challenges (if subject allows).");
         prompt.AppendLine("- **Quiz:** MANDATORY - 9-10 questions, application/analysis level (Bloom's Taxonomy)");
         prompt.AppendLine("- **Total Activities:** 8-10 activities (including the mandatory Quiz)");
         prompt.AppendLine();
@@ -222,19 +227,6 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("**CRITICAL:** All three tracks MUST:");
         prompt.AppendLine("1. Cover the same core topics but at different depths");
         prompt.AppendLine("2. End with a Quiz activity (NO EXCEPTIONS)");
-        prompt.AppendLine();
-
-        // 6. Activity Flow Pattern
-        prompt.AppendLine("## 6. Recommended Activity Flow");
-        prompt.AppendLine("For each track, follow this general pattern:");
-        prompt.AppendLine("1. Reading (introduce concept)");
-        prompt.AppendLine("2. KnowledgeCheck (3-4 questions)");
-        prompt.AppendLine("3. Reading (next concept)");
-        prompt.AppendLine("4. KnowledgeCheck (3-4 questions)");
-        prompt.AppendLine("5. Reading (additional concepts if needed)");
-        prompt.AppendLine("6. **Quiz (MANDATORY FINAL ACTIVITY - 7-10 questions)**");
-        prompt.AppendLine();
-        prompt.AppendLine("**Note:** The Quiz MUST always be the last activity. Adjust the number of Reading and KnowledgeCheck activities based on content complexity.");
         prompt.AppendLine();
 
         // 7. Output Rules
@@ -249,15 +241,18 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("6. Include `experiencePoints` in EVERY activity payload");
         prompt.AppendLine("7. Group questions into `questions` arrays for KnowledgeCheck and Quiz");
         prompt.AppendLine("8. Ensure Quiz covers all major topics from the module");
+        prompt.AppendLine("9. **Ensure `answer` fields match the EXACT string text of the correct option, not 'A' or 'B'.**"); // Explicit constraint
         prompt.AppendLine();
 
         prompt.AppendLine("### ❌ MUST NOT DO:");
-        prompt.AppendLine("1. Do NOT generate coding activities or exercises");
-        prompt.AppendLine("2. Do NOT use literal escape sequences like `\\n` or `\\t` in strings");
-        prompt.AppendLine("3. Do NOT create single-question activities");
-        prompt.AppendLine("4. **DO NOT omit the Quiz activity - it is MANDATORY**");
-        prompt.AppendLine("5. Do NOT omit `experiencePoints` from payloads");
-        prompt.AppendLine("6. Do NOT wrap JSON output in markdown code fences");
+        prompt.AppendLine("1. Do NOT use literal escape sequences like `\\n` or `\\t` in strings (Use `\\\\n` instead)");
+        prompt.AppendLine("2. Do NOT create single-question activities");
+        prompt.AppendLine("3. **DO NOT omit the Quiz activity - it is MANDATORY**");
+        prompt.AppendLine("4. Do NOT omit `experiencePoints` from payloads");
+        prompt.AppendLine("5. Do NOT wrap JSON output in markdown code fences");
+        prompt.AppendLine("6. Do NOT include markdown blocks inside JSON string values (e.g. no ```java inside \"starterCode\")");
+        prompt.AppendLine("7. The content title of any item should NOT exceed 255 characters (keep titles concise).");
+        prompt.AppendLine("8. Do NOT use letter keys like 'A', 'B' for answers. Use the full option text."); // Explicit constraint
         prompt.AppendLine();
 
         // 8. JSON Schema
@@ -268,7 +263,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"supportive\": {");
         prompt.AppendLine("    \"activities\": [");
         prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
-        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, \"questions\": [...] } },");
+        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, \"questions\": [ { \"question\": \"...\", \"options\": [...], \"answer\": \"Full Text Answer\" } ] } },"); // Updated schema hint
         prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
         prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 60, \"questions\": [7-8 questions] } }");
         prompt.AppendLine("    ]");
@@ -282,6 +277,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("  \"challenging\": {");
         prompt.AppendLine("    \"activities\": [");
         prompt.AppendLine("      // ... similar structure ...");
+        prompt.AppendLine("      { \"type\": \"Coding\", \"payload\": { \"language\": \"csharp\", \"starterCode\": \"...\", \"validationCriteria\": \"...\", \"experiencePoints\": 60 } },");
         prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 100, \"questions\": [9-10 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  }");
@@ -293,7 +289,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("## 9. String Formatting Guidelines");
         prompt.AppendLine("When writing text for questions, explanations, and summaries:");
         prompt.AppendLine("- Use plain English with normal punctuation");
-        prompt.AppendLine("- For line breaks, write complete sentences instead of using escape codes");
+        prompt.AppendLine("- For line breaks in strings, use `\\\\n` (double backslash n)");
         prompt.AppendLine("- For emphasis, use natural language or Markdown (*italic*, **bold**)");
         prompt.AppendLine("- Example: Instead of 'First step\\nSecond step', write 'First step. Second step.'");
         prompt.AppendLine();
@@ -322,6 +318,9 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- [ ] Every activity has a valid skillId and activityId");
         prompt.AppendLine("- [ ] Output is pure JSON (no markdown fences, no explanatory text)");
         prompt.AppendLine("- [ ] Questions are grouped in `questions` arrays for KnowledgeCheck and Quiz");
+        prompt.AppendLine("- [ ] Coding activities have clean starterCode (no markdown fences inside string)");
+        prompt.AppendLine("- [ ] Titles do not exceed 255 characters");
+        prompt.AppendLine("- [ ] All answers match the exact text of the correct option (no 'A', 'B', etc.)"); // Added check
 
         return prompt.ToString();
     }
