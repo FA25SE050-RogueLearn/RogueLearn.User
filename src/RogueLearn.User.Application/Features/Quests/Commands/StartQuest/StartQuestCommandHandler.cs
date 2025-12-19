@@ -15,6 +15,12 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
     private readonly IQuestRepository _questRepository;
     private readonly IStudentSemesterSubjectRepository _studentSubjectRepository;
     private readonly IQuestDifficultyResolver _difficultyResolver;
+
+    // NEW DEPENDENCIES for Skill Analysis
+    private readonly ISubjectSkillMappingRepository _mappingRepository;
+    private readonly ISkillDependencyRepository _skillDependencyRepository;
+    private readonly IUserSkillRepository _userSkillRepository;
+
     private readonly ILogger<StartQuestCommandHandler> _logger;
 
     public StartQuestCommandHandler(
@@ -22,12 +28,18 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
         IQuestRepository questRepository,
         IStudentSemesterSubjectRepository studentSubjectRepository,
         IQuestDifficultyResolver difficultyResolver,
+        ISubjectSkillMappingRepository mappingRepository,
+        ISkillDependencyRepository skillDependencyRepository,
+        IUserSkillRepository userSkillRepository,
         ILogger<StartQuestCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
         _questRepository = questRepository;
         _studentSubjectRepository = studentSubjectRepository;
         _difficultyResolver = difficultyResolver;
+        _mappingRepository = mappingRepository;
+        _skillDependencyRepository = skillDependencyRepository;
+        _userSkillRepository = userSkillRepository;
         _logger = logger;
     }
 
@@ -35,26 +47,65 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
     {
         _logger.LogInformation("StartQuest: User {UserId} requesting to start quest {QuestId}", request.AuthUserId, request.QuestId);
 
-        // 1. Check if quest exists
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
-        if (quest == null)
-        {
-            throw new NotFoundException("Quest", request.QuestId);
-        }
+        if (quest == null) throw new NotFoundException("Quest", request.QuestId);
 
-        // 2. Check for existing attempt
         var existingAttempt = await _attemptRepository.FirstOrDefaultAsync(
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
 
-        // 3. Resolve Difficulty (Current Calculation)
+        // --- SKILL & PREREQUISITE ANALYSIS ---
+        double prerequisiteProficiency = 1.0; // Default to 100% if no data
+
+        if (quest.SubjectId.HasValue)
+        {
+            // 1. Find Skills taught by this Subject
+            var subjectMappings = await _mappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
+            var subjectSkillIds = subjectMappings.Select(m => m.SkillId).ToList();
+
+            if (subjectSkillIds.Any())
+            {
+                // 2. Find Prerequisites for those skills
+                // (Skills that must be known BEFORE learning this subject)
+                var allDependencies = await _skillDependencyRepository.GetAllAsync(cancellationToken);
+                var prerequisites = allDependencies
+                    .Where(d => subjectSkillIds.Contains(d.SkillId)) // Where target is this subject's skill
+                    .Select(d => d.PrerequisiteSkillId)
+                    .Distinct()
+                    .ToList();
+
+                if (prerequisites.Any())
+                {
+                    // 3. Check User's Level in Prerequisites
+                    var userSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
+                    var userSkillMap = userSkills.ToDictionary(s => s.SkillId);
+
+                    int totalPrereqs = prerequisites.Count;
+                    int metPrereqs = 0;
+
+                    foreach (var prereqId in prerequisites)
+                    {
+                        if (userSkillMap.TryGetValue(prereqId, out var us) && us.Level >= 3) // Level 3 = "Competent"
+                        {
+                            metPrereqs++;
+                        }
+                    }
+
+                    prerequisiteProficiency = (double)metPrereqs / totalPrereqs;
+                    _logger.LogInformation("Prerequisite Proficiency: {Percent:P0} ({Met}/{Total})", prerequisiteProficiency, metPrereqs, totalPrereqs);
+                }
+            }
+        }
+        // -------------------------------------
+
         string calculatedDifficulty = "Standard";
         if (quest.SubjectId.HasValue)
         {
             var gradeRecords = await _studentSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken);
             var subjectRecord = gradeRecords.FirstOrDefault(s => s.SubjectId == quest.SubjectId.Value);
 
-            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord);
+            // Pass the proficiency to the resolver
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord, prerequisiteProficiency);
             calculatedDifficulty = difficultyInfo.ExpectedDifficulty;
         }
         else if (!string.IsNullOrEmpty(quest.ExpectedDifficulty))
@@ -62,32 +113,24 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             calculatedDifficulty = quest.ExpectedDifficulty;
         }
 
-        // 4. Handle State Transitions
         if (existingAttempt != null)
         {
-            // CASE A: Already Active/Completed
-            // We respect the HISTORICAL difficulty locked in the attempt, ignoring the new calculation.
+            // If already active, respect history unless it was just a preview ("NotStarted")
             if (existingAttempt.Status != QuestAttemptStatus.NotStarted)
             {
-                _logger.LogInformation("Quest {QuestId} already active. Maintaining locked difficulty: {Difficulty}",
-                    request.QuestId, existingAttempt.AssignedDifficulty);
-
                 return new StartQuestResponse
                 {
                     AttemptId = existingAttempt.Id,
                     Status = existingAttempt.Status.ToString(),
-                    AssignedDifficulty = existingAttempt.AssignedDifficulty, // Return the snapshot
+                    AssignedDifficulty = existingAttempt.AssignedDifficulty,
                     IsNew = false
                 };
             }
 
-            // CASE B: Transitioning from NotStarted -> InProgress (First Activation)
-            // We LOCK IN the currently calculated difficulty now.
-            _logger.LogInformation("Activating NotStarted attempt. Locking difficulty to: {Difficulty}", calculatedDifficulty);
-
+            // Activating for the first time -> Lock calculated difficulty
             existingAttempt.Status = QuestAttemptStatus.InProgress;
-            existingAttempt.AssignedDifficulty = calculatedDifficulty; // SNAPSHOT HAPPENS HERE
-            existingAttempt.Notes = $"Started on {DateTime.UtcNow}. Difficulty locked.";
+            existingAttempt.AssignedDifficulty = calculatedDifficulty;
+            existingAttempt.Notes = $"Started. Difficulty: {calculatedDifficulty} (Prereq Prof: {prerequisiteProficiency:P0})";
             existingAttempt.StartedAt = DateTimeOffset.UtcNow;
             existingAttempt.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -102,25 +145,20 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             };
         }
 
-        // CASE C: No attempt exists (Fresh Start)
-        // Create new attempt and LOCK IN the difficulty.
         var newAttempt = new UserQuestAttempt
         {
             Id = Guid.NewGuid(),
             AuthUserId = request.AuthUserId,
             QuestId = request.QuestId,
             Status = QuestAttemptStatus.InProgress,
-            AssignedDifficulty = calculatedDifficulty, // SNAPSHOT HAPPENS HERE
-            Notes = "First attempt",
+            AssignedDifficulty = calculatedDifficulty,
+            Notes = $"First attempt. Prereq Prof: {prerequisiteProficiency:P0}",
             StartedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
 
         var createdAttempt = await _attemptRepository.AddAsync(newAttempt, cancellationToken);
-
-        _logger.LogInformation("Created fresh attempt for Quest {QuestId} with locked difficulty {Difficulty}",
-            createdAttempt.Id, calculatedDifficulty);
 
         return new StartQuestResponse
         {
