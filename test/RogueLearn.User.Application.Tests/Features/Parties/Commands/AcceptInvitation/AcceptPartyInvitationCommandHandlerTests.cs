@@ -51,7 +51,6 @@ public class AcceptPartyInvitationCommandHandlerTests
 
         updated.Should().NotBeNull();
         updated!.Status.Should().Be(MemberStatus.Active);
-        updated.LeftAt.Should().BeNull();
         updated.JoinedAt.Should().NotBe(default);
         await inviteRepo.Received(1).UpdateAsync(Arg.Is<PartyInvitation>(i => i.Status == InvitationStatus.Accepted), Arg.Any<CancellationToken>());
     }

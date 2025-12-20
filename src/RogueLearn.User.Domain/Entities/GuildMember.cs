@@ -26,9 +26,6 @@ public class GuildMember : BaseEntity
     [Column("joined_at")]
     public DateTimeOffset JoinedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    [Column("left_at")]
-    public DateTimeOffset? LeftAt { get; set; }
-
     [Column("contribution_points")]
     public int ContributionPoints { get; set; } = 0;
 

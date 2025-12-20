@@ -11,6 +11,7 @@ using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Features.Quests.Queries.GetMyQuestsWithSubjects;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestSkills;
 using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
+using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitCodingActivity; // ADDED
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
@@ -152,6 +153,40 @@ public class QuestsController : ControllerBase
         }
     }
 
+    [HttpPost("{questId:guid}/steps/{stepId:guid}/activities/{activityId:guid}/submit-code")]
+    [ProducesResponseType(typeof(SubmitCodingActivityResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SubmitCodingActivity(
+    Guid questId,
+    Guid stepId,
+    Guid activityId,
+    [FromBody] SubmitCodingRequest body)
+    {
+        var authUserId = User.GetAuthUserId();
+
+        try
+        {
+            var command = new SubmitCodingActivityCommand
+            {
+                AuthUserId = authUserId,
+                QuestId = questId,
+                StepId = stepId,
+                ActivityId = activityId,
+                Code = body.Code,
+                Language = body.Language
+            };
+
+            var result = await _mediator.Send(command);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing coding submission");
+            return StatusCode(500, new { message = "Failed to process coding submission", error = ex.Message });
+        }
+    }
+
     [HttpGet("me")]
     [ProducesResponseType(typeof(List<MyQuestWithSubjectDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetMyQuestsWithSubjects()
@@ -176,6 +211,12 @@ public class SubmitQuizAnswerRequest
     public Dictionary<string, string> Answers { get; set; } = new();
     public int CorrectAnswerCount { get; set; }
     public int TotalQuestions { get; set; }
+}
+
+public class SubmitCodingRequest
+{
+    public string Code { get; set; } = string.Empty;
+    public string Language { get; set; } = string.Empty;
 }
 
 public class UpdateQuestActivityProgressRequest

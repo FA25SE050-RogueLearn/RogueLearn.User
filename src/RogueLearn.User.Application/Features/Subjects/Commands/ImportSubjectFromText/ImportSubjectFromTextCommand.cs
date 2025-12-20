@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
 
-public class ImportSubjectFromTextCommand : IRequest<CreateSubjectResponse>
+public class ImportSubjectFromTextCommand : IRequest<ImportSubjectFromTextResponse>
 {
     public string RawText { get; set; } = string.Empty;
 
@@ -13,4 +13,11 @@ public class ImportSubjectFromTextCommand : IRequest<CreateSubjectResponse>
     // This allows the admin to provide an explicit semester, overriding any value
     // extracted by the AI from the syllabus text.
     public int? Semester { get; set; }
+}
+
+public class ImportSubjectFromTextResponse
+{
+    public string JobId { get; set; } = string.Empty;
+    public string Status { get; set; } = "Queued";
+    public string Message { get; set; } = string.Empty;
 }

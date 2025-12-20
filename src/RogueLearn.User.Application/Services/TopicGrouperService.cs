@@ -124,22 +124,23 @@ public class TopicGrouperService : ITopicGrouperService
 
     private void FinalizeModule(QuestStepDefinition module)
     {
-        // Generate a title based on the most frequent or first topic
+        // Simplified Logic: The AI will generate the "Smart" title.
+        // Here we just provide a basic context title (e.g., "Module 1: [First Topic]")
+        // This avoids the "weird long title" issue by delegating creativity to the LLM.
+
         var topics = module.Sessions
-            .Select(s => NormalizeTopic(s.Topic))
-            .GroupBy(t => t)
-            .OrderByDescending(g => g.Count())
-            .Select(g => g.Key)
+            .Select(s => s.Topic)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
             .ToList();
 
         module.KeyTopics = topics;
 
-        // Simple title strategy: Top 1-2 topics
         if (topics.Count > 0)
         {
-            module.Title = topics.Count > 1
-                ? $"{topics[0]} & {topics[1]}"
-                : topics[0];
+            // Just use the first topic as a hint/placeholder.
+            // The prompt builder will pass the full list of topics to the AI.
+            string baseTopic = CleanTitle(topics[0]);
+            module.Title = baseTopic;
         }
         else
         {
@@ -150,20 +151,22 @@ public class TopicGrouperService : ITopicGrouperService
     private string NormalizeTopic(string topic)
     {
         if (string.IsNullOrWhiteSpace(topic)) return "General";
-
-        // Basic normalization: remove punctuation, lower case, trim
-        // "Introduction to C#" -> "introduction to c#"
         var cleaned = topic.Trim().ToLowerInvariant();
-
-        // Remove common prefixes like "Chapter 1:", "Unit 2:"
         cleaned = Regex.Replace(cleaned, @"^(chapter|unit|lesson|session)\s*\d+\s*[:.-]\s*", "");
-
         return cleaned;
+    }
+
+    private string CleanTitle(string topic)
+    {
+        if (string.IsNullOrWhiteSpace(topic)) return string.Empty;
+
+        // Simple cleanup: remove version numbers and noise
+        var title = Regex.Split(topic, @"\s*[:|\-–+]\s*")[0].Trim();
+        return title;
     }
 
     private bool IsTopicRelated(HashSet<string> currentTopics, string newTopic)
     {
-        // Simple heuristic: do they share significant words?
         var newWords = newTopic.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Where(w => w.Length > 3).ToHashSet();
 

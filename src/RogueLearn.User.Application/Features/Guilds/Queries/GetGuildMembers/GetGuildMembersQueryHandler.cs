@@ -31,7 +31,6 @@ public class GetGuildMembersQueryHandler : IRequestHandler<GetGuildMembersQuery,
                 AuthUserId = m.AuthUserId,
                 Role = m.Role,
                 JoinedAt = m.JoinedAt,
-                LeftAt = m.LeftAt,
                 Status = m.Status,
                 ContributionPoints = m.ContributionPoints,
                 RankWithinGuild = m.RankWithinGuild,
@@ -40,8 +39,6 @@ public class GetGuildMembersQueryHandler : IRequestHandler<GetGuildMembersQuery,
                 FirstName = profile?.FirstName,
                 LastName = profile?.LastName,
                 ProfileImageUrl = profile?.ProfileImageUrl,
-                Level = profile?.Level ?? 0,
-                ExperiencePoints = profile?.ExperiencePoints ?? 0,
                 Bio = profile?.Bio
             });
         }

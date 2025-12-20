@@ -45,8 +45,6 @@ public class UserContextPromptBuilder : IPromptBuilder
 
         // Add user information
         prompt.AppendLine($"**Student:** {userProfile.FirstName} {userProfile.LastName} ({userProfile.Username})");
-        prompt.AppendLine($"**Level:** {userProfile.Level}");
-        prompt.AppendLine($"**Experience Points:** {userProfile.ExperiencePoints}");
         prompt.AppendLine();
 
         // Add class/roadmap information

@@ -36,7 +36,4 @@ public class Party : BaseEntity
 
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
-
-    [Column("disbanded_at")]
-    public DateTimeOffset? DisbandedAt { get; set; }
 }

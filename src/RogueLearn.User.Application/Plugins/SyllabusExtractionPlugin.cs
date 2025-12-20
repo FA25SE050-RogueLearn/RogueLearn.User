@@ -35,12 +35,12 @@ public class SyllabusExtractionPlugin : ISyllabusExtractionPlugin
 
             var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
             var rawResponse = result.GetValue<string>() ?? string.Empty;
-            _logger.LogInformation("Syllabus extractor raw response: {RawResponse}", rawResponse);
+            //_logger.LogInformation("Syllabus extractor raw response: {RawResponse}", rawResponse);
             return CleanToJson(rawResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to extract syllabus data using AI");
+           // _logger.LogError(ex, "Failed to extract syllabus data using AI");
             return string.Empty;
         }
     }

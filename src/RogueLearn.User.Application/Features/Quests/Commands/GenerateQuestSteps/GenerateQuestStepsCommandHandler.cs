@@ -27,6 +27,9 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private const int MinXpPerStep = 250;
     private const int MaxXpPerStep = 400;
 
+    // Delay between AI calls to prevent 429 Too Many Requests
+    private const int AiRateLimitDelayMs = 4000;
+
     private readonly IQuestRepository _questRepository;
     private readonly IQuestStepRepository _questStepRepository;
     private readonly ISubjectRepository _subjectRepository;
@@ -38,9 +41,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
     private readonly QuestStepsPromptBuilder _promptBuilder;
     private readonly IUserSkillRepository _userSkillRepository;
     private readonly ITopicGrouperService _topicGrouperService;
-
-    // Removed IClassRepository and IUserProfileRepository since admins don't need a class context
-    // The "Master Template" is class-agnostic or uses the subject's default context
 
     public GenerateQuestStepsCommandHandler(
         IQuestRepository questRepository,
@@ -77,8 +77,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         if (questHasSteps)
         {
             _logger.LogWarning("Quest {QuestId} already has steps. Proceeding (might create duplicates if not cleared).", request.QuestId);
-            // In a real admin tool, we might want to clear existing steps here or throw.
-            // For now, logging warning.
         }
 
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
@@ -126,6 +124,13 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             {
                 UpdateHangfireJobProgress(request.HangfireJobId, processedModules, modules.Count, $"Generating Module {module.ModuleNumber}: {module.Title}...");
 
+                // Rate limiting delay before calling AI
+                if (processedModules > 0)
+                {
+                    _logger.LogInformation("Cooling down for {Ms}ms before next AI call...", AiRateLimitDelayMs);
+                    await Task.Delay(AiRateLimitDelayMs, cancellationToken);
+                }
+
                 // Pass null for userClass since this is Master Template generation
                 var prompt = _promptBuilder.BuildMasterPrompt(module, relevantSkills, subject.SubjectName, subject.Description ?? "", userClass: null);
                 var generatedJson = await _questGenerationPlugin.GenerateFromPromptAsync(prompt, cancellationToken);
@@ -134,6 +139,14 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 using var doc = JsonDocument.Parse(generatedJson);
                 var root = doc.RootElement;
+
+                // ⭐ Extract AI-Generated Smart Title (or fallback to grouper title)
+                string aiTitle = root.TryGetProperty("moduleTitle", out var titleElem)
+                    ? titleElem.GetString() ?? module.Title
+                    : module.Title;
+
+                if (aiTitle.Length > 200) aiTitle = aiTitle.Substring(0, 200) + "...";
+
                 var variants = new[] { "standard", "supportive", "challenging" };
 
                 foreach (var variantKey in variants)
@@ -175,13 +188,16 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                                 _ => "Standard"
                             };
 
+                            // Use the AI title with variant suffix
+                            var stepTitle = $"{aiTitle} ({dbVariant})";
+
                             var step = new QuestStep
                             {
                                 QuestId = request.QuestId,
                                 StepNumber = module.ModuleNumber,
                                 ModuleNumber = module.ModuleNumber,
                                 DifficultyVariant = dbVariant,
-                                Title = $"{module.Title} ({dbVariant})",
+                                Title = stepTitle,
                                 Description = $"Module {module.ModuleNumber} - {dbVariant} Track",
                                 ExperiencePoints = xp,
                                 Content = new Dictionary<string, object> { { "activities", activitiesList ?? new List<Dictionary<string, object>>() } },
@@ -191,7 +207,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                             await _questStepRepository.AddAsync(step, cancellationToken);
                             createdSteps.Add(step);
-                            _logger.LogInformation("Saved Module {Module} Variant {Variant} (XP: {XP})", module.ModuleNumber, dbVariant, xp);
+                            _logger.LogInformation("Saved Module {Module} Variant {Variant} (XP: {XP}, Title: {Title})", module.ModuleNumber, dbVariant, xp, stepTitle);
                         }
                     }
                 }
@@ -221,6 +237,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
             int defaultXp = type switch
             {
                 "Quiz" => 80,
+                "Coding" => 60, // Default XP for coding activities
                 "KnowledgeCheck" => 30,
                 "Reading" => 15,
                 _ => 10
