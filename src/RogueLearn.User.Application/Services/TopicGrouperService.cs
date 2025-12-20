@@ -124,38 +124,23 @@ public class TopicGrouperService : ITopicGrouperService
 
     private void FinalizeModule(QuestStepDefinition module)
     {
-        // Generate a title based on the most frequent or first topic
+        // Simplified Logic: The AI will generate the "Smart" title.
+        // Here we just provide a basic context title (e.g., "Module 1: [First Topic]")
+        // This avoids the "weird long title" issue by delegating creativity to the LLM.
+
         var topics = module.Sessions
-            .Select(s => CleanTitle(s.Topic)) // Use simplified title cleaner
+            .Select(s => s.Topic)
             .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         module.KeyTopics = topics;
 
-        // Smart Title Strategy:
         if (topics.Count > 0)
         {
-            // 1. Pick the first topic as the primary candidate
-            var bestTitle = topics[0];
-
-            // 2. If it's short (< 30 chars) AND we have a second distinct topic, consider combining ONLY if short
-            if (topics.Count > 1 && bestTitle.Length < 25 && topics[1].Length < 25)
-            {
-                // Check if they are redundant (e.g. "Java Basics" & "Java Syntax")
-                if (!IsRedundant(bestTitle, topics[1]))
-                {
-                    bestTitle = $"{bestTitle} & {topics[1]}";
-                }
-            }
-
-            // 3. Final safety truncate to ensure DB compliance (though CleanTitle helps)
-            if (bestTitle.Length > 100)
-            {
-                bestTitle = bestTitle.Substring(0, 97) + "...";
-            }
-
-            module.Title = bestTitle;
+            // Just use the first topic as a hint/placeholder.
+            // The prompt builder will pass the full list of topics to the AI.
+            string baseTopic = CleanTitle(topics[0]);
+            module.Title = baseTopic;
         }
         else
         {
@@ -171,52 +156,13 @@ public class TopicGrouperService : ITopicGrouperService
         return cleaned;
     }
 
-    /// <summary>
-    /// Cleans academic titles to be short and readable.
-    /// Removes technical specs, versions, and redundant prefixes.
-    /// </summary>
     private string CleanTitle(string topic)
     {
         if (string.IsNullOrWhiteSpace(topic)) return string.Empty;
 
-        // 1. Split by common separators (colon, dash, pipe, plus) and take the first meaningful part
-        var parts = Regex.Split(topic, @"\s*[:|\-–+]\s*");
-        var title = parts[0].Trim();
-
-        // 2. Remove common noise like "Introduction to..." if it makes it too long, but keep it if short
-        // actually "Introduction to Java" is fine. "Introduction to Java Web Application Development..." is not.
-
-        // 3. Remove version numbers (e.g., "JDK 1.8", "Tomcat 10")
-        title = Regex.Replace(title, @"\s+v?\d+(\.\d+)*.*", "");
-
-        // 4. Remove parentheticals
-        title = Regex.Replace(title, @"\s*\(.*?\)", "");
-
-        // 5. Hard truncate if the *first part* itself was huge
-        if (title.Length > 60)
-        {
-            var words = title.Split(' ');
-            if (words.Length > 6)
-            {
-                title = string.Join(" ", words.Take(6));
-            }
-        }
-
-        return title.Trim();
-    }
-
-    private bool IsRedundant(string title1, string title2)
-    {
-        var t1 = title1.ToLowerInvariant();
-        var t2 = title2.ToLowerInvariant();
-        // If one contains the other, or they share > 50% words
-        if (t1.Contains(t2) || t2.Contains(t1)) return true;
-
-        var w1 = t1.Split(' ').ToHashSet();
-        var w2 = t2.Split(' ').ToHashSet();
-        var common = w1.Intersect(w2).Count();
-
-        return common >= Math.Min(w1.Count, w2.Count) / 2.0;
+        // Simple cleanup: remove version numbers and noise
+        var title = Regex.Split(topic, @"\s*[:|\-–+]\s*")[0].Trim();
+        return title;
     }
 
     private bool IsTopicRelated(HashSet<string> currentTopics, string newTopic)

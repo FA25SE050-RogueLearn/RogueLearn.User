@@ -139,6 +139,14 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                 using var doc = JsonDocument.Parse(generatedJson);
                 var root = doc.RootElement;
+
+                // ⭐ Extract AI-Generated Smart Title (or fallback to grouper title)
+                string aiTitle = root.TryGetProperty("moduleTitle", out var titleElem)
+                    ? titleElem.GetString() ?? module.Title
+                    : module.Title;
+
+                if (aiTitle.Length > 200) aiTitle = aiTitle.Substring(0, 200) + "...";
+
                 var variants = new[] { "standard", "supportive", "challenging" };
 
                 foreach (var variantKey in variants)
@@ -180,11 +188,8 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                                 _ => "Standard"
                             };
 
-                            // Truncate title to fit in database column (255 chars)
-                            var rawTitle = $"{module.Title} ({dbVariant})";
-                            var safeTitle = rawTitle.Length > 250
-                                ? rawTitle.Substring(0, 250) + "..."
-                                : rawTitle;
+                            // Use the AI title with variant suffix
+                            var stepTitle = $"{aiTitle} ({dbVariant})";
 
                             var step = new QuestStep
                             {
@@ -192,7 +197,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                                 StepNumber = module.ModuleNumber,
                                 ModuleNumber = module.ModuleNumber,
                                 DifficultyVariant = dbVariant,
-                                Title = safeTitle,
+                                Title = stepTitle,
                                 Description = $"Module {module.ModuleNumber} - {dbVariant} Track",
                                 ExperiencePoints = xp,
                                 Content = new Dictionary<string, object> { { "activities", activitiesList ?? new List<Dictionary<string, object>>() } },
@@ -202,7 +207,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
 
                             await _questStepRepository.AddAsync(step, cancellationToken);
                             createdSteps.Add(step);
-                            _logger.LogInformation("Saved Module {Module} Variant {Variant} (XP: {XP})", module.ModuleNumber, dbVariant, xp);
+                            _logger.LogInformation("Saved Module {Module} Variant {Variant} (XP: {XP}, Title: {Title})", module.ModuleNumber, dbVariant, xp, stepTitle);
                         }
                     }
                 }
