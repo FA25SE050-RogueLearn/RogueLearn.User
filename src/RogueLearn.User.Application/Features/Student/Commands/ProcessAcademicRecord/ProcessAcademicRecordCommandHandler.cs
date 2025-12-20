@@ -6,7 +6,7 @@ using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 using RogueLearn.User.Application.Interfaces;
-using RogueLearn.User.Application.Models; // ADDED: For FapRecordData and FapSubjectData
+using RogueLearn.User.Application.Models; // For FapRecordData and FapSubjectData
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
@@ -18,8 +18,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
-
-// DUPLICATE CLASSES REMOVED - Using RogueLearn.User.Application.Models definitions
 
 public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcademicRecordCommand, ProcessAcademicRecordResponse>
 {
@@ -185,22 +183,38 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var subjectCatalog = allAllowedSubjects.ToDictionary(s => s.SubjectCode);
         _logger.LogInformation("Built combined subject catalog for program and class with {Count} subjects.", subjectCatalog.Count);
 
-        // ========== NEW LOGIC: GENERATE AI ANALYSIS ==========
-        // Before we save to DB, let's analyze the extracted data using the rich Subject Name context
-        var subjectNameMap = new Dictionary<string, string>();
-        foreach (var s in fapData.Subjects)
-        {
-            if (subjectCatalog.TryGetValue(s.SubjectCode, out var subjEntity))
-            {
-                subjectNameMap[s.SubjectCode] = subjEntity.SubjectName;
-            }
-        }
+        // ========== NEW LOGIC: GENERATE AI ANALYSIS WITH CACHING ==========
+        // 1. Try to get existing analysis from storage
+        AcademicAnalysisReport? analysisReport = await _storage.GetUserAnalysisAsync(request.AuthUserId, cancellationToken);
 
-        _logger.LogInformation("Generating AI Academic Analysis...");
-        var analysisReport = await _academicAnalysisPlugin.AnalyzePerformanceAsync(
-            fapData.Subjects,
-            subjectNameMap,
-            cancellationToken);
+        // 2. Only run AI if analysis is missing or if we just parsed new FAP data (cache miss on extraction)
+        bool freshDataParsed = string.IsNullOrWhiteSpace(extractedJson); // If we extracted, we should re-analyze
+
+        if (analysisReport == null || freshDataParsed)
+        {
+            _logger.LogInformation("Generating AI Academic Analysis (Cache Miss or Fresh Data)...");
+
+            var subjectNameMap = new Dictionary<string, string>();
+            foreach (var s in fapData.Subjects)
+            {
+                if (subjectCatalog.TryGetValue(s.SubjectCode, out var subjEntity))
+                {
+                    subjectNameMap[s.SubjectCode] = subjEntity.SubjectName;
+                }
+            }
+
+            analysisReport = await _academicAnalysisPlugin.AnalyzePerformanceAsync(
+                fapData.Subjects,
+                subjectNameMap,
+                cancellationToken);
+
+            // 3. Save the new analysis to storage
+            await _storage.SaveUserAnalysisAsync(request.AuthUserId, analysisReport, cancellationToken);
+        }
+        else
+        {
+            _logger.LogInformation("Using cached Academic Analysis for user {UserId}", request.AuthUserId);
+        }
 
         // Fetch existing records using specialized method to avoid Guid LINQ issues
         var existingSemesterSubjects = (await _semesterSubjectRepository.GetSemesterSubjectsByUserAsync(
@@ -288,7 +302,15 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
         // This command will now perform the JIT difficulty calculation preview and create "NotStarted" attempts
         // It returns the AuthUserId as the virtual LearningPathId
-        var questLineResponse = await _mediator.Send(new GenerateQuestLine { AuthUserId = request.AuthUserId }, cancellationToken);
+
+        // MODIFICATION: Pass the AI Analysis Report into the generation command
+        var questLineCommand = new GenerateQuestLine
+        {
+            AuthUserId = request.AuthUserId,
+            AiAnalysisReport = analysisReport
+        };
+
+        var questLineResponse = await _mediator.Send(questLineCommand, cancellationToken);
 
         _logger.LogInformation("✅ Academic records processed successfully. Quests updated with difficulty previews.");
 

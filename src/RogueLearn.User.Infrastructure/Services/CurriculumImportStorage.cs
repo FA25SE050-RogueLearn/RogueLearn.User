@@ -4,49 +4,8 @@ using RogueLearn.User.Application.Models;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
-/*
- * ==========================================================================================
- * SUPABASE STORAGE BUCKET SETUP INSTRUCTIONS
- * ==========================================================================================
- * This service requires a Supabase Storage bucket to cache AI-processed data.
- *
- * 1. BUCKET NAME:
- *    Create a bucket named: `curriculum-imports`
- *
- * 2. PUBLIC BUCKET:
- *    Make the bucket PUBLIC. This is necessary for retrieving cached JSON files via URL.
- *    The contents are non-sensitive JSON caches of public curriculum/syllabus data.
- *
- * 3. POLICIES:
- *    The following policies allow authenticated users to perform all necessary operations (CRUD).
- *    Navigate to `Storage -> Policies` and create these policies for the `curriculum-imports` bucket.
- *
- *    -- Policy: Allow authenticated select (read)
- *    CREATE POLICY "Allow authenticated read access"
- *    ON storage.objects FOR SELECT
- *    TO authenticated
- *    USING (bucket_id = 'curriculum-imports');
- *
- *    -- Policy: Allow authenticated insert (create)
- *    CREATE POLICY "Allow authenticated insert access"
- *    ON storage.objects FOR INSERT
- *    TO authenticated
- *    WITH CHECK (bucket_id = 'curriculum-imports');
- *
- *    -- Policy: Allow authenticated update
- *    CREATE POLICY "Allow authenticated update access"
- *    ON storage.objects FOR UPDATE
- *    TO authenticated
- *    USING (bucket_id = 'curriculum-imports');
- *
- *    -- Policy: Allow authenticated delete
- *    CREATE POLICY "Allow authenticated delete access"
- *    ON storage.objects FOR DELETE
- *    TO authenticated
- *    USING (bucket_id = 'curriculum-imports');
- * ==========================================================================================
- */
 namespace RogueLearn.User.Infrastructure.Services;
 
 public class CurriculumImportStorage : ICurriculumImportStorage
@@ -327,14 +286,11 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         var storage = _client.Storage.From("curriculum-imports");
         try
         {
-            // This is the corrected line. It explicitly provides null for the optional parameters,
-            // resolving the CS0121 ambiguity error.
             var bytes = await storage.Download(byHashJsonPath, (Supabase.Storage.TransformOptions?)null, (EventHandler<float>?)null);
             return bytes is null ? null : Encoding.UTF8.GetString(bytes);
         }
         catch
         {
-            // Supabase client throws an exception for 404s, which is expected for cache misses.
             return null;
         }
     }
@@ -347,7 +303,6 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         try
         {
             const string bucketName = "curriculum-imports";
-            // Version folder naming for syllabus follows the raw version number
             var data = await TryGetLatestJsonAsync(
                 bucketName,
                 $"syllabus/{subjectCode}",
@@ -411,7 +366,6 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         string rawTextHash,
         CancellationToken cancellationToken = default)
     {
-        // Paths for syllabus folder structure
         var safeSubject = subjectCode.Trim();
         var safeVersion = versionCode.Trim();
         var prefix = $"syllabus/{safeSubject}/{safeVersion}/";
@@ -420,10 +374,8 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         var byHashJsonPath = $"syllabus/_hashes/{rawTextHash}.json";
         var versionByHashJsonPath = prefix + $"versions/{rawTextHash}.json";
 
-        // Get bucket
         var storage = _client.Storage.From(bucketName);
 
-        // Upload JSON (overwrite)
         var jsonBytes = Encoding.UTF8.GetBytes(jsonContent);
         await storage.Upload(jsonBytes, latestJsonPath, new Supabase.Storage.FileOptions
         {
@@ -431,21 +383,18 @@ public class CurriculumImportStorage : ICurriculumImportStorage
             Upsert = true
         });
 
-        // Upload JSON by hash (cache), overwrite so latest known content for this raw text is available
         await storage.Upload(jsonBytes, byHashJsonPath, new Supabase.Storage.FileOptions
         {
             ContentType = "application/json",
             Upsert = true
         });
 
-        // Upload JSON versioned under syllabus/subject/version keyed by hash (historical/reference)
         await storage.Upload(jsonBytes, versionByHashJsonPath, new Supabase.Storage.FileOptions
         {
             ContentType = "application/json",
             Upsert = true
         });
 
-        // Upload metadata (includes hash)
         var metaObj = new
         {
             rawTextHash = rawTextHash,
@@ -453,7 +402,7 @@ public class CurriculumImportStorage : ICurriculumImportStorage
             subjectCode = safeSubject,
             version = safeVersion
         };
-        var metaJson = System.Text.Json.JsonSerializer.Serialize(metaObj);
+        var metaJson = JsonSerializer.Serialize(metaObj);
         var metaBytes = Encoding.UTF8.GetBytes(metaJson);
         await storage.Upload(metaBytes, latestMetaPath, new Supabase.Storage.FileOptions
         {
@@ -465,4 +414,82 @@ public class CurriculumImportStorage : ICurriculumImportStorage
     }
 
     #endregion
+
+    // ============================================================================
+    // NEW: User Academic Analysis Storage
+    // ============================================================================
+
+    public async Task SaveUserAnalysisAsync(
+        Guid authUserId,
+        AcademicAnalysisReport report,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            const string bucketName = "academic-records"; // Store user data here
+            var filePath = $"users/{authUserId}/academic-analysis.json";
+
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+            var jsonContent = JsonSerializer.Serialize(report, jsonOptions);
+            var bytes = Encoding.UTF8.GetBytes(jsonContent);
+
+            var storage = _client.Storage.From(bucketName);
+            await storage.Upload(bytes, filePath, new Supabase.Storage.FileOptions
+            {
+                ContentType = "application/json",
+                Upsert = true
+            });
+
+            _logger.LogInformation("Saved academic analysis for user {UserId}", authUserId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save academic analysis for user {UserId}", authUserId);
+            throw;
+        }
+    }
+
+    public async Task<AcademicAnalysisReport?> GetUserAnalysisAsync(
+        Guid authUserId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            const string bucketName = "academic-records";
+            var filePath = $"users/{authUserId}/academic-analysis.json";
+
+            var storage = _client.Storage.From(bucketName);
+
+            // Supabase download throws if file doesn't exist, handle gracefully
+            byte[] bytes;
+            try
+            {
+                bytes = await storage.Download(filePath, (Supabase.Storage.TransformOptions?)null, (EventHandler<float>?)null);
+            }
+            catch
+            {
+                _logger.LogInformation("No cached academic analysis found for user {UserId}", authUserId);
+                return null;
+            }
+
+            if (bytes == null || bytes.Length == 0) return null;
+
+            var jsonContent = Encoding.UTF8.GetString(bytes);
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            return JsonSerializer.Deserialize<AcademicAnalysisReport>(jsonContent, options);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve academic analysis for user {UserId}", authUserId);
+            return null;
+        }
+    }
 }

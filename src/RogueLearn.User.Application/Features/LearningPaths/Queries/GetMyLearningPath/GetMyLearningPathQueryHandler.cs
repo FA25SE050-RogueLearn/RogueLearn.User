@@ -21,7 +21,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
     private readonly IClassSpecializationSubjectRepository _classSpecializationSubjectRepository;
     private readonly IQuestDifficultyResolver _difficultyResolver;
 
-    // NEW: Dependencies for accurate preview calculation
     private readonly ISubjectSkillMappingRepository _mappingRepository;
     private readonly ISkillDependencyRepository _skillDependencyRepository;
     private readonly IUserSkillRepository _userSkillRepository;
@@ -58,8 +57,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
     public async Task<LearningPathDto?> Handle(GetMyLearningPathQuery request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Fetching dynamic learning path for user {AuthUserId}", request.AuthUserId);
-
         // 1. Get User Profile
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
         if (userProfile == null) return null;
@@ -123,8 +120,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         var userSkillMap = userSkills.ToDictionary(s => s.SkillId);
 
         var allDependencies = await _skillDependencyRepository.GetAllAsync(cancellationToken);
-
-        // Fetch ALL mappings for ALL subjects in the path to avoid N+1
         var allMappings = await _mappingRepository.GetMappingsBySubjectIdsAsync(allSubjectIds, cancellationToken);
         var subjectSkillMap = allMappings.GroupBy(m => m.SubjectId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -158,29 +153,36 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     totalQuestsCount++;
                     var attempt = attempts.GetValueOrDefault(masterQuest.Id);
                     var studentRecord = studentRecords.GetValueOrDefault(subject.Id);
-
-                    // Determine Status
                     var computedStatus = attempt?.Status.ToString() ??
                                  (studentRecord?.Status == SubjectEnrollmentStatus.Passed ? "Completed" : "NotStarted");
 
                     string displayDifficulty;
                     string diffReason;
 
-                    // CHECK IF LOCKED
-                    bool isLocked = attempt != null &&
-                                   attempt.Status != QuestAttemptStatus.NotStarted &&
-                                   !string.IsNullOrEmpty(attempt.AssignedDifficulty);
-
-                    if (isLocked)
+                    // FIX: Respect the persisted difficulty on the attempt, even if it is 'NotStarted'
+                    // This ensures the AI Analysis results from ProcessAcademicRecord are displayed.
+                    if (attempt != null && !string.IsNullOrEmpty(attempt.AssignedDifficulty))
                     {
-                        displayDifficulty = attempt!.AssignedDifficulty;
-                        diffReason = "Locked to your initial assessment";
+                        displayDifficulty = attempt.AssignedDifficulty;
+
+                        // Customize the reason based on whether the user has actually started engaging with it
+                        if (attempt.Status != QuestAttemptStatus.NotStarted)
+                        {
+                            diffReason = "Locked to your initial assessment";
+                        }
+                        else
+                        {
+                            // If NotStarted, use the saved notes (which contain the AI explanation)
+                            // or a default preview message.
+                            diffReason = !string.IsNullOrEmpty(attempt.Notes)
+                                ? attempt.Notes
+                                : "Personalized based on academic analysis";
+                        }
                     }
                     else
                     {
-                        // FALLBACK: Dynamic calculation (Preview only)
-                        // This mirrors GenerateQuestLineCommandHandler logic
-                        double proficiency = -1.0; // Default: No Data / Neutral
+                        // Fallback: No attempt exists yet, calculate a "preview" difficulty live.
+                        double proficiency = -1.0;
 
                         if (subjectSkillMap.TryGetValue(subject.Id, out var subjectMappings) && subjectMappings.Any())
                         {
@@ -201,7 +203,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                                 {
                                     if (userSkillMap.TryGetValue(pid, out var us))
                                     {
-                                        // Use same Level >= 2 threshold as Generator
                                         if (us.Level >= 2) metPrereqs++;
                                     }
                                     else
@@ -212,17 +213,23 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
                                 if (unknownPrereqs == totalPrereqs)
                                 {
-                                    proficiency = 1.0; // Assume standard if no data
+                                    proficiency = 1.0;
                                 }
                                 else
                                 {
-                                    // Treat unknowns as neutral/met for preview calculation
                                     proficiency = (double)(metPrereqs + unknownPrereqs) / totalPrereqs;
                                 }
                             }
                         }
 
-                        var diffInfo = _difficultyResolver.ResolveDifficulty(studentRecord, proficiency);
+                        // Preview Mode: Passing null for AI Report since live preview doesn't re-run expensive AI analysis
+                        var diffInfo = _difficultyResolver.ResolveDifficulty(
+                            studentRecord,
+                            proficiency,
+                            subject,
+                            null,  // AI Report (unavailable in preview query)
+                            null); // Skills list (not strictly needed for basic preview fallback)
+
                         displayDifficulty = diffInfo.ExpectedDifficulty;
                         diffReason = diffInfo.DifficultyReason;
                     }
