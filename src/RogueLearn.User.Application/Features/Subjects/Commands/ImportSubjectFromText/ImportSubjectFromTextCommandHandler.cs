@@ -35,7 +35,7 @@ public class ImportSubjectFromTextCommandHandler : IRequestHandler<ImportSubject
     // ============================================================================
     // Set this to a low number (e.g., 5) for demos/dev to only enrich the first few sessions.
     // Set to int.MaxValue for production to enrich everything.
-    private const int MAX_SESSIONS_TO_ENRICH = 30;
+    private const int MAX_SESSIONS_TO_ENRICH = 5;
     // ============================================================================
 
     private readonly ISyllabusExtractionPlugin _syllabusExtractionPlugin;

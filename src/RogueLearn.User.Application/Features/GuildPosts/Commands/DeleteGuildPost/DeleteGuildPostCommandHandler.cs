@@ -21,11 +21,6 @@ public class DeleteGuildPostCommandHandler : IRequestHandler<DeleteGuildPostComm
         var post = await _postRepository.GetByIdAsync(request.GuildId, request.PostId, cancellationToken)
             ?? throw new NotFoundException("GuildPost", request.PostId.ToString());
 
-        if (post.AuthorId != request.RequesterAuthUserId)
-        {
-            throw new ForbiddenException("Cannot delete another user's post");
-        }
-
         if (post.IsLocked)
         {
             throw new ForbiddenException("Post is locked by admin");
