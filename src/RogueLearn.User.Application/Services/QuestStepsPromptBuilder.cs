@@ -199,29 +199,30 @@ public class QuestStepsPromptBuilder
 
         prompt.AppendLine("### 🟢 SUPPORTIVE Track (For struggling students)");
         prompt.AppendLine("**Philosophy:** Extra scaffolding, simpler language, more guidance");
-        prompt.AppendLine("- **Reading:** Break complex topics into smaller chunks, use analogies");
-        prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, simple recall focus");
-        prompt.AppendLine("- **Quiz:** MANDATORY - 7-8 questions, straightforward, foundational understanding");
-        prompt.AppendLine("- **Total Activities:** 6-8 activities (including the mandatory Quiz)");
-        prompt.AppendLine("- **Coding:** DO NOT include Coding activities.");
+        prompt.AppendLine("- **Reading:** 2 Reading activities (rarely 3 if absolutely necessary)");
+        prompt.AppendLine("- **KnowledgeCheck:** 2-3 KnowledgeChecks, 3-4 questions each, after readings");
+        prompt.AppendLine("- **Coding:** DO NOT include Coding activities");
+        prompt.AppendLine("- **Quiz:** MANDATORY - 1 Quiz with 7-8 questions at the end");
+        prompt.AppendLine("- **Total Activities:** 5-7 activities (2-3 Readings + 2-3 KnowledgeChecks + 1 Quiz)");
         prompt.AppendLine();
 
         prompt.AppendLine("### 🟡 STANDARD Track (The balanced path)");
         prompt.AppendLine("**Philosophy:** Comprehensive coverage at appropriate depth");
-        prompt.AppendLine("- **Reading:** Cover all learning outcomes with clear explanations");
-        prompt.AppendLine("- **KnowledgeCheck:** 3-4 questions per check, comprehension and basic application");
-        prompt.AppendLine("- **Quiz:** MANDATORY - 8-9 questions, balanced difficulty, mixed question types");
-        prompt.AppendLine("- **Total Activities:** 7-9 activities (including the mandatory Quiz)");
+        prompt.AppendLine("- **Reading:** 2 Reading activities (rarely 3 if topic is complex)");
+        prompt.AppendLine("- **KnowledgeCheck:** 2-4 KnowledgeChecks, 3-4 questions each, after readings");
+        prompt.AppendLine("- **Coding:** 1 Coding activity (only if subject involves programming)");
+        prompt.AppendLine("- **Quiz:** MANDATORY - 1 Quiz with 8-9 questions at the end");
+        prompt.AppendLine("- **Total Activities:** 6-9 activities (2-3 Readings + 2-4 KnowledgeChecks + 0-1 Coding + 1 Quiz)");
         prompt.AppendLine("- **MUST use APPROVED RESOURCE URLs** when available for Reading activities");
-        prompt.AppendLine("- **Coding:** DO NOT include Coding activities (keep it for Challenging).");
         prompt.AppendLine();
 
         prompt.AppendLine("### 🔴 CHALLENGING Track (For advanced students)");
         prompt.AppendLine("**Philosophy:** Deeper exploration, edge cases, real-world complexity");
-        prompt.AppendLine("- **Reading:** Advanced patterns, industry best practices, performance considerations");
-        prompt.AppendLine("- **Coding:** REPLACE 1-2 KnowledgeChecks with Coding Challenges (if subject allows).");
-        prompt.AppendLine("- **Quiz:** MANDATORY - 9-10 questions, application/analysis level (Bloom's Taxonomy)");
-        prompt.AppendLine("- **Total Activities:** 8-10 activities (including the mandatory Quiz)");
+        prompt.AppendLine("- **Reading:** 2 Reading activities (rarely 3 for very complex topics)");
+        prompt.AppendLine("- **KnowledgeCheck:** 2-3 KnowledgeChecks, 3-4 questions each");
+        prompt.AppendLine("- **Coding:** 1-2 Coding activities (only if subject involves programming)");
+        prompt.AppendLine("- **Quiz:** MANDATORY - 1 Quiz with 9-10 questions at the end");
+        prompt.AppendLine("- **Total Activities:** 6-9 activities (2-3 Readings + 2-3 KnowledgeChecks + 1-2 Coding + 1 Quiz)");
         prompt.AppendLine();
 
         prompt.AppendLine("**CRITICAL:** All three tracks MUST:");
