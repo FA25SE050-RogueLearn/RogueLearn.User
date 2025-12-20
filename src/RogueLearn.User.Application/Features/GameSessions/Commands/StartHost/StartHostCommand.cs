@@ -43,9 +43,11 @@ namespace RogueLearn.User.Application.Features.GameSessions.Commands.StartHost
             var runArgs = new List<string> { "run", "--rm", "--name", name, "-d" };
             var portHost = Env("RL_DOCKER_PORT_HOST", string.Empty);
             var portContainer = Env("RL_DOCKER_PORT_CONTAINER", "8080");
+            var portMappingAdded = false;
             if (!string.IsNullOrWhiteSpace(portHost))
             {
                 runArgs.AddRange(new[] { "-p", $"{portHost}:{portContainer}" });
+                portMappingAdded = true;
             }
 
             AddIfSet(runArgs, "--cpus", Env("RL_DOCKER_CPUS", string.Empty));
@@ -88,7 +90,16 @@ namespace RogueLearn.User.Application.Features.GameSessions.Commands.StartHost
                 var runResult = await RunProcessAsync("docker", runArgs, TimeSpan.FromSeconds(30), cancellationToken);
                 if (runResult.exitCode != 0)
                 {
-                    return new StartHostResult(false, null, null, null, null, null, $"docker run failed: {runResult.stderr}");
+                    if (portMappingAdded && LooksLikePortBindingFailure(runResult.stderr))
+                    {
+                        var retryArgs = RemovePortMappingArgs(runArgs);
+                        runResult = await RunProcessAsync("docker", retryArgs, TimeSpan.FromSeconds(30), cancellationToken);
+                    }
+
+                    if (runResult.exitCode != 0)
+                    {
+                        return new StartHostResult(false, null, null, null, null, null, $"docker run failed: {runResult.stderr}");
+                    }
                 }
 
                 var timeoutMs = int.TryParse(Env("RL_LOG_TIMEOUT_MS", "20000"), out var ms) ? ms : 20000;
@@ -119,6 +130,29 @@ namespace RogueLearn.User.Application.Features.GameSessions.Commands.StartHost
                 await ForceRemoveContainer(name);
                 return new StartHostResult(false, null, null, null, null, null, ex.Message);
             }
+        }
+
+        private static bool LooksLikePortBindingFailure(string stderr)
+        {
+            if (string.IsNullOrWhiteSpace(stderr)) return false;
+            return stderr.Contains("port is already allocated", StringComparison.OrdinalIgnoreCase)
+                   || stderr.Contains("bind:", StringComparison.OrdinalIgnoreCase)
+                   || stderr.Contains("address already in use", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static List<string> RemovePortMappingArgs(List<string> runArgs)
+        {
+            var copy = new List<string>(runArgs);
+            for (var i = 0; i < copy.Count - 1; i++)
+            {
+                if (copy[i] == "-p")
+                {
+                    copy.RemoveAt(i);
+                    copy.RemoveAt(i);
+                    break;
+                }
+            }
+            return copy;
         }
 
         private static string? Env(string key, string? defaultValue) =>

@@ -42,7 +42,7 @@ public class GetPendingInvitationsQueryHandler : IRequestHandler<GetPendingInvit
             i.InviterId,
             i.InviteeId,
             i.Status,
-            i.Message,
+            ParseMessageText(i.Message),
             ParseJoinLink(i.Message),
             ParseGameSessionId(i.Message),
             i.InvitedAt,
@@ -51,6 +51,23 @@ public class GetPendingInvitationsQueryHandler : IRequestHandler<GetPendingInvit
             partyNameById.TryGetValue(i.PartyId, out var name) ? name : string.Empty,
             inviteeNameById.TryGetValue(i.InviteeId, out var iname) ? iname : string.Empty
         )).ToList();
+    }
+
+    private static string? ParseMessageText(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(message);
+            if (doc.RootElement.TryGetProperty("message", out var msgProp) && msgProp.ValueKind == JsonValueKind.String)
+            {
+                return msgProp.GetString();
+            }
+        }
+        catch
+        {
+        }
+        return message;
     }
 
     private static string? ParseJoinLink(string? message)
