@@ -24,12 +24,14 @@ public class ConfigureGuildSettingsCommandValidator : AbstractValidator<Configur
 
         RuleFor(x => x.MaxMembers)
             .GreaterThan(2)
-            .MustAsync(async (cmd, max, ct) =>
+            .CustomAsync(async (max, context, ct) =>
             {
+                var cmd = (ConfigureGuildSettingsCommand)context.InstanceToValidate;
                 var guild = await guildRepository.GetByIdAsync(cmd.GuildId, ct);
                 if (guild == null)
                 {
-                    return false;
+                    context.AddFailure("GuildId", "Guild not found.");
+                    return;
                 }
 
                 var role = await roleRepository.GetByNameAsync("Verified Lecturer", ct);
@@ -37,8 +39,11 @@ public class ConfigureGuildSettingsCommandValidator : AbstractValidator<Configur
                 var isVerifiedLecturer = role != null && roles.Any(r => r.RoleId == role.Id);
                 var cap = isVerifiedLecturer ? 100 : 50;
 
-                return max > guild.CurrentMemberCount && max <= cap;
-            })
-            .WithMessage("Max members must be greater than current members and not exceed your role-based cap.");
+                var isValid = max > guild.CurrentMemberCount && max <= cap;
+                if (!isValid)
+                {
+                    context.AddFailure("MaxMembers", $"Max members must be greater than current members ({guild.CurrentMemberCount}) and cannot exceed {cap} for your role.");
+                }
+            });
     }
 }
