@@ -177,27 +177,8 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
 
             var code = HttpUtility.HtmlDecode(cells[0].InnerText).Trim();
 
-            // FILTER: Ignore placeholder subjects (SE_COM...) as requested
-            if (code.StartsWith("SE_COM", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            if (code.StartsWith("PHE_COM", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            if (code.StartsWith("OTP101", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            if (code.StartsWith("PEN", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            if (code.StartsWith("TMI_ELE", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+            // FILTER: Removed hardcoded filtering to allow linking logic to handle what exists in DB.
+            // Previously we filtered placeholder codes here, but now we delegate that to the DB existence check.
 
             // The name is often inside an <a> tag
             var nameNode = cells[1].SelectSingleNode(".//a");
@@ -233,10 +214,11 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
             };
 
             // Parse Prerequisites: "PRF192" or "SWE102 or SWE201c"
-            // We want to extract valid codes (3 letters + 3 digits)
+            // MODIFICATION: Updated regex to handle special codes like IA_COM*1, IA_GRA_ELE
             if (!string.IsNullOrWhiteSpace(prereqRaw) && !prereqRaw.Equals("None", StringComparison.OrdinalIgnoreCase))
             {
-                var matches = Regex.Matches(prereqRaw, @"[A-Z]{3}\d{3}[a-z]?");
+                // Matches standard codes (PRF192) and complex codes (SE_COM*1, IA_GRA_ELE)
+                var matches = Regex.Matches(prereqRaw, @"[A-Z0-9_]+(?:\*[0-9]+)?[c]?");
                 if (matches.Count > 0)
                 {
                     structure.PrerequisiteSubjectCodes = matches.Select(m => m.Value).Distinct().ToList();
@@ -246,7 +228,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
             results.Add((subject, structure));
         }
 
-        _logger.LogInformation("Extracted {Count} valid subjects from HTML.", results.Count);
+        _logger.LogInformation("Extracted {Count} subjects from HTML.", results.Count);
         return results;
     }
 }

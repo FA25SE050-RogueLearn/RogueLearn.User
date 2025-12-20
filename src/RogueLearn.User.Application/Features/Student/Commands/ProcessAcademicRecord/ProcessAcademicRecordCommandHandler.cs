@@ -6,6 +6,7 @@ using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 using RogueLearn.User.Application.Interfaces;
+using RogueLearn.User.Application.Models; // ADDED: For FapRecordData and FapSubjectData
 using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Entities;
@@ -18,21 +19,7 @@ using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
-public class FapRecordData
-{
-    public double? Gpa { get; set; }
-    public List<FapSubjectData> Subjects { get; set; } = new();
-}
-
-public class FapSubjectData
-{
-    public string SubjectCode { get; set; } = string.Empty;
-    public string? SubjectName { get; set; }  // ⭐ NEW
-    public string Status { get; set; } = string.Empty;
-    public double? Mark { get; set; }
-    public int Semester { get; set; }
-    public string AcademicYear { get; set; } = string.Empty;
-}
+// DUPLICATE CLASSES REMOVED - Using RogueLearn.User.Application.Models definitions
 
 public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcademicRecordCommand, ProcessAcademicRecordResponse>
 {
@@ -61,8 +48,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
     private readonly IQuestStepGenerationService _questStepGenerationService;
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IGradeExperienceCalculator _gradeExperienceCalculator;
-
-    // NOTE: ILearningPathRepository has been removed from here.
+    private readonly IAcademicAnalysisPlugin _academicAnalysisPlugin;
 
     public ProcessAcademicRecordCommandHandler(
         IFapExtractionPlugin fapPlugin,
@@ -81,7 +67,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         IQuestRepository questRepository,
         IQuestStepGenerationService questStepGenerationService,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
-        IGradeExperienceCalculator gradeExperienceCalculator)
+        IGradeExperienceCalculator gradeExperienceCalculator,
+        IAcademicAnalysisPlugin academicAnalysisPlugin)
     {
         _fapPlugin = fapPlugin;
         _enrollmentRepository = enrollmentRepository;
@@ -100,6 +87,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         _questStepGenerationService = questStepGenerationService;
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _gradeExperienceCalculator = gradeExperienceCalculator;
+        _academicAnalysisPlugin = academicAnalysisPlugin;
     }
 
     public async Task<ProcessAcademicRecordResponse> Handle(ProcessAcademicRecordCommand request, CancellationToken cancellationToken)
@@ -197,6 +185,23 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var subjectCatalog = allAllowedSubjects.ToDictionary(s => s.SubjectCode);
         _logger.LogInformation("Built combined subject catalog for program and class with {Count} subjects.", subjectCatalog.Count);
 
+        // ========== NEW LOGIC: GENERATE AI ANALYSIS ==========
+        // Before we save to DB, let's analyze the extracted data using the rich Subject Name context
+        var subjectNameMap = new Dictionary<string, string>();
+        foreach (var s in fapData.Subjects)
+        {
+            if (subjectCatalog.TryGetValue(s.SubjectCode, out var subjEntity))
+            {
+                subjectNameMap[s.SubjectCode] = subjEntity.SubjectName;
+            }
+        }
+
+        _logger.LogInformation("Generating AI Academic Analysis...");
+        var analysisReport = await _academicAnalysisPlugin.AnalyzePerformanceAsync(
+            fapData.Subjects,
+            subjectNameMap,
+            cancellationToken);
+
         // Fetch existing records using specialized method to avoid Guid LINQ issues
         var existingSemesterSubjects = (await _semesterSubjectRepository.GetSemesterSubjectsByUserAsync(
             request.AuthUserId, cancellationToken)
@@ -225,13 +230,20 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 ss.SubjectId == subject.Id &&
                 ss.AcademicYear == subjectRecord.AcademicYear);
 
-            // Fallback if status is empty but grade is present
-            if (string.IsNullOrWhiteSpace(subjectRecord.Status) && subjectRecord.Mark.HasValue)
-            {
-                subjectRecord.Status = subjectRecord.Mark >= 5.0 ? "Passed" : "Failed";
-            }
-
+            // Updated Mapping Logic:
+            // 1. Explicitly map string status
             var parsedStatus = MapFapStatusToEnum(subjectRecord.Status);
+
+            // 2. Safety check: If Mark is missing and Status is empty/ambiguous, verify it's NotStarted
+            if (!subjectRecord.Mark.HasValue && parsedStatus == SubjectEnrollmentStatus.NotStarted)
+            {
+                // Correct behavior: Keep it as NotStarted
+            }
+            else if (string.IsNullOrWhiteSpace(subjectRecord.Status) && subjectRecord.Mark.HasValue)
+            {
+                // Fallback: If status missing but grade exists, infer status
+                parsedStatus = subjectRecord.Mark >= 5.0 ? SubjectEnrollmentStatus.Passed : SubjectEnrollmentStatus.NotPassed;
+            }
 
             if (existingRecord == null)
             {
@@ -288,7 +300,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             LearningPathId = questLineResponse.LearningPathId,
             SubjectsProcessed = fapData.Subjects.Count,
             CalculatedGpa = fapData.Gpa ?? 0.0,
-            XpAwarded = xpAwarded.SkillAwards.Any() ? xpAwarded : null
+            XpAwarded = xpAwarded.SkillAwards.Any() ? xpAwarded : null,
+            AnalysisReport = analysisReport
         };
     }
 
@@ -329,7 +342,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
 
     private SubjectEnrollmentStatus MapFapStatusToEnum(string status)
     {
-        // Ensure we catch more variants from AI extraction
+        // Updated to catch "Not Started" specifically
         return status.Trim().ToLowerInvariant() switch
         {
             "passed" => SubjectEnrollmentStatus.Passed,
@@ -486,7 +499,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         if (htmlContent.Length < 500)
         {
             _logger.LogWarning("HTML content too short ({Length} chars). Likely not a valid transcript.", htmlContent.Length);
-            throw new BadRequestException("The provided content is too short to be a valid academic transcript. Please ensure you're uploading the complete FAP grade report page.");
+            throw new BadRequestException("The provided content is too short. Please upload the complete FAP grade report page.");
         }
 
         // Check for basic HTML structure
@@ -498,7 +511,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         {
             _logger.LogWarning("HTML content does not contain table structure. Content preview: {Preview}",
                 htmlContent.Substring(0, Math.Min(200, htmlContent.Length)));
-            throw new BadRequestException("The provided content does not appear to be a valid HTML table. Please upload the FAP transcript page that contains your grade table.");
+            throw new BadRequestException("The provided content does not appear to be a valid HTML table. Please upload the FAP transcript page.");
         }
 
         // Check for FAP-specific indicators (subject codes, grade patterns)
@@ -506,7 +519,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         if (!hasFapIndicators)
         {
             _logger.LogWarning("HTML content does not contain FAP-specific indicators (subject codes, grades).");
-            throw new BadRequestException("The provided HTML does not appear to be from the FAP academic portal. Please ensure you're uploading the correct transcript page from FAP (fap.fpt.edu.vn).");
+            throw new BadRequestException("The provided HTML does not appear to be from the FAP academic portal. Please ensure you're uploading the correct transcript page from FAP.");
         }
     }
 

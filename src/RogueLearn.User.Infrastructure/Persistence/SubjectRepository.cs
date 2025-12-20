@@ -92,6 +92,19 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
 
     }
 
+    public async Task<IEnumerable<Subject>> GetByCodesAsync(IEnumerable<string> subjectCodes, CancellationToken cancellationToken = default)
+    {
+        var codesList = subjectCodes.Distinct().ToList();
+        if (!codesList.Any()) return Enumerable.Empty<Subject>();
+
+        var response = await _supabaseClient
+            .From<Subject>()
+            .Filter("subject_code", Operator.In, codesList)
+            .Get(cancellationToken);
+
+        return response.Models;
+    }
+
     public async Task<IEnumerable<Subject>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
     {
         var list = ids.Select(id => id.ToString()).ToList();

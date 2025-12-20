@@ -89,7 +89,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
         services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
         services.AddScoped<IConstructiveQuestionGenerationPlugin, ConstructiveQuestionGenerationPlugin>();
-
+        // ADDED: Register Academic Analysis Plugin
+        services.AddScoped<IAcademicAnalysisPlugin, AcademicAnalysisPlugin>();
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
         services.AddScoped<QuestStepsPromptBuilder>();

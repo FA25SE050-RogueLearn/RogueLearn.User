@@ -29,8 +29,8 @@ Analyze the following academic transcript text and extract the grade information
   ""subjects"": [
     {
       ""subjectCode"": ""string (e.g., 'CSI104')"",
-      ""status"": ""string (must be one of 'Passed', 'Failed', 'Studying')"",
-      ""mark"": number (optional, extract the numeric grade if available)
+      ""status"": ""string (must be one of 'Passed', 'Failed', 'Studying', 'Not Started')"",
+      ""mark"": number (optional, extract the numeric grade if available, null if empty)
     }
   ]
 }
@@ -38,9 +38,13 @@ Analyze the following academic transcript text and extract the grade information
 Important Rules:
 - The input is the clean text from a table. Each row's data will appear sequentially.
 - Identify the Subject Code, the numeric Grade/Mark, and the final Status for each row.
-- Map the status text directly to 'Passed', 'Failed', or 'Studying'.
-- Ignore header rows or rows that do not contain a subject code.
-- If a grade is not present for a subject (e.g., for 'Studying' courses), the 'mark' property should be null.
+- Map the status text directly to:
+  - 'Passed' (if status is Passed)
+  - 'Failed' (if status is Not Passed / Failed)
+  - 'Studying' (if status is Studying / In Progress)
+  - 'Not Started' (if status is Not Started / Empty / Future semester)
+- EXTRACT ALL ROWS, including those with 'Not Started' status or empty grades. Do NOT skip future subjects.
+- If a grade is not present (e.g., for 'Studying' or 'Not Started'), the 'mark' property MUST be null.
 
 GPA CALCULATION (IMPORTANT):
 - Calculate GPA using the weighted average formula: GPA = Σ(mark × credits) / Σ(credits)
@@ -54,8 +58,6 @@ GPA CALCULATION (IMPORTANT):
   * All other subjects: 3 credits (default)
 - Round the final GPA to 2 decimal places
 - If no subjects can be used for GPA calculation, set gpa to null
-- Example: If you have PRF192 (mark: 8.1, 3 credits) and LAB211 (mark: 3.0, 1 credit):
-  GPA = (8.1×3 + 3.0×1) / (3+1) = 27.3 / 4 = 6.825 → 6.83
 
 Return ONLY the JSON object, with no additional text or markdown formatting.
 

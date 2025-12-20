@@ -10,7 +10,8 @@ namespace RogueLearn.User.Application.Services;
 public interface IQuestDifficultyResolver
 {
     // Updated signature to accept optional skill context
-    QuestDifficultyInfo ResolveDifficulty(StudentSemesterSubject? subjectRecord, double prerequisiteProficiency = 1.0);
+    // Default -1.0 indicates "No Data" / "Neutral"
+    QuestDifficultyInfo ResolveDifficulty(StudentSemesterSubject? subjectRecord, double prerequisiteProficiency = -1.0);
 }
 
 /// <summary>
@@ -38,13 +39,14 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
 {
     /// <summary>
     /// Calculates difficulty.
-    /// prerequisiteProficiency: 0.0 to 1.0 (Percentage of mastery of prerequisites).
+    /// prerequisiteProficiency: 0.0 to 1.0 (Percentage of mastery). -1.0 means "No Prerequisite Data".
     /// </summary>
-    public QuestDifficultyInfo ResolveDifficulty(StudentSemesterSubject? subjectRecord, double prerequisiteProficiency = 1.0)
+    public QuestDifficultyInfo ResolveDifficulty(StudentSemesterSubject? subjectRecord, double prerequisiteProficiency = -1.0)
     {
-        // 1. If Prerequisites are weak (< 30% mastery), force Supportive regardless of history.
-        // This handles the "Open Access" requirement - let them in, but give them help.
-        if (prerequisiteProficiency < 0.3)
+        // 1. Check Prerequisite Proficiency (Leading Indicator)
+        // Only downgrade to Supportive if we have POSITIVE EVIDENCE of weakness (Proficiency < 30% AND Data Exists)
+        // If proficiency is -1.0 (No Data), we skip this check and default to Standard.
+        if (prerequisiteProficiency >= 0.0 && prerequisiteProficiency < 0.3)
         {
             return new QuestDifficultyInfo(
                 expectedDifficulty: "Supportive",
@@ -54,9 +56,10 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
             );
         }
 
+        // 2. Check Academic Record (Lagging Indicator)
         if (subjectRecord == null)
         {
-            // First time attempt with good prereqs -> Standard
+            // First time attempt with unknown or decent prereqs -> Standard
             return new QuestDifficultyInfo(
                 expectedDifficulty: "Standard",
                 difficultyReason: "First attempt - standard learning path",
@@ -78,7 +81,7 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
                 subjectStatus: "Studying"
             ),
 
-            // Failed previously -> Supportive
+            // Failed previously -> Supportive (Evidence of Struggle)
             SubjectEnrollmentStatus.NotPassed => new QuestDifficultyInfo(
                 expectedDifficulty: "Supportive",
                 difficultyReason: $"Retaking subject - focus on fundamentals and reinforcement",

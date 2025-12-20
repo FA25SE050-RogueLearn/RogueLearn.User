@@ -55,7 +55,7 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             cancellationToken);
 
         // --- SKILL & PREREQUISITE ANALYSIS ---
-        double prerequisiteProficiency = 1.0; // Default to 100% if no data
+        double prerequisiteProficiency = -1.0; // Default: No Data / Neutral
 
         if (quest.SubjectId.HasValue)
         {
@@ -66,7 +66,6 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             if (subjectSkillIds.Any())
             {
                 // 2. Find Prerequisites for those skills
-                // (Skills that must be known BEFORE learning this subject)
                 var allDependencies = await _skillDependencyRepository.GetAllAsync(cancellationToken);
                 var prerequisites = allDependencies
                     .Where(d => subjectSkillIds.Contains(d.SkillId)) // Where target is this subject's skill
@@ -82,17 +81,33 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
 
                     int totalPrereqs = prerequisites.Count;
                     int metPrereqs = 0;
+                    int unknownPrereqs = 0;
 
                     foreach (var prereqId in prerequisites)
                     {
-                        if (userSkillMap.TryGetValue(prereqId, out var us) && us.Level >= 3) // Level 3 = "Competent"
+                        if (userSkillMap.TryGetValue(prereqId, out var us))
                         {
-                            metPrereqs++;
+                            // REFACTOR: Check Level >= 2. Match GenerateQuestLine logic.
+                            if (us.Level >= 2) metPrereqs++;
+                        }
+                        else
+                        {
+                            unknownPrereqs++;
                         }
                     }
 
-                    prerequisiteProficiency = (double)metPrereqs / totalPrereqs;
-                    _logger.LogInformation("Prerequisite Proficiency: {Percent:P0} ({Met}/{Total})", prerequisiteProficiency, metPrereqs, totalPrereqs);
+                    if (unknownPrereqs == totalPrereqs)
+                    {
+                        prerequisiteProficiency = 1.0; // Assume standard if no data
+                    }
+                    else
+                    {
+                        // Treat unknowns as neutral/met
+                        prerequisiteProficiency = (double)(metPrereqs + unknownPrereqs) / totalPrereqs;
+                    }
+
+                    _logger.LogInformation("Prerequisite Proficiency: {Percent:P0} (Met: {Met}, Unknown: {Unknown}, Total: {Total})",
+                        prerequisiteProficiency, metPrereqs, unknownPrereqs, totalPrereqs);
                 }
             }
         }

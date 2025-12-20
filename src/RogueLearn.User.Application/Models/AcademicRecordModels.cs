@@ -24,6 +24,9 @@ public class FapSubjectData
     [JsonPropertyName("subjectCode")]
     public string SubjectCode { get; set; } = string.Empty;
 
+    [JsonPropertyName("subjectName")]
+    public string? SubjectName { get; set; }
+
     [JsonPropertyName("status")]
     public string Status { get; set; } = string.Empty;
 
@@ -31,5 +34,11 @@ public class FapSubjectData
     public double? Mark { get; set; }
 
     [JsonPropertyName("credits")]
-    public int? Credits { get; set; } // Optional: credits for this subject
+    public int? Credits { get; set; }
+
+    [JsonPropertyName("semester")]
+    public int Semester { get; set; }
+
+    [JsonPropertyName("academicYear")]
+    public string AcademicYear { get; set; } = string.Empty;
 }

@@ -179,8 +179,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     else
                     {
                         // FALLBACK: Dynamic calculation (Preview only)
-                        // Calculate REAL prerequisite proficiency to match StartQuest logic
-                        double proficiency = 1.0;
+                        // This mirrors GenerateQuestLineCommandHandler logic
+                        double proficiency = -1.0; // Default: No Data / Neutral
+
                         if (subjectSkillMap.TryGetValue(subject.Id, out var subjectMappings) && subjectMappings.Any())
                         {
                             var targetSkillIds = subjectMappings.Select(m => m.SkillId).ToList();
@@ -192,13 +193,32 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
                             if (prereqs.Any())
                             {
-                                int met = 0;
+                                int totalPrereqs = prereqs.Count;
+                                int metPrereqs = 0;
+                                int unknownPrereqs = 0;
+
                                 foreach (var pid in prereqs)
                                 {
-                                    if (userSkillMap.TryGetValue(pid, out var us) && us.Level >= 3)
-                                        met++;
+                                    if (userSkillMap.TryGetValue(pid, out var us))
+                                    {
+                                        // Use same Level >= 2 threshold as Generator
+                                        if (us.Level >= 2) metPrereqs++;
+                                    }
+                                    else
+                                    {
+                                        unknownPrereqs++;
+                                    }
                                 }
-                                proficiency = (double)met / prereqs.Count;
+
+                                if (unknownPrereqs == totalPrereqs)
+                                {
+                                    proficiency = 1.0; // Assume standard if no data
+                                }
+                                else
+                                {
+                                    // Treat unknowns as neutral/met for preview calculation
+                                    proficiency = (double)(metPrereqs + unknownPrereqs) / totalPrereqs;
+                                }
                             }
                         }
 

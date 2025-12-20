@@ -15,12 +15,10 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
     private readonly ISubjectRepository _subjectRepository;
     private readonly IClassSpecializationSubjectRepository _classSpecializationSubjectRepository;
     private readonly IStudentSemesterSubjectRepository _studentSemesterSubjectRepository;
-    // REMOVED: ILearningPathRepository dependency (No DB table used)
     private readonly IQuestRepository _questRepository;
     private readonly IUserQuestAttemptRepository _userQuestAttemptRepository;
     private readonly IQuestDifficultyResolver _difficultyResolver;
 
-    // NEW: Needed for predictive analysis
     private readonly ISubjectSkillMappingRepository _mappingRepository;
     private readonly ISkillDependencyRepository _skillDependencyRepository;
     private readonly IUserSkillRepository _userSkillRepository;
@@ -32,7 +30,6 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         ISubjectRepository subjectRepository,
         IClassSpecializationSubjectRepository classSpecializationSubjectRepository,
         IStudentSemesterSubjectRepository studentSemesterSubjectRepository,
-        // REMOVED: ILearningPathRepository
         IQuestRepository questRepository,
         IUserQuestAttemptRepository userQuestAttemptRepository,
         IQuestDifficultyResolver difficultyResolver,
@@ -76,37 +73,80 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
         // 3. Get User's Academic History (Grades)
         var gradeRecords = (await _studentSemesterSubjectRepository.GetSemesterSubjectsByUserAsync(request.AuthUserId, cancellationToken)).ToList();
 
+        // Map for quick lookup of "Did I pass Subject X?"
+        var passedSubjectIds = gradeRecords
+            .Where(r => r.Status == SubjectEnrollmentStatus.Passed)
+            .Select(r => r.SubjectId)
+            .ToHashSet();
+
         // 4. Pre-fetch Skill Data for Predictive Analysis
         var userSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
         var userSkillMap = userSkills.ToDictionary(s => s.SkillId);
 
-        // Fetch all skill mappings for these subjects to know what they require
         var allSubjectIds = idealSubjects.Select(s => s.Id).ToList();
         var allMappings = await _mappingRepository.GetMappingsBySubjectIdsAsync(allSubjectIds, cancellationToken);
         var mappingsBySubject = allMappings.GroupBy(m => m.SubjectId).ToDictionary(g => g.Key, g => g.ToList());
 
         var allDependencies = await _skillDependencyRepository.GetAllAsync(cancellationToken);
 
-        // 5. The Core Loop: Link Subjects -> Quests & Assign Difficulty (Predictive Analysis)
+        // 5. The Core Loop: Intelligent Quest Generation
+        int generatedCount = 0;
+        int skippedCount = 0;
+
         foreach (var subject in idealSubjects)
         {
+            // --- FILTER LOGIC: SHOULD THIS QUEST EXIST FOR THE USER? ---
+
+            var gradeRecord = gradeRecords.FirstOrDefault(g => g.SubjectId == subject.Id);
+            bool isStarted = gradeRecord != null;
+
+            // Rule 1: Always generate if user has interacted with the subject (Studying, Passed, Failed)
+            bool shouldGenerate = isStarted;
+
+            // Rule 2: If not started, check if it is "Next Up" (Prerequisites met)
+            if (!shouldGenerate)
+            {
+                // Check if all prerequisites are passed
+                // Note: Subject.PrerequisiteSubjectIds is an array of Guids
+                if (subject.PrerequisiteSubjectIds == null || subject.PrerequisiteSubjectIds.Length == 0)
+                {
+                    // No prereqs -> Available (e.g. Semester 1 subjects)
+                    shouldGenerate = true;
+                }
+                else
+                {
+                    // Check if ALL prereqs are in the passed set
+                    bool allPrereqsMet = subject.PrerequisiteSubjectIds.All(id => passedSubjectIds.Contains(id));
+                    if (allPrereqsMet)
+                    {
+                        shouldGenerate = true;
+                    }
+                }
+            }
+
+            if (!shouldGenerate)
+            {
+                // Skip future content (e.g., Semester 9 Capstone when in Semester 2)
+                skippedCount++;
+                continue;
+            }
+
+            // --- END FILTER LOGIC ---
+
             // A. Find the Master Quest
             var masterQuest = await _questRepository.GetActiveQuestBySubjectIdAsync(subject.Id, cancellationToken);
 
-            // If admin hasn't generated a quest for this subject yet, skip it.
             if (masterQuest == null)
             {
                 continue;
             }
 
             // B. Calculate Prerequisite Proficiency (The "Predictive" Part)
-            double proficiency = 1.0; // Default to 100%
+            double proficiency = -1.0;
 
             if (mappingsBySubject.TryGetValue(subject.Id, out var subjectSkillMappings))
             {
                 var targetSkillIds = subjectSkillMappings.Select(m => m.SkillId).ToList();
-
-                // Find skills that are PREREQUISITES for the skills this subject teaches
                 var prerequisites = allDependencies
                     .Where(d => targetSkillIds.Contains(d.SkillId))
                     .Select(d => d.PrerequisiteSkillId)
@@ -117,48 +157,55 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 {
                     int totalPrereqs = prerequisites.Count;
                     int metPrereqs = 0;
+                    int unknownPrereqs = 0;
 
                     foreach (var pid in prerequisites)
                     {
-                        // Check if user has leveled up this prerequisite skill
-                        if (userSkillMap.TryGetValue(pid, out var us) && us.Level >= 3) // Level 3 = "Competent"
+                        if (userSkillMap.TryGetValue(pid, out var us))
                         {
-                            metPrereqs++;
+                            if (us.Level >= 2) metPrereqs++;
+                        }
+                        else
+                        {
+                            unknownPrereqs++;
                         }
                     }
 
-                    proficiency = (double)metPrereqs / totalPrereqs;
+                    if (unknownPrereqs == totalPrereqs)
+                    {
+                        proficiency = 1.0;
+                    }
+                    else
+                    {
+                        proficiency = (double)(metPrereqs + unknownPrereqs) / totalPrereqs;
+                    }
                 }
             }
 
             // C. Calculate Personalized Difficulty
-            var gradeRecord = gradeRecords.FirstOrDefault(g => g.SubjectId == subject.Id);
             var difficultyInfo = _difficultyResolver.ResolveDifficulty(gradeRecord, proficiency);
 
-            // D. Create or Update the User's Attempt (Status: NotStarted)
+            // D. Create or Update the User's Attempt
             var existingAttempt = await _userQuestAttemptRepository.FirstOrDefaultAsync(
                 a => a.AuthUserId == request.AuthUserId && a.QuestId == masterQuest.Id,
                 cancellationToken);
 
             if (existingAttempt == null)
             {
-                // Create new attempt with predicted difficulty
                 var newAttempt = new UserQuestAttempt
                 {
                     AuthUserId = request.AuthUserId,
                     QuestId = masterQuest.Id,
-                    // IMPORTANT: Set status to NotStarted so it shows up in lists but doesn't start timer
                     Status = QuestAttemptStatus.NotStarted,
-                    AssignedDifficulty = difficultyInfo.ExpectedDifficulty, // Lock the prediction
+                    AssignedDifficulty = difficultyInfo.ExpectedDifficulty,
                     Notes = difficultyInfo.DifficultyReason,
                     StartedAt = DateTimeOffset.UtcNow
                 };
                 await _userQuestAttemptRepository.AddAsync(newAttempt, cancellationToken);
-                _logger.LogInformation("Generated NotStarted attempt for Quest {QuestId} (Difficulty: {Diff}).", masterQuest.Id, difficultyInfo.ExpectedDifficulty);
+                generatedCount++;
             }
             else
             {
-                // If exists but hasn't really started, update the prediction
                 if (existingAttempt.Status == QuestAttemptStatus.NotStarted)
                 {
                     existingAttempt.AssignedDifficulty = difficultyInfo.ExpectedDifficulty;
@@ -168,7 +215,8 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             }
         }
 
-        // Return AuthUserId as the virtual LearningPathId
+        _logger.LogInformation("Quest generation complete. Generated/Updated: {Gen}, Skipped (Locked): {Skip}", generatedCount, skippedCount);
+
         return new GenerateQuestLineResponse { LearningPathId = request.AuthUserId };
     }
 }
