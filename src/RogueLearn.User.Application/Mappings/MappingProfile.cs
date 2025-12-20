@@ -80,7 +80,9 @@ public class MappingProfile : Profile
 
         //  Mappings for the Onboarding feature
         CreateMap<CurriculumProgram, RouteDto>();
-        CreateMap<Class, ClassDto>();
+        // Updated Class mapping to support CRUD
+        CreateMap<Class, ClassDto>()
+            .ForMember(dest => dest.SkillFocusAreas, opt => opt.MapFrom(src => src.SkillFocusAreas ?? Array.Empty<string>()));
 
         // Achievement mappings
         CreateMap<Achievement, AchievementDto>()
