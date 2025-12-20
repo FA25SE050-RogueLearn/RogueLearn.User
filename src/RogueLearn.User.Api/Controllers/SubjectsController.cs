@@ -11,6 +11,8 @@ using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromTe
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Queries.GetSubjectSkillMappings;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.AddSubjectSkillMapping;
 using RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.RemoveSubjectSkillMapping;
+using Hangfire;
+using System.Text.Json;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -26,12 +28,16 @@ public class SubjectsController : ControllerBase
         _mediator = mediator;
     }
 
+    /// <summary>
+    /// Starts a background job to import a subject from raw syllabus text.
+    /// Returns a Job ID that can be used to poll for progress.
+    /// </summary>
     [HttpPost("import-from-text")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ImportSubjectFromTextResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<CreateSubjectResponse>> ImportFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ImportSubjectFromTextResponse>> ImportFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.RawText))
         {
@@ -43,19 +49,81 @@ public class SubjectsController : ControllerBase
             RawText = request.RawText,
             Semester = request.Semester
         };
+
+        // Mediator now returns a Job ID immediately
         var result = await _mediator.Send(command, cancellationToken);
-        return Ok(result);
+
+        return AcceptedAtAction(nameof(GetImportStatus), new { jobId = result.JobId }, result);
     }
 
     [HttpPut("import-from-text")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(CreateSubjectResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ImportSubjectFromTextResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<CreateSubjectResponse>> UpdateFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ImportSubjectFromTextResponse>> UpdateFromText([FromForm] ImportSubjectFromTextRequest request, CancellationToken cancellationToken)
     {
         return await ImportFromText(request, cancellationToken);
     }
+
+    /// <summary>
+    /// Checks the progress of a subject import background job.
+    /// </summary>
+    [HttpGet("import-status/{jobId}")]
+    [ProducesResponseType(typeof(ImportJobStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetImportStatus(string jobId)
+    {
+        var connection = JobStorage.Current.GetConnection();
+        var jobData = connection.GetJobData(jobId);
+
+        if (jobData == null)
+        {
+            return NotFound($"Job {jobId} not found");
+        }
+
+        var response = new ImportJobStatusResponse
+        {
+            JobId = jobId,
+            Status = jobData.State ?? "Unknown",
+            CreatedAt = jobData.CreatedAt
+        };
+
+        // Retrieve custom progress data stored by the service
+        var progressJson = connection.GetJobParameter(jobId, "ImportProgress");
+        if (!string.IsNullOrEmpty(progressJson))
+        {
+            try
+            {
+                var progress = JsonSerializer.Deserialize<JobProgressData>(progressJson);
+                if (progress != null)
+                {
+                    response.Percent = progress.Percent;
+                    response.Message = progress.Message;
+                    response.UpdatedAt = progress.Timestamp;
+                }
+            }
+            catch { /* Ignore deserialization errors */ }
+        }
+
+        // Handle specific states
+        if (jobData.State == "Failed")
+        {
+            // Hangfire stores exception details in state data
+            // Note: Retrieving exact exception message requires accessing state data directly
+            response.Message = "Job failed. Check logs or retry.";
+            response.Status = "Failed";
+        }
+        else if (jobData.State == "Succeeded")
+        {
+            response.Percent = 100;
+            if (string.IsNullOrEmpty(response.Message)) response.Message = "Import completed successfully.";
+        }
+
+        return Ok(response);
+    }
+
+    // ... [Rest of the controller methods remain unchanged: GetAllSubjects, GetSubjectById, etc.] ...
 
     /// <summary>
     /// Retrieves paginated subjects with optional search.
@@ -153,4 +221,21 @@ public class SubjectsController : ControllerBase
         await _mediator.Send(new RemoveSubjectSkillMappingCommand { SubjectId = subjectId, SkillId = skillId }, cancellationToken);
         return NoContent();
     }
+}
+
+public class ImportJobStatusResponse
+{
+    public string JobId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public int Percent { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class JobProgressData
+{
+    public int Percent { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
 }

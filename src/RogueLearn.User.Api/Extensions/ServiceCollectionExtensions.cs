@@ -99,6 +99,9 @@ public static class ServiceCollectionExtensions
         // ADDED: Topic Grouper Service
         services.AddScoped<ITopicGrouperService, TopicGrouperService>();
 
+        // ADDED: Subject Import Service (Background Job)
+        services.AddScoped<ISubjectImportService, SubjectImportService>();
+
         services.AddSingleton<IMemoryStore, InMemoryStore>();
         services.AddScoped<IAiQueryClassificationService, AiQueryClassificationService>();
 

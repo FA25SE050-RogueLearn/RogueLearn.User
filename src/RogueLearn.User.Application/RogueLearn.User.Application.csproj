@@ -24,6 +24,7 @@
 		<PackageReference Include="Google.Apis.Drive.v3" Version="1.73.0.3996" />
 		<PackageReference Include="FFMpegCore" Version="5.4.0" />
 		<PackageReference Include="OpenAI" Version="2.8.0" />
+		<PackageReference Include="Hangfire.Console" Version="1.4.3" /> 
 	</ItemGroup>
 
 	<ItemGroup>
