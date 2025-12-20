@@ -19,8 +19,8 @@ public class ConfigureGuildSettingsCommandValidator : AbstractValidator<Configur
         RuleFor(x => x.Privacy)
             .NotEmpty()
             .Must(p => string.Equals(p, "public", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(p, "invite_only", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Privacy must be either 'public' or 'invite_only'.");
+                        string.Equals(p, "private", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Privacy must be either 'public' or 'private'.");
 
         RuleFor(x => x.MaxMembers)
             .GreaterThan(2)
