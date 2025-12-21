@@ -272,8 +272,7 @@ public class GetFullUserInfoQueryHandler : IRequestHandler<GetFullUserInfoQuery,
                 attempt.StartedAt,
                 attempt.CompletedAt,
                 stepsTotal,
-                stepsCompleted,
-                attempt.CurrentStepId
+                stepsCompleted
             ));
         }
 

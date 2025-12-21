@@ -81,4 +81,4 @@ public record GuildMemberItem(Guid GuildId, string GuildName, string Role, DateT
 public record NoteItem(Guid Id, string Title, DateTimeOffset CreatedAt);
 public record NotificationItem(Guid Id, string Type, string Title, bool IsRead, DateTimeOffset CreatedAt);
 public record LecturerVerificationRequestItem(Guid Id, string Status, DateTimeOffset? SubmittedAt);
-public record QuestAttemptItem(Guid AttemptId, Guid QuestId, string QuestTitle, string Status, decimal CompletionPercentage, int TotalExperienceEarned, DateTimeOffset StartedAt, DateTimeOffset? CompletedAt, int StepsTotal, int StepsCompleted, Guid? CurrentStepId);
+public record QuestAttemptItem(Guid AttemptId, Guid QuestId, string QuestTitle, string Status, decimal CompletionPercentage, int TotalExperienceEarned, DateTimeOffset StartedAt, DateTimeOffset? CompletedAt, int StepsTotal, int StepsCompleted);
