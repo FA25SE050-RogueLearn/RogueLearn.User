@@ -1,10 +1,7 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/DTOs/Internal/CurriculumForQuestGenerationDto.cs
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.DTOs.Internal;
 
-// This DTO mirrors BuildingBlocks.Shared.DTOs.CurriculumDto in the QuestService
-// to create a stable, explicit contract for inter-service communication.
 public class CurriculumForQuestGenerationDto
 {
     [JsonPropertyName("curriculumCode")]

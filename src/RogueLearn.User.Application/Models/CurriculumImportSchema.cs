@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Models/CurriculumImportSchema.cs
 using System.ComponentModel.DataAnnotations;
 using RogueLearn.User.Domain.Enums;
 using System.Text.Json.Serialization;

@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Common/ObjectToInferredTypesConverter.cs
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Common;

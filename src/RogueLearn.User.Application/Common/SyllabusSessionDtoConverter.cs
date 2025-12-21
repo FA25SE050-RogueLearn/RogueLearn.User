@@ -1,22 +1,15 @@
-// src/RogueLearn.User.Application/Common/SyllabusSessionDtoConverter.cs
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using RogueLearn.User.Application.Models;
 
 namespace RogueLearn.User.Application.Common;
 
-/// <summary>
-/// Custom JSON converter for SyllabusSessionDto
-/// Handles flexible deserialization with graceful fallbacks for case-sensitivity and malformed data.
-/// </summary>
 public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
 {
     private static bool TryGetPropertyCaseInsensitive(JsonElement root, string name, out JsonElement value)
     {
-        // exact match first
         if (root.TryGetProperty(name, out value)) return true;
 
-        // then case-insensitive scan
         foreach (var prop in root.EnumerateObject())
         {
             if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
@@ -86,8 +79,6 @@ public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
             // Parse SuggestedUrl (optional) with robust error handling
             if (TryGetPropertyCaseInsensitive(root, "SuggestedUrl", out var suggestedUrlElement))
             {
-                // FIX: Handle the specific corruption case where a JsonElement was serialized as {"ValueKind": 7}
-                // ValueKind 7 corresponds to JsonValueKind.Undefined in some contexts or just a raw object structure.
                 if (suggestedUrlElement.ValueKind == JsonValueKind.String)
                 {
                     var raw = suggestedUrlElement.GetString();
@@ -96,10 +87,8 @@ public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
                         session.SuggestedUrl = raw.Replace("`", string.Empty).Trim();
                     }
                 }
-                // If it's an object (like {"ValueKind":7}), treat it as null/empty string
                 else if (suggestedUrlElement.ValueKind == JsonValueKind.Object)
                 {
-                    // Logically ignore this corrupt object
                     session.SuggestedUrl = null;
                 }
             }
@@ -113,7 +102,6 @@ public class SyllabusSessionDtoConverter : JsonConverter<SyllabusSessionDto>
         SyllabusSessionDto value,
         JsonSerializerOptions options)
     {
-        // Use default serialization logic which respects naming policies
         JsonSerializer.Serialize(writer, value, options);
     }
 }

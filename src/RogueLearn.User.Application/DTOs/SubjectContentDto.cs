@@ -6,30 +6,10 @@
 /// </summary>
 public class SubjectContentDto
 {
-    /// <summary>
-    /// The subject ID this content belongs to.
-    /// </summary>
     public Guid SubjectId { get; set; }
-
-    /// <summary>
-    /// Subject code (e.g., "BIT_SE_K19D_K20A").
-    /// </summary>
-    public string SubjectCode { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Subject name.
-    /// </summary>
+    public string SubjectCode { get; set; } = string.Empty;   
     public string SubjectName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The JSON content object containing all syllabus information.
-    /// This is the full SyllabusContent object deserialized from the database JSONB column.
-    /// </summary>
     public SyllabusContentDto Content { get; set; } = new();
-
-    /// <summary>
-    /// Timestamp of last update.
-    /// </summary>
     public DateTimeOffset? LastUpdated { get; set; }
 }
 
@@ -39,54 +19,16 @@ public class SubjectContentDto
 /// </summary>
 public class SyllabusContentDto
 {
-    /// <summary>
-    /// Overall course description and objectives.
-    /// </summary>
+   
     public string? CourseDescription { get; set; }
-
-    /// <summary>
-    /// Course learning outcomes (CLOs).
-    /// </summary>
     public List<CourseLearningOutcomeDto> CourseLearningOutcomes { get; set; } = new();
-
-    /// <summary>
-    /// Structured session schedule.
-    /// </summary>
     public List<SessionScheduleDto> SessionSchedule { get; set; } = new();
-
-    /// <summary>
-    /// Assessment methods and weightages.
-    /// </summary>
     public List<AssessmentDto> Assessments { get; set; } = new();
-
-    /// <summary>
-    /// Required reading materials.
-    /// </summary>
     public List<string> RequiredTexts { get; set; } = new();
-
-    /// <summary>
-    /// Recommended reading materials.
-    /// </summary>
     public List<string> RecommendedTexts { get; set; } = new();
-
-    /// <summary>
-    /// Grading policy explanation.
-    /// </summary>
     public string? GradingPolicy { get; set; }
-
-    /// <summary>
-    /// Attendance and participation policy.
-    /// </summary>
     public string? AttendancePolicy { get; set; }
-
-    /// <summary>
-    /// Course prerequisites if any.
-    /// </summary>
     public List<string> Prerequisites { get; set; } = new();
-
-    /// <summary>
-    /// Additional resources or materials.
-    /// </summary>
     public List<string> AdditionalResources { get; set; } = new();
 }
 
