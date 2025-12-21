@@ -1,4 +1,5 @@
 using RogueLearn.User.Application.Exceptions;
+using Supabase.Postgrest.Exceptions;
 using System.Net;
 using System.Text.Json;
 
@@ -44,6 +45,31 @@ public class ExceptionHandlingMiddleware
                     {
                         message = "Validation failed",
                         details = validationEx.Errors
+                    }
+                };
+                break;
+
+            case PostgrestException postgrestEx when postgrestEx.Message.Contains("Network connection lost"):
+            case NetworkException:
+                context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+                response = new
+                {
+                    error = new
+                    {
+                        message = "We're experiencing network connectivity issues. Please try again in a moment.",
+                        code = "NETWORK_ERROR"
+                    }
+                };
+                break;
+
+            case PostgrestException postgrestEx when postgrestEx.Message.Contains("gateway error"):
+                context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+                response = new
+                {
+                    error = new
+                    {
+                        message = "The service is temporarily unavailable. Please try again shortly.",
+                        code = "SERVICE_UNAVAILABLE"
                     }
                 };
                 break;
@@ -150,8 +176,8 @@ public class ExceptionHandlingMiddleware
                 {
                     error = new
                     {
-                        message = "An internal server error occurred",
-                        details = (string?)null
+                        message = "An unexpected error occurred. Please try again later.",
+                        code = "INTERNAL_SERVER_ERROR"
                     }
                 };
                 break;

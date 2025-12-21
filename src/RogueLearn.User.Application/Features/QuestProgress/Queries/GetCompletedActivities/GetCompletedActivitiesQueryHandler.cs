@@ -32,7 +32,7 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
 
         try
         {
-            // 1. Get quest step
+            // 1. Get quest step to access its content (the list of activities).
             var questStep = await _questStepRepository.GetByIdAsync(request.StepId, cancellationToken)
                 ?? throw new NotFoundException("QuestStep", request.StepId);
 
@@ -41,12 +41,13 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                 throw new NotFoundException("QuestStep does not belong to this quest");
             }
 
-            // 2. Get user's attempt
+            // 2. Get the user's specific attempt for this quest. This is the root of their progress.
             var attempt = await _attemptRepository.FirstOrDefaultAsync(
                 a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
                 cancellationToken);
 
-            // If attempt doesn't exist yet (Not Started), return empty progress
+            // If no attempt record exists, it means the user has never started this quest.
+            // In this case, we return a list of all activities for the step, all marked as incomplete.
             if (attempt == null)
             {
                 _logger.LogInformation("ℹ️ No attempt found for Quest:{QuestId} - returning empty activity list", request.QuestId);
@@ -60,11 +61,13 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                 };
             }
 
-            // 3. Get step progress
+            // 3. Look for a progress record for this specific step within the user's attempt.
             var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
                 sp => sp.AttemptId == attempt.Id && sp.StepId == request.StepId,
                 cancellationToken);
 
+            // If no step progress exists, it means the user has started the quest but not this particular step.
+            // This can happen after a difficulty upgrade where old progress was cleared. We return all activities as incomplete.
             if (stepProgress is null)
             {
                 _logger.LogInformation("ℹ️ No progress yet for Step:{StepId} - user just started this step", request.StepId);
@@ -78,7 +81,8 @@ public class GetCompletedActivitiesQueryHandler : IRequestHandler<GetCompletedAc
                 };
             }
 
-            // 4. Parse activities from content and map with completion status
+            // 4. If progress is found, parse the activities from the quest step's content and use the
+            // 'completed_activity_ids' from the progress record to determine which are complete.
             var activities = ExtractAndMapActivities(questStep.Content, stepProgress.CompletedActivityIds ?? Array.Empty<Guid>());
 
             var result = new CompletedActivitiesDto

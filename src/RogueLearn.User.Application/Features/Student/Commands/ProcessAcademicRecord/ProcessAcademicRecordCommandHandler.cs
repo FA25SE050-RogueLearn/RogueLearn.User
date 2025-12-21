@@ -113,6 +113,11 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var rawTextHash = ComputeSha256Hash(request.FapHtmlContent);
         string? extractedJson = await _storage.TryGetByHashJsonAsync("academic-records", rawTextHash, cancellationToken);
 
+        // This flag is the key to solving the stale analysis report issue.
+        // It tracks whether we performed a fresh AI extraction of the FAP HTML,
+        // signaling that the underlying grade data has changed.
+        bool fapCacheMiss = false;
+
         if (!string.IsNullOrWhiteSpace(extractedJson))
         {
             _logger.LogInformation("Cache HIT: Found cached academic record for hash {Hash}. Skipping AI extraction.", rawTextHash);
@@ -120,6 +125,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         else
         {
             _logger.LogInformation("Cache MISS: No cached record found for hash {Hash}. Proceeding with AI extraction.", rawTextHash);
+            fapCacheMiss = true; // Set the flag because we are processing new data.
             var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.FapHtmlContent);
 
             // ========== STEP 2: VALIDATE CLEANED TEXT ==========
@@ -170,9 +176,9 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
             await _enrollmentRepository.AddAsync(enrollment, cancellationToken);
         }
 
-        var allAllowedSubjects = (await _subjectRepository.GetAllAsync(cancellationToken))
-            .Where(s => allowedSubjectIds.Contains(s.Id))
-            .ToList();
+        // OPTIMIZED: Use GetByIdsAsync instead of GetAllAsync + Where
+        // This is much more performant when the subject table grows large.
+        var allAllowedSubjects = (await _subjectRepository.GetByIdsAsync(allowedSubjectIds, cancellationToken)).ToList();
 
         if (!allAllowedSubjects.Any())
         {
@@ -183,16 +189,18 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         var subjectCatalog = allAllowedSubjects.ToDictionary(s => s.SubjectCode);
         _logger.LogInformation("Built combined subject catalog for program and class with {Count} subjects.", subjectCatalog.Count);
 
-        // ========== NEW LOGIC: GENERATE AI ANALYSIS WITH CACHING ==========
-        // 1. Try to get existing analysis from storage
+        // ========== AI ACADEMIC ANALYSIS LOGIC ==========
+        // This block now correctly handles re-analysis when new data is submitted.
+
+        // 1. Attempt to retrieve a previously generated analysis report from storage.
         AcademicAnalysisReport? analysisReport = await _storage.GetUserAnalysisAsync(request.AuthUserId, cancellationToken);
 
-        // 2. Only run AI if analysis is missing or if we just parsed new FAP data (cache miss on extraction)
-        bool freshDataParsed = string.IsNullOrWhiteSpace(extractedJson); // If we extracted, we should re-analyze
-
-        if (analysisReport == null || freshDataParsed)
+        // 2. The core logic fix: Re-run the AI analysis if EITHER there is no existing report
+        // OR if we just processed new academic data (indicated by the fapCacheMiss flag).
+        if (analysisReport == null || fapCacheMiss)
         {
-            _logger.LogInformation("Generating AI Academic Analysis (Cache Miss or Fresh Data)...");
+            string logReason = analysisReport == null ? "No existing report found" : "New academic data detected (FAP cache miss)";
+            _logger.LogInformation("Generating AI Academic Analysis ({Reason})...", logReason);
 
             var subjectNameMap = new Dictionary<string, string>();
             foreach (var s in fapData.Subjects)
@@ -208,7 +216,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                 subjectNameMap,
                 cancellationToken);
 
-            // 3. Save the new analysis to storage
+            // 3. Save the newly generated (or updated) analysis to storage for future use.
             await _storage.SaveUserAnalysisAsync(request.AuthUserId, analysisReport, cancellationToken);
         }
         else
@@ -303,7 +311,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         // This command will now perform the JIT difficulty calculation preview and create "NotStarted" attempts
         // It returns the AuthUserId as the virtual LearningPathId
 
-        // MODIFICATION: Pass the AI Analysis Report into the generation command
+        // The freshly generated or retrieved AI Analysis Report is passed to the quest generation logic.
         var questLineCommand = new GenerateQuestLine
         {
             AuthUserId = request.AuthUserId,

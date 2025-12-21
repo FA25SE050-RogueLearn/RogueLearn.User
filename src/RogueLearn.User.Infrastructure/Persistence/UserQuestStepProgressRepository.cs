@@ -45,4 +45,19 @@ public class UserQuestStepProgressRepository : GenericRepository<UserQuestStepPr
 
         return response.Models;
     }
+
+    /// <summary>
+    /// Deletes all step progress records for a given attempt ID using a direct filter.
+    /// This is a critical function for resetting a user's quest progress when their
+    /// assigned difficulty level changes, ensuring data consistency.
+    /// </summary>
+    /// <param name="attemptId">The unique identifier of the quest attempt whose progress should be cleared.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    public async Task DeleteByAttemptIdAsync(Guid attemptId, CancellationToken cancellationToken = default)
+    {
+        await _supabaseClient
+            .From<UserQuestStepProgress>()
+            .Filter("attempt_id", Operator.Equals, attemptId.ToString())
+            .Delete(cancellationToken: cancellationToken);
+    }
 }

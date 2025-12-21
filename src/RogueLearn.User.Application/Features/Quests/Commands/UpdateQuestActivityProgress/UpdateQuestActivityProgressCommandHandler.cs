@@ -84,7 +84,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         bool isAlreadyCompleted = completedList.Contains(request.ActivityId);
         bool progressChanged = false;
 
-        // ... [Remaining logic for XP awarding and completion checks is unchanged] ...
         if (request.Status == StepCompletionStatus.Completed && !isAlreadyCompleted)
         {
             completedList.Add(request.ActivityId);
@@ -93,44 +92,70 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
             var (activityXp, activitySkillId, activityTitle) = ExtractActivityDetails(step.Content, request.ActivityId);
 
+            // This is the core logic for XP capping.
+            // It ensures that a user's total experience for a quest does not exceed the
+            // maximum possible for their currently assigned difficulty level. This is crucial for
+            // re-attempts at higher difficulties, as it prevents earning unlimited XP.
             if (activityXp > 0)
             {
-                attempt.TotalExperienceEarned += activityXp;
-                await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+                // Fetch all steps for the quest to calculate the XP cap for the current difficulty.
+                var allQuestSteps = await _questStepRepository.GetByQuestIdAsync(request.QuestId, cancellationToken);
+                var maxExperienceForDifficulty = allQuestSteps
+                    .Where(s => string.Equals(s.DifficultyVariant, attempt.AssignedDifficulty, StringComparison.OrdinalIgnoreCase))
+                    .Sum(s => s.ExperiencePoints);
 
-                if (activitySkillId.HasValue)
+                // Calculate the potential new total XP and cap it at the maximum for this difficulty.
+                var potentialNewTotalXp = attempt.TotalExperienceEarned + activityXp;
+                var newTotalXp = Math.Min(potentialNewTotalXp, maxExperienceForDifficulty);
+
+                // This logic correctly handles both UPGRADE and DOWNGRADE scenarios:
+                // 1. UPGRADE: If a user earned 1000 XP on Standard (cap 1000) and moves to Challenging (cap 1500),
+                //    they can earn up to 500 additional XP. `newTotalXp` will be greater than `attempt.TotalExperienceEarned`,
+                //    so the `if` block executes.
+                // 2. DOWNGRADE: If a user earned 1500 XP on Challenging and moves to Standard (cap 1000),
+                //    `newTotalXp` will be capped at 1000. The condition `if (1000 > 1500)` will be FALSE.
+                //    This correctly prevents any new XP from being awarded and preserves their higher score of 1500.
+                if (newTotalXp > attempt.TotalExperienceEarned)
                 {
-                    await _mediator.Send(new IngestXpEventCommand
+                    var xpGained = newTotalXp - attempt.TotalExperienceEarned;
+                    attempt.TotalExperienceEarned = newTotalXp;
+                    await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+
+                    // The XP event is dispatched with the actual XP gained after capping.
+                    if (activitySkillId.HasValue)
                     {
-                        AuthUserId = request.AuthUserId,
-                        SkillId = activitySkillId.Value,
-                        Points = activityXp,
-                        SourceService = "QuestSystem",
-                        SourceType = "ActivityComplete",
-                        SourceId = request.ActivityId,
-                        Reason = $"Completed: {activityTitle ?? "Quest Activity"}"
-                    }, cancellationToken);
-                }
-                else
-                {
-                    // Fallback logic for primary skill
-                    var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
-                    if (quest != null && quest.SubjectId.HasValue)
-                    {
-                        var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
-                        var primaryMapping = skillMappings.OrderByDescending(m => m.RelevanceWeight).FirstOrDefault();
-                        if (primaryMapping != null)
+                        await _mediator.Send(new IngestXpEventCommand
                         {
-                            await _mediator.Send(new IngestXpEventCommand
+                            AuthUserId = request.AuthUserId,
+                            SkillId = activitySkillId.Value,
+                            Points = xpGained,
+                            SourceService = "QuestSystem",
+                            SourceType = "ActivityComplete",
+                            SourceId = request.ActivityId,
+                            Reason = $"Completed: {activityTitle ?? "Quest Activity"}"
+                        }, cancellationToken);
+                    }
+                    else
+                    {
+                        // Fallback logic for primary skill
+                        var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken);
+                        if (quest != null && quest.SubjectId.HasValue)
+                        {
+                            var skillMappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { quest.SubjectId.Value }, cancellationToken);
+                            var primaryMapping = skillMappings.OrderByDescending(m => m.RelevanceWeight).FirstOrDefault();
+                            if (primaryMapping != null)
                             {
-                                AuthUserId = request.AuthUserId,
-                                SkillId = primaryMapping.SkillId,
-                                Points = activityXp,
-                                SourceService = "QuestSystem",
-                                SourceType = "ActivityComplete",
-                                SourceId = request.ActivityId,
-                                Reason = $"Completed: {activityTitle ?? "Quest Activity"} (Primary Skill Fallback)"
-                            }, cancellationToken);
+                                await _mediator.Send(new IngestXpEventCommand
+                                {
+                                    AuthUserId = request.AuthUserId,
+                                    SkillId = primaryMapping.SkillId,
+                                    Points = xpGained,
+                                    SourceService = "QuestSystem",
+                                    SourceType = "ActivityComplete",
+                                    SourceId = request.ActivityId,
+                                    Reason = $"Completed: {activityTitle ?? "Quest Activity"} (Primary Skill Fallback)"
+                                }, cancellationToken);
+                            }
                         }
                     }
                 }
@@ -173,7 +198,6 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         await UpdateQuestCompletionPercentage(attempt, request.QuestId, currentDifficulty, cancellationToken);
     }
 
-    // [Helper methods unchanged]
     private async Task UpdateQuestCompletionPercentage(UserQuestAttempt attempt, Guid questId, string difficultyVariant, CancellationToken cancellationToken)
     {
         try

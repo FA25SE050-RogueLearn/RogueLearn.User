@@ -57,7 +57,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
 
     public async Task<LearningPathDto?> Handle(GetMyLearningPathQuery request, CancellationToken cancellationToken)
     {
-        // 1. Get User Profile
+        // 1. Get User Profile to determine their academic route and specialization.
         var userProfile = await _userProfileRepository.GetByAuthIdAsync(request.AuthUserId, cancellationToken);
         if (userProfile == null) return null;
 
@@ -78,7 +78,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             };
         }
 
-        // 2. Fetch all subjects
+        // 2. Fetch all subjects relevant to the user's main program and specialization class.
         var programSubjects = await _programSubjectRepository.FindAsync(ps => ps.ProgramId == userProfile.RouteId.Value, cancellationToken);
         var programSubjectIds = programSubjects.Select(ps => ps.SubjectId).ToHashSet();
 
@@ -98,7 +98,8 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             };
         }
 
-        // 3. Fetch Master Data
+        // 3. Fetch all necessary master data in bulk to avoid N+1 queries in the loop.
+        // This includes all subjects, student grade records, master quests, and quest attempts.
         var subjects = (await _subjectRepository.GetByIdsAsync(allSubjectIds, cancellationToken))
                        .ToDictionary(s => s.Id);
 
@@ -115,7 +116,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             .GroupBy(a => a.QuestId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        // 4. Pre-fetch Skill Data for Efficient Calculation
+        // 4. Pre-fetch skill-related data for live "preview" difficulty calculations.
         var userSkills = await _userSkillRepository.GetSkillsByAuthIdAsync(request.AuthUserId, cancellationToken);
         var userSkillMap = userSkills.ToDictionary(s => s.SkillId);
 
@@ -123,7 +124,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
         var allMappings = await _mappingRepository.GetMappingsBySubjectIdsAsync(allSubjectIds, cancellationToken);
         var subjectSkillMap = allMappings.GroupBy(m => m.SubjectId).ToDictionary(g => g.Key, g => g.ToList());
 
-        // 5. Build Structure
+        // 5. Build the learning path structure, grouped by semester.
         var semesterGroups = subjects.Values
             .GroupBy(s => s.Semester ?? 0)
             .OrderBy(g => g.Key)
@@ -153,27 +154,31 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     totalQuestsCount++;
                     var attempt = attempts.GetValueOrDefault(masterQuest.Id);
                     var studentRecord = studentRecords.GetValueOrDefault(subject.Id);
+
+                    // Determine the quest's status by checking the attempt first, then falling back to the academic record.
                     var computedStatus = attempt?.Status.ToString() ??
                                  (studentRecord?.Status == SubjectEnrollmentStatus.Passed ? "Completed" : "NotStarted");
 
                     string displayDifficulty;
                     string diffReason;
 
-                    // FIX: Respect the persisted difficulty on the attempt, even if it is 'NotStarted'
-                    // This ensures the AI Analysis results from ProcessAcademicRecord are displayed.
+                    // This is the core logic for displaying the correct, updated difficulty.
+                    // It prioritizes the 'assigned_difficulty' stored in the user's quest attempt record.
+                    // This record is updated by the 'ProcessAcademicRecord' flow whenever the user's GPA changes.
                     if (attempt != null && !string.IsNullOrEmpty(attempt.AssignedDifficulty))
                     {
+                        // Use the difficulty that was calculated and saved during the last academic sync.
                         displayDifficulty = attempt.AssignedDifficulty;
 
-                        // Customize the reason based on whether the user has actually started engaging with it
+                        // Display a different reason based on whether the user has started the quest.
                         if (attempt.Status != QuestAttemptStatus.NotStarted)
                         {
                             diffReason = "Locked to your initial assessment";
                         }
                         else
                         {
-                            // If NotStarted, use the saved notes (which contain the AI explanation)
-                            // or a default preview message.
+                            // If the quest is not started, display the reason saved in the 'notes' field,
+                            // which explains why the AI predicted this difficulty.
                             diffReason = !string.IsNullOrEmpty(attempt.Notes)
                                 ? attempt.Notes
                                 : "Personalized based on academic analysis";
@@ -181,7 +186,9 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                     }
                     else
                     {
-                        // Fallback: No attempt exists yet, calculate a "preview" difficulty live.
+                        // This fallback block is for generating a "live preview" of difficulty
+                        // for quests that do not have an attempt record yet (e.g., future quests).
+                        // It does not use the full AI analysis for performance reasons.
                         double proficiency = -1.0;
 
                         if (subjectSkillMap.TryGetValue(subject.Id, out var subjectMappings) && subjectMappings.Any())
@@ -222,18 +229,19 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                             }
                         }
 
-                        // Preview Mode: Passing null for AI Report since live preview doesn't re-run expensive AI analysis
+                        // Calculate a preview difficulty without the full AI analysis report.
                         var diffInfo = _difficultyResolver.ResolveDifficulty(
                             studentRecord,
                             proficiency,
                             subject,
-                            null,  // AI Report (unavailable in preview query)
-                            null); // Skills list (not strictly needed for basic preview fallback)
+                            null,  // AI Report is not available in this live query.
+                            null);
 
                         displayDifficulty = diffInfo.ExpectedDifficulty;
                         diffReason = diffInfo.DifficultyReason;
                     }
 
+                    // Assemble the Quest DTO with the determined difficulty and status.
                     var questDto = new QuestSummaryDto
                     {
                         Id = masterQuest.Id,
@@ -255,6 +263,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                 }
             }
 
+            // Determine the overall status of the chapter (semester).
             if (chapterDto.Quests.Any())
             {
                 if (chapterDto.Quests.All(q => q.Status == "Completed"))
@@ -266,6 +275,7 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             }
         }
 
+        // Calculate the overall completion percentage for the entire learning path.
         var completionPercentage = totalQuestsCount > 0
             ? Math.Round((double)completedQuestsCount / totalQuestsCount * 100, 2)
             : 0;
