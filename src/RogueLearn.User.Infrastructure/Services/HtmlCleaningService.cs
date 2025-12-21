@@ -57,7 +57,6 @@ public class HtmlCleaningService : IHtmlCleaningService
             // 3. Post-processing: Formatting and cleanup
             var bodyNode = doc.DocumentNode.SelectSingleNode("//body") ?? doc.DocumentNode;
 
-            // Convert to string
             var result = bodyNode.OuterHtml;
 
             result = Regex.Replace(result, @"\n\s*\n", "\n");
@@ -116,23 +115,19 @@ public class HtmlCleaningService : IHtmlCleaningService
 
         // --- Tag Logic ---
 
-        // 1. Text Nodes: Keep if not empty
         if (node.NodeType == HtmlNodeType.Text)
         {
             if (string.IsNullOrWhiteSpace(node.InnerText))
             {
-                // Remove empty text nodes to clean up formatting
                 node.Remove();
             }
             return;
         }
 
-        // 2. Element Nodes
         if (node.NodeType == HtmlNodeType.Element)
         {
             var tagName = node.Name.ToLowerInvariant();
 
-            // Transformations
             if (tagName == "b")
             {
                 node.Name = "strong";
@@ -219,7 +214,6 @@ public class HtmlCleaningService : IHtmlCleaningService
             parent.InsertBefore(child, node);
         }
 
-        // Remove the original tag
         parent.RemoveChild(node);
     }
 

@@ -95,7 +95,6 @@ public class UserContextService : IUserContextService
         }
         dto.Enrollment = enrollmentDto;
 
-        // Skills aggregation
         var skills = await _userSkillRepository.FindAsync(x => x.AuthUserId == authUserId, cancellationToken);
         var skillsList = skills.ToList();
         var totalExperience = skillsList.Sum(s => s.ExperiencePoints);
@@ -123,7 +122,6 @@ public class UserContextService : IUserContextService
             TopSkills = topSkills
         };
 
-        // Achievements count
         dto.AchievementsCount = await _userAchievementRepository.CountAsync(x => x.AuthUserId == authUserId, cancellationToken);
 
         return dto;

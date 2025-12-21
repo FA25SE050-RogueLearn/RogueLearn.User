@@ -31,11 +31,9 @@ public class AchievementImageStorage : IAchievementImageStorage
 
         var storage = _client.Storage.From(bucketName);
 
-        // Infer extension
         var ext = System.IO.Path.GetExtension(originalFileName).ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(ext)) ext = ".png"; // default
+        if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
 
-        // Determine content type if not provided
         var uploadContentType = contentType ?? ext switch
         {
             ".png" => "image/png",

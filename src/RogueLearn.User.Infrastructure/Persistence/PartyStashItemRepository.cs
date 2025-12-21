@@ -51,7 +51,6 @@ public class PartyStashItemRepository : GenericRepository<PartyStashItem>, IPart
                 }
                 catch
                 {
-                    // If content is not JSON, cannot match by subject
                     return false;
                 }
             }

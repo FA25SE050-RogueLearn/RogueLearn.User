@@ -249,7 +249,6 @@ public class CurriculumImportStorage : ICurriculumImportStorage
                 return;
             }
 
-            // Create syllabus folder structure alongside curriculum folders
             await SaveSyllabusLatestAsync(
                 bucketName,
                 subjectCode,
