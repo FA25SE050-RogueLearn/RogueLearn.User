@@ -21,8 +21,8 @@ public class ConfigureGuildSettingsCommandHandler : IRequestHandler<ConfigureGui
         var guild = await _guildRepository.GetByIdAsync(request.GuildId, cancellationToken)
             ?? throw new Application.Exceptions.NotFoundException("Guild", request.GuildId.ToString());
 
-        // Validate that the new max is strictly greater than current members
-        if (request.MaxMembers <= guild.CurrentMemberCount)
+        var isChangingMax = request.MaxMembers != guild.MaxMembers;
+        if (isChangingMax && request.MaxMembers <= guild.CurrentMemberCount)
         {
             throw new Application.Exceptions.BadRequestException("Max members must be greater than the current member count.");
         }
@@ -33,11 +33,11 @@ public class ConfigureGuildSettingsCommandHandler : IRequestHandler<ConfigureGui
         var isVerifiedLecturer = verifiedLecturerRole != null && userRoles.Any(ur => ur.RoleId == verifiedLecturerRole.Id);
         var maxAllowed = isVerifiedLecturer ? 100 : 50;
 
-        if (!isVerifiedLecturer && guild.CurrentMemberCount >= 50)
+        if (!isVerifiedLecturer && guild.CurrentMemberCount > 50 && isChangingMax)
         {
-            throw new Application.Exceptions.UnprocessableEntityException("Guild settings are locked until a Verified Lecturer is GuildMaster.");
+            throw new Application.Exceptions.UnprocessableEntityException("Max members cannot be changed because current members exceed 50 and a Verified Lecturer is not GuildMaster.");
         }
-        if (request.MaxMembers > maxAllowed)
+        if (isChangingMax && request.MaxMembers > maxAllowed)
         {
             throw new Application.Exceptions.BadRequestException($"Max guild members cannot exceed {maxAllowed} for your role.");
         }
@@ -45,7 +45,10 @@ public class ConfigureGuildSettingsCommandHandler : IRequestHandler<ConfigureGui
         guild.Name = request.Name;
         guild.Description = request.Description;
         guild.IsPublic = request.Privacy.Equals("public", StringComparison.OrdinalIgnoreCase);
-        guild.MaxMembers = request.MaxMembers;
+        if (isChangingMax)
+        {
+            guild.MaxMembers = request.MaxMembers;
+        }
         guild.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _guildRepository.UpdateAsync(guild, cancellationToken);
