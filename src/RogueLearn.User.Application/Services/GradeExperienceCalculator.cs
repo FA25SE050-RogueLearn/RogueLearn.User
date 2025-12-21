@@ -4,18 +4,14 @@ using RogueLearn.User.Domain.Entities;
 namespace RogueLearn.User.Application.Services;
 
 /// <summary>
-/// Calculates XP awards from academic grades using a tiered cap system.
-/// 
-/// The tiered system prevents a perfect score in a beginner subject from 
-/// making a user look like a master. Each subject tier contributes a limited
-/// "pool" of XP to a skill.
-/// 
-/// Tier Caps (based on Subject.Semester):
-/// - Tier 1 (Sem 1-3): Max 1500 XP contribution → Level 1.5
-/// - Tier 2 (Sem 4-6): Max 2000 XP contribution → fills to Level 3.5
-/// - Tier 3 (Sem 7+):  Max 1500 XP contribution → fills to Level 5
-/// 
-/// Formula: XP = TierPool × RelevanceWeight × (Grade / 10.0)
+/// This service implements the "Tiered Reward System" for calculating XP awards from academic grades.
+/// It uses a "Per-Subject Contribution" model, where each subject acts as a self-contained pool of potential XP.
+/// The tier of the subject determines the size of this pool. A skill's total XP is the sum of XP awarded
+/// from all relevant subjects.
+///
+/// This is distinct from a "Cumulative Skill Cap" model where a skill itself has a total XP limit that
+/// increases with each tier. The current model is simpler to implement and still effectively rewards
+/// students more for mastering advanced subjects.
 /// </summary>
 public interface IGradeExperienceCalculator
 {
@@ -36,37 +32,46 @@ public interface IGradeExperienceCalculator
 
 public class GradeExperienceCalculator : IGradeExperienceCalculator
 {
-    // XP pools per tier - these define how much XP each tier of subjects can contribute
-    private const int Tier1Pool = 1500;  // Foundation subjects (Sem 1-3)
-    private const int Tier2Pool = 2000;  // Intermediate subjects (Sem 4-6)
-    private const int Tier3Pool = 1500;  // Advanced subjects (Sem 7+)
+    // These constants define the maximum XP that a single subject can contribute to a skill,
+    // based on the semester it belongs to. This creates the "Tiered Reward System".
+    private const int Tier1Pool = 1500;  // Tier 1 (Foundation): For subjects in Semesters 1-3.
+    private const int Tier2Pool = 2000;  // Tier 2 (Intermediate): For subjects in Semesters 4-6.
+    private const int Tier3Pool = 2500;  // Tier 3 (Advanced): For subjects in Semester 7+, providing the highest reward.
 
-    // Minimum grade to earn meaningful XP (passing grade in Vietnam is 5.0)
+    // A grade of 5.0 is the minimum passing grade required to earn substantial XP.
     private const double PassingGrade = 5.0;
-    
-    // Consolation XP for attempting but failing
+
+    // A small, flat amount of XP awarded for subjects that were attempted but not passed.
     private const int ConsolationXp = 50;
 
+    /// <summary>
+    /// This is the core method where the XP calculation happens based on the Per-Subject Contribution model.
+    /// </summary>
     public int CalculateXpAward(double grade, int semester, decimal relevanceWeight)
     {
-        // Determine the XP pool based on semester tier
+        // First, determine the maximum XP pool for this subject based on its semester tier.
         int tierPool = GetTierPool(semester);
 
-        // If failed (grade < 5.0), give small consolation XP for trying
+        // If the grade is below passing, award a small, fixed amount of XP for the effort.
         if (grade < PassingGrade)
         {
             return ConsolationXp;
         }
 
-        // Calculate grade percentage (5.0 = 50%, 10.0 = 100%)
+        // Convert the grade (e.g., 8.5) into a percentage (0.85).
         double gradePercent = grade / 10.0;
 
-        // Calculate XP: Pool × Relevance × Grade%
+        // The final XP is calculated by multiplying the tier's max pool by the skill's relevance
+        // to the subject, and then by the student's grade percentage.
         int earnedXp = (int)(tierPool * (double)relevanceWeight * gradePercent);
 
         return earnedXp;
     }
 
+    /// <summary>
+    /// A helper method to get the details of a tier based on the semester number.
+    /// This is used for logging and can also be used to display information to the user.
+    /// </summary>
     public (int Tier, int MaxPool, string Description) GetTierInfo(int semester)
     {
         return semester switch
@@ -77,6 +82,9 @@ public class GradeExperienceCalculator : IGradeExperienceCalculator
         };
     }
 
+    /// <summary>
+    /// A private helper that returns the correct XP pool for a given semester.
+    /// </summary>
     private static int GetTierPool(int semester)
     {
         return semester switch
