@@ -46,7 +46,6 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
 
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
 
-        // Verify user exists
         var user = await _userProfileRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
         {
@@ -54,7 +53,6 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
             throw new NotFoundException("User", request.UserId);
         }
 
-        // Verify achievement exists
         var achievement = await _achievementRepository.GetByIdAsync(request.AchievementId, cancellationToken);
         if (achievement is null)
         {
@@ -62,7 +60,6 @@ public class AwardAchievementToUserCommandHandler : IRequestHandler<AwardAchieve
             throw new NotFoundException("Achievement", request.AchievementId);
         }
 
-        // Prevent duplicate awarding
         var alreadyEarned = await _userAchievementRepository.AnyAsync(
             ua => ua.AuthUserId == user.AuthUserId && ua.AchievementId == request.AchievementId,
             cancellationToken);

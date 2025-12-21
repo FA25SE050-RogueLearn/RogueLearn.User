@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Plugins/GoogleWebSearchService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
 using System.Text;
@@ -20,17 +19,15 @@ namespace RogueLearn.User.Application.Plugins
         private readonly HttpClient _httpClient;
         private readonly ILogger<GoogleWebSearchService>? _logger;
 
-        // Blocked sources (paywalls)
         private static readonly string[] BlockedSources = new[]
         {
             "medium.com", // Often paywalled
             "towardsdatascience.com", // Paywalled
         };
 
-        // HIGH PRIORITY: Tutorial sites with clear, well-written examples
         private static readonly string[] TutorialSites = new[]
         {
-            // International tutorial sites
+            // International
             "geeksforgeeks.org",
             "w3schools.com",
             "tutorialspoint.com",
@@ -164,7 +161,6 @@ namespace RogueLearn.User.Application.Plugins
             var queryLower = query.ToLowerInvariant();
             var enhancedQuery = new StringBuilder(query);
 
-            // Add content keywords if missing
             var contentKeywords = new[] {
                 "tutorial", "guide", "documentation", "example",
                 "introduction", "beginner", "learn", "explained"
@@ -176,12 +172,10 @@ namespace RogueLearn.User.Application.Plugins
                 enhancedQuery.Append(" tutorial guide");
             }
 
-            // Vietnamese content detection and boost
             if (IsVietnameseQuery(query))
             {
                 _logger?.LogDebug("🇻🇳 Detected Vietnamese query, boosting Vietnamese sources");
 
-                // Prioritize Vietnamese sites for Vietnamese queries
                 var vietnameseSites = string.Join(" OR ", new[]
                 {
                     "site:viblo.asia",
@@ -194,8 +188,6 @@ namespace RogueLearn.User.Application.Plugins
             }
             else
             {
-                // For non-Vietnamese queries, boost international community/tutorial sites
-                // Also add software requirements engineering sources if query looks like SE/requirements
                 var seBoost = LooksLikeRequirements(query)
                     ? " OR visual-paradigm.com OR atlassian.com OR lucidchart.com OR smartsheet.com OR productplan.com OR geeksforgeeks.org/software-engineering"
                     : string.Empty;
@@ -205,12 +197,8 @@ namespace RogueLearn.User.Application.Plugins
             return enhancedQuery.ToString();
         }
 
-        /// <summary>
-        /// Detect if query contains Vietnamese characters or keywords.
-        /// </summary>
         private bool IsVietnameseQuery(string query)
         {
-            // Check for Vietnamese diacritics
             return Regex.IsMatch(query, @"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđĐ]");
         }
 
@@ -220,37 +208,27 @@ namespace RogueLearn.User.Application.Plugins
             return q.Contains("requirement") || q.Contains("requirements") || q.Contains("use case") || q.Contains("acceptance criteria") || q.Contains("elicitation") || q.Contains("validation") || q.Contains("vision and scope");
         }
 
-        /// <summary>
-        /// Prioritize search results by source type.
-        /// Priority: Tutorial Sites > Community Blogs > Official Docs > Others
-        /// </summary>
         private List<GoogleSearchItem> PrioritizeResults(List<GoogleSearchItem> items)
         {
             var prioritized = items.OrderByDescending(item =>
             {
                 var link = item.Link.ToLowerInvariant();
 
-                // Highest priority: Tutorial sites with clear examples
                 if (TutorialSites.Any(site => link.Contains(site)))
                     return 1000;
 
-                // High priority: Community blogs
                 if (CommunityBlogs.Any(site => link.Contains(site)))
                     return 900;
 
-                // Medium priority: Official docs
                 if (OfficialDocs.Any(site => link.Contains(site)))
                     return 500;
 
-                // Lower priority: Stack Overflow (good but often too specific)
                 if (link.Contains("stackoverflow.com"))
                     return 400;
 
-                // Lower priority: Reddit discussions
                 if (link.Contains("reddit.com"))
                     return 300;
 
-                // Lowest: Everything else
                 return 100;
             }).ToList();
 
@@ -289,7 +267,6 @@ namespace RogueLearn.User.Application.Plugins
             return "General Source";
         }
 
-        // JSON response models
         private class GoogleSearchResponse
         {
             [JsonPropertyName("items")]

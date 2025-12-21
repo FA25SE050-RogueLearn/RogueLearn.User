@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/OfficialDocsProvider.cs
 namespace RogueLearn.User.Application.Services;
 
 public static class OfficialDocsProvider

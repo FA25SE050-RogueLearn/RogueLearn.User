@@ -1,6 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/GradeExperienceCalculator.cs
-using RogueLearn.User.Domain.Entities;
-
 namespace RogueLearn.User.Application.Services;
 
 /// <summary>

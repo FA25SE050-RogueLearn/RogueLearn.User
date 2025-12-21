@@ -1,5 +1,3 @@
-// Add to RogueLearn.User.Application/Services/AcademicContextBuilder.cs
-
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Entities;
@@ -39,7 +37,6 @@ public class AcademicContextBuilder : IAcademicContextBuilder
     {
         var context = new AcademicContext();
 
-        // Get target subject
         var targetSubject = await _subjectRepo.GetByIdAsync(targetSubjectId, cancellationToken);
         if (targetSubject == null)
         {
@@ -47,7 +44,6 @@ public class AcademicContextBuilder : IAcademicContextBuilder
             return context;
         }
 
-        // Get all student's semester subjects
         var allStudentSubjects = (await _semesterSubjectRepo.FindAsync(
             ss => ss.AuthUserId == authUserId,
             cancellationToken)).ToList();
@@ -59,10 +55,8 @@ public class AcademicContextBuilder : IAcademicContextBuilder
             return context;
         }
 
-        // Calculate GPA
         context.CurrentGpa = CalculateGpa(allStudentSubjects);
 
-        // Determine attempt reason
         var targetSubjectHistory = allStudentSubjects
             .Where(ss => ss.SubjectId == targetSubjectId)
             .OrderByDescending(ss => ss.AcademicYear)
@@ -71,23 +65,19 @@ public class AcademicContextBuilder : IAcademicContextBuilder
         context.PreviousAttempts = targetSubjectHistory.Count;
         context.AttemptReason = DetermineAttemptReason(targetSubjectHistory);
 
-        // Get all subjects for reference
         var allSubjects = (await _subjectRepo.GetAllAsync(cancellationToken)).ToList();
         var subjectDict = allSubjects.ToDictionary(s => s.Id, s => s);
 
-        // Analyze prerequisites (subjects from earlier semesters)
         context.PrerequisiteHistory = AnalyzePrerequisites(
             allStudentSubjects,
             subjectDict,
             targetSubject.Semester ?? 1);
 
-        // Identify related subjects (same category/department)
         context.RelatedSubjects = GetRelatedSubjects(
             allStudentSubjects,
             subjectDict,
             targetSubject);
 
-        // Determine strengths and weaknesses
         var (strengths, improvements) = AnalyzePerformancePatterns(
             allStudentSubjects,
             subjectDict);
@@ -134,7 +124,6 @@ public class AcademicContextBuilder : IAcademicContextBuilder
     {
         var prerequisites = new List<PrerequisitePerformance>();
 
-        // Get subjects from earlier semesters
         var priorSubjects = allSubjects
             .Where(ss => subjectDict.ContainsKey(ss.SubjectId) &&
                         (subjectDict[ss.SubjectId].Semester ?? 0) < targetSemester)

@@ -64,12 +64,10 @@ Follow these rules strictly:
             var parsed = TryParseBlockNoteJsonToObject(sanitized);
             if (parsed is { } obj && obj is List<object> list && list.Count == 0)
             {
-                // avoid empty array — construct minimal paragraph block
                 parsed = BlockNoteDocumentFactory.FromPlainText(rawText.Trim());
             }
             if (parsed is null)
             {
-                // Fallback to plain text conversion
                 parsed = BlockNoteDocumentFactory.FromPlainText(rawText.Trim());
             }
             return parsed;
@@ -228,8 +226,6 @@ Follow these rules strictly:
         }
     }
 
-    // Note: PDF parsing is not implemented due to missing library support in this environment.
-
     private ChatMessageContentItemCollection ProcessPowerPoint(Stream pptxStream)
     {
         var contentItems = new ChatMessageContentItemCollection();
@@ -383,7 +379,6 @@ Follow these rules strictly:
         // Remove common code fences
         if (s.StartsWith("```"))
         {
-            // Try to find the JSON array boundaries inside fenced content
             var start = s.IndexOf('[');
             var end = s.LastIndexOf(']');
             if (start >= 0 && end > start)
@@ -402,7 +397,6 @@ Follow these rules strictly:
             }
         }
 
-        // Fallback: return as-is (caller may validate/parse)
         return s;
     }
 
@@ -414,10 +408,8 @@ Follow these rules strictly:
             var trimmed = json.Trim();
             if (trimmed.StartsWith("````"))
             {
-                // unlikely fence variant
                 trimmed = trimmed.Trim('`');
             }
-            // Strip Markdown code fences if present
             if (trimmed.StartsWith("```"))
             {
                 var idx = trimmed.IndexOf('\n');

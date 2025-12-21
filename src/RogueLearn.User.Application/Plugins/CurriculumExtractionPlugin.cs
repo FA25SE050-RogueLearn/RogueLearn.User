@@ -1,10 +1,5 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/CurriculumExtractionPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RogueLearn.User.Application.Plugins;
 

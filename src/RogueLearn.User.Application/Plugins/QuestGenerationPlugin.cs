@@ -1,4 +1,3 @@
-// src/RogueLearn.User.Application/Plugins/QuestGenerationPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Services;
@@ -36,26 +35,23 @@ public class QuestGenerationPlugin : IQuestGenerationPlugin
             {
                 _logger.LogInformation("Executing Master Quest AI Prompt (Attempt {Attempt}/{Max})", attempt, maxAttempts);
 
-                // Append error hint if retrying to guide the AI
                 var finalPrompt = prompt;
                 if (attempt > 1 && !string.IsNullOrWhiteSpace(lastError))
                 {
                     finalPrompt += BuildRetryErrorHint(lastError);
                 }
 
-                // Call LLM
                 var rawResponse = await _kernel.InvokePromptAsync(finalPrompt, cancellationToken: cancellationToken);
                 var rawJson = rawResponse.ToString();
 
                 _logger.LogInformation("AI Response received. Length: {Length}", rawJson.Length);
 
-                // Use the existing robust cleaning pipeline
                 var (success, cleanedJson, error) = EscapeSequenceCleaner.CleanAndValidate(rawJson);
 
                 if (!success)
                 {
                     _logger.LogError("JSON cleaning failed: {Error}", error);
-                    // ⭐ LOGGING: Dump first 500 chars of the raw response to debug the format
+                    // Log first 500 chars of the raw response to debug the format
                     var preview = rawJson.Length > 500 ? rawJson.Substring(0, 500) + "..." : rawJson;
                     _logger.LogError("Raw AI Response Preview: {Preview}", preview);
 

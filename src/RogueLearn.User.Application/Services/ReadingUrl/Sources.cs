@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/Sources.cs
 namespace RogueLearn.User.Application.Services;
 
 public static class Sources

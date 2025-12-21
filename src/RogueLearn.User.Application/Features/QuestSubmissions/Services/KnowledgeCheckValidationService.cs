@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestSubmissions/Services/KnowledgeCheckValidationService.cs
 using Microsoft.Extensions.Logging;
 
 namespace RogueLearn.User.Application.Features.QuestSubmissions.Services;

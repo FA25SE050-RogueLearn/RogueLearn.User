@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/ContextKeywordExtractor.cs
 using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Services;

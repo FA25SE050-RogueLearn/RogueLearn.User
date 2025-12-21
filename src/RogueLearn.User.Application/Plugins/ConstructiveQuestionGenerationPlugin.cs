@@ -1,4 +1,3 @@
-﻿// src/RogueLearn.User.Application/Plugins/ConstructiveQuestionGenerationPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Models;

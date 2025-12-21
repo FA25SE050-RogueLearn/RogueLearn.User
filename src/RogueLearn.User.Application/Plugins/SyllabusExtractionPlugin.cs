@@ -1,10 +1,5 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/SyllabusExtractionPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -35,19 +30,16 @@ public class SyllabusExtractionPlugin : ISyllabusExtractionPlugin
 
             var result = await _kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
             var rawResponse = result.GetValue<string>() ?? string.Empty;
-            //_logger.LogInformation("Syllabus extractor raw response: {RawResponse}", rawResponse);
             return CleanToJson(rawResponse);
         }
         catch (Exception ex)
         {
-           // _logger.LogError(ex, "Failed to extract syllabus data using AI");
             return string.Empty;
         }
     }
 
     private static string CleanToJson(string rawResponse)
     {
-        // This cleaning logic can be shared or kept separate, for now it is duplicated for clarity.
         var cleanedResponse = rawResponse.Trim();
         if (cleanedResponse.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
         {

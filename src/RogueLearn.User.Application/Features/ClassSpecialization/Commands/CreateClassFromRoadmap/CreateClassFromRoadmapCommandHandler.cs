@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -42,7 +42,6 @@ public class CreateClassFromRoadmapCommandHandler : IRequestHandler<CreateClassF
             throw new BadRequestException("File is empty.");
         }
 
-        // 1. Extract Text from PDF
         string rawText;
         try
         {
@@ -101,7 +100,6 @@ public class CreateClassFromRoadmapCommandHandler : IRequestHandler<CreateClassF
         return _mapper.Map<ClassDto>(newClass);
     }
 
-    // Helper classes for JSON deserialization
     private class RoadmapImportData
     {
         public ClassData? Class { get; set; }
