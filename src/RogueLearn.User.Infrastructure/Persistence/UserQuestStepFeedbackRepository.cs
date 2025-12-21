@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Infrastructure/Persistence/UserQuestStepFeedbackRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -26,8 +25,6 @@ public class UserQuestStepFeedbackRepository : GenericRepository<UserQuestStepFe
 
     public async Task<IEnumerable<UserQuestStepFeedback>> GetBySubjectIdAsync(Guid subjectId, CancellationToken cancellationToken = default)
     {
-        // This query aggregates feedback from ALL users who are taking this subject.
-        // It allows admins to spot content errors (like broken links) that affect everyone.
         var response = await _supabaseClient
             .From<UserQuestStepFeedback>()
             .Filter("subject_id", Operator.Equals, subjectId.ToString())

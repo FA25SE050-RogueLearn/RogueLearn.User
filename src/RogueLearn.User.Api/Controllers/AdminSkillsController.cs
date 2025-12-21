@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/AdminSkillsController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;

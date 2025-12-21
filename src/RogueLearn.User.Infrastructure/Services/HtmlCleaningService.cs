@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/HtmlCleaningService.cs
 using System.Text;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
@@ -61,9 +60,7 @@ public class HtmlCleaningService : IHtmlCleaningService
             // Convert to string
             var result = bodyNode.OuterHtml;
 
-            // Collapse multiple empty lines and spaces using Regex
             result = Regex.Replace(result, @"\n\s*\n", "\n");
-            // Remove spaces between tags like "> <" to compact the HTML
             result = Regex.Replace(result, @">\s+<", "><");
 
             return result.Trim();
@@ -88,7 +85,6 @@ public class HtmlCleaningService : IHtmlCleaningService
         }
 
         // 2. Select nodes that are definitely trash to delete completely
-        // Removed //form from this list
         var nodesToRemove = node.SelectNodes("//script|//style|//link|//meta|//input|//comment()|//iframe|//svg|//noscript|//button|//select|//option");
 
         if (nodesToRemove != null)
@@ -218,8 +214,6 @@ public class HtmlCleaningService : IHtmlCleaningService
         var parent = node.ParentNode;
         if (parent == null) return;
 
-        // Move all children to parent
-        // Use ToList() to create a copy because ChildNodes changes as we move them
         foreach (var child in node.ChildNodes.ToList())
         {
             parent.InsertBefore(child, node);

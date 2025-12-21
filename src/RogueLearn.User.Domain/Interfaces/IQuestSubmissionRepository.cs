@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Domain/Interfaces/IQuestSubmissionRepository.cs
 using BuildingBlocks.Shared.Interfaces;
 using RogueLearn.User.Domain.Entities;
 

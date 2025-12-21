@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Extensions/ServiceCollectionExtensions.cs
 using FluentValidation;
 using MediatR;
 using Microsoft.OpenApi.Models;
@@ -36,7 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehaviour<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnhandledExceptionBehaviour<,>));
 
-        // CRITICAL FIX: Read configuration ONCE outside the lambda
+        // Read configuration ONCE outside the lambda
         var googleSearchApiKey = configuration["GoogleSearch:ApiKey"]
             ?? throw new InvalidOperationException("GoogleSearch:ApiKey is not configured.");
         var googleSearchEngineId = configuration["GoogleSearch:SearchEngineId"]
@@ -85,11 +84,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileSummarizationPlugin, ContentSummarizationPlugin>();
         services.AddScoped<IFapExtractionPlugin, FapExtractionPlugin>();
         services.AddScoped<ISubjectExtractionPlugin, SubjectExtractionPlugin>();
-        // ADDED: Register the new plugin for quest step generation.
         services.AddScoped<IQuestGenerationPlugin, QuestGenerationPlugin>();
         services.AddScoped<ISkillDependencyAnalysisPlugin, SkillDependencyAnalysisPlugin>();
         services.AddScoped<IConstructiveQuestionGenerationPlugin, ConstructiveQuestionGenerationPlugin>();
-        // ADDED: Register Academic Analysis Plugin
         services.AddScoped<IAcademicAnalysisPlugin, AcademicAnalysisPlugin>();
         // Register prompt builders
         services.AddScoped<IPromptBuilder, UserContextPromptBuilder>();
@@ -97,10 +94,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAcademicContextBuilder, AcademicContextBuilder>();
         services.AddScoped<IQuestDifficultyResolver, QuestDifficultyResolver>();
         services.AddScoped<IGradeExperienceCalculator, GradeExperienceCalculator>();
-        // ADDED: Topic Grouper Service
         services.AddScoped<ITopicGrouperService, TopicGrouperService>();
 
-        // ADDED: Subject Import Service (Background Job)
+        // Subject Import Service (Background Job)
         services.AddScoped<ISubjectImportService, SubjectImportService>();
 
         services.AddSingleton<IMemoryStore, InMemoryStore>();

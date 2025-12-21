@@ -1,10 +1,8 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/ProfilesController.cs
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 using RogueLearn.User.Application.Features.UserProfiles.Queries.GetAllUserProfiles;
-using RogueLearn.User.Api.Attributes;
 using BuildingBlocks.Shared.Authentication;
 using RogueLearn.User.Application.Features.UserFullInfo.Queries.GetFullUserInfo;
 
@@ -27,7 +25,7 @@ public class ProfilesController : ControllerBase
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The current user's profile.</returns>
-    [HttpGet("profiles/me")] // ADDED THIS NEW ENDPOINT
+    [HttpGet("profiles/me")]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

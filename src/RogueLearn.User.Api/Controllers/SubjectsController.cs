@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/SubjectsController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
@@ -122,8 +121,6 @@ public class SubjectsController : ControllerBase
 
         return Ok(response);
     }
-
-    // ... [Rest of the controller methods remain unchanged: GetAllSubjects, GetSubjectById, etc.] ...
 
     /// <summary>
     /// Retrieves paginated subjects with optional search.

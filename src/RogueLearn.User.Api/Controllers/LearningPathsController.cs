@@ -1,10 +1,8 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/LearningPathsController.cs
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.LearningPaths.Queries.GetMyLearningPath;
-using RogueLearn.User.Api.Attributes;
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -36,8 +34,4 @@ public class LearningPathsController : ControllerBase
 
         return result is not null ? Ok(result) : NotFound();
     }
-
-    // MODIFICATION: The 'AnalyzeLearningGap' endpoint has been removed.
-
-    // MODIFICATION: The 'ForgeLearningPath' endpoint has been removed.
 }

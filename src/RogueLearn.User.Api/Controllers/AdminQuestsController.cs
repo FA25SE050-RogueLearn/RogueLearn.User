@@ -1,11 +1,7 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/AdminQuestsController.cs
 using BuildingBlocks.Shared.Authentication;
 using Hangfire;
-using Hangfire.Server;
 using Hangfire.States;
-using Hangfire.Storage;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.Quests.Commands.EnsureMasterQuests;
@@ -224,7 +220,6 @@ public class AdminQuestsController : ControllerBase
     }
 }
 
-// DTOs moved here (or keep in a shared file, duplicates removed from QuestsController)
 public class GeneratedQuestStepsResponse
 {
     public string JobId { get; set; } = string.Empty;

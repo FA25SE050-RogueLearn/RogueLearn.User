@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Note.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 
@@ -13,7 +12,6 @@ public class Note : BaseEntity
     [Column("title")]
     public string Title { get; set; } = string.Empty;
 
-    // Stored as JSONB in database; BlockNote uses a top-level array of blocks, so model as a list for reliable serialization
     [Column("content")]
     public object? Content { get; set; }
 

@@ -63,7 +63,6 @@ public class RoadmapImportStorage : IRoadmapImportStorage
                 sb.Append(ch);
             else if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_' || ch == '/')
                 sb.Append('-');
-            // ignore other chars
         }
         var slug = sb.ToString();
         while (slug.Contains("--")) slug = slug.Replace("--", "-");

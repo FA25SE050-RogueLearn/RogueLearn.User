@@ -16,7 +16,7 @@ public class MatchResult : BaseEntity
     public DateTime EndUtc { get; set; }
 
     [Column("result")]
-    public string Result { get; set; } = string.Empty; // "win" or "lose"
+    public string Result { get; set; } = string.Empty;
 
     [Column("scene")]
     public string Scene { get; set; } = string.Empty;
@@ -27,7 +27,6 @@ public class MatchResult : BaseEntity
     [Column("user_id")]
     public Guid? UserId { get; set; }
 
-    // Store full match data as raw JSON string (avoids JsonElement serialization issues)
     [Column("match_data")]
     public string? MatchDataJson { get; set; }
 

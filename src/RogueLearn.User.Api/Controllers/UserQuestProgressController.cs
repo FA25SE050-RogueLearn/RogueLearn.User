@@ -1,11 +1,9 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/UserQuestProgressController.cs
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Application.Features.QuestProgress.Queries.GetStepProgress;
 using RogueLearn.User.Application.Features.QuestProgress.Queries.GetCompletedActivities;
-// MODIFIED: Using the robust query from Features.Quests that handles difficulty filtering
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestProgress;
 
 namespace RogueLearn.User.Api.Controllers;
@@ -42,9 +40,6 @@ public class UserQuestProgressController : ControllerBase
 
         try
         {
-            // MODIFIED: Switched to GetQuestProgressQuery (Features.Quests) 
-            // This handler correctly filters steps based on the user's UserQuestAttempt.AssignedDifficulty
-            // and calculates IsLocked logic based on sequence.
             var query = new GetQuestProgressQuery
             {
                 AuthUserId = authUserId,

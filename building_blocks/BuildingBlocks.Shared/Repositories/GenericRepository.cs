@@ -1,4 +1,3 @@
-// RogueLearn.User/building_blocks/BuildingBlocks.Shared/Repositories/GenericRepository.cs
 using BuildingBlocks.Shared.Common;
 using BuildingBlocks.Shared.Interfaces;
 using Supabase;

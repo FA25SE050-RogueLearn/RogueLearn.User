@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/StudentCurriculumController.cs
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

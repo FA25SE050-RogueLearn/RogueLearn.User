@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/CurriculumImportStorage.cs
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
 using Microsoft.Extensions.Logging;
@@ -28,7 +27,6 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         string rawTextHash,
         CancellationToken cancellationToken = default)
     {
-        // Paths
         var safeProgram = programCode.Trim();
         var safeVersion = versionCode.Trim();
         var prefix = $"curriculum/{safeProgram}/{safeVersion}/";
@@ -38,10 +36,8 @@ public class CurriculumImportStorage : ICurriculumImportStorage
         var byHashJsonPath = $"curriculum/_hashes/{rawTextHash}.json";
         var versionByHashJsonPath = prefix + $"versions/{rawTextHash}.json";
 
-        // Get bucket
         var storage = _client.Storage.From(bucketName);
 
-        // Upload JSON (overwrite)
         var jsonBytes = Encoding.UTF8.GetBytes(jsonContent);
         await storage.Upload(jsonBytes, latestJsonPath, new Supabase.Storage.FileOptions
         {
@@ -63,7 +59,6 @@ public class CurriculumImportStorage : ICurriculumImportStorage
             Upsert = true
         });
 
-        // Upload raw text (overwrite)
         var rawBytes = Encoding.UTF8.GetBytes(rawTextContent);
         await storage.Upload(rawBytes, rawTextPath, new Supabase.Storage.FileOptions
         {
@@ -71,7 +66,6 @@ public class CurriculumImportStorage : ICurriculumImportStorage
             Upsert = true
         });
 
-        // Upload metadata (includes hash)
         var metaObj = new
         {
             rawTextHash = rawTextHash,
@@ -416,7 +410,7 @@ public class CurriculumImportStorage : ICurriculumImportStorage
     #endregion
 
     // ============================================================================
-    // NEW: User Academic Analysis Storage
+    // User Academic Analysis Storage
     // ============================================================================
 
     public async Task SaveUserAnalysisAsync(

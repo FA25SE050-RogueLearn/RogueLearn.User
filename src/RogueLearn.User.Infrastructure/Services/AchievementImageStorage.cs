@@ -1,4 +1,4 @@
-using BuildingBlocks.Shared.Extensions; // ToSlug
+using BuildingBlocks.Shared.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
@@ -51,7 +51,6 @@ public class AchievementImageStorage : IAchievementImageStorage
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var filePath = $"icons/{slug}/{timestamp}{ext}";
 
-        // Read stream into bytes
         using var ms = new MemoryStream();
         await imageStream.CopyToAsync(ms, cancellationToken);
         var bytes = ms.ToArray();

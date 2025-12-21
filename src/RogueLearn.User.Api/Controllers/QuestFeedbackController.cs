@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestFeedbackController.cs
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

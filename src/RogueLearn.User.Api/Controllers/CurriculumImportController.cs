@@ -1,9 +1,7 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/CurriculumImportController.cs
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using RogueLearn.User.Api.Attributes;
 using RogueLearn.User.Application.Features.CurriculumImport.Commands.ImportCurriculum;
-using RogueLearn.User.Application.Interfaces;
 
 namespace RogueLearn.User.Api.Controllers;
 

@@ -7,10 +7,6 @@ using Newtonsoft.Json;
 
 namespace RogueLearn.User.Infrastructure.Services;
 
-/// <summary>
-/// Stub implementation for party notification service.
-/// TODO: Integrate with actual notification system (email, push notifications, etc.)
-/// </summary>
 public class PartyNotificationService : IPartyNotificationService
 {
     private readonly ILogger<PartyNotificationService> _logger;

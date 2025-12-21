@@ -72,7 +72,6 @@ public class PartyStashItemRepository : GenericRepository<PartyStashItem>, IPart
                 return false;
             }
 
-            // Fallback: no match
             return false;
         });
     }

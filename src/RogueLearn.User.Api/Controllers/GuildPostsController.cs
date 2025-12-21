@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/GuildPostsController.cs
 using System.Net.Mime;
 using BuildingBlocks.Shared.Authentication;
 using MediatR;

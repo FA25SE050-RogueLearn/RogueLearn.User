@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/NotesController.cs
 using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

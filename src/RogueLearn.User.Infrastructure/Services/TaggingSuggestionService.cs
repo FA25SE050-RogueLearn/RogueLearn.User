@@ -70,7 +70,6 @@ public class TaggingSuggestionService : ITaggingSuggestionService
             .Take(Math.Max(1, Math.Min(10, maxTags)))
             .ToList();
 
-        // Fetch user's tags and map by normalized slug
         var userTags = await _tagRepository.FindAsync(t => t.AuthUserId == authUserId, cancellationToken);
         var tagMap = userTags.ToDictionary(t => NormalizeLabel(t.Name).ToSlug(), t => t);
 

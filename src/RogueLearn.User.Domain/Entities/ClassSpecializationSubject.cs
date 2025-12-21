@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/ClassSpecializationSubject.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 
@@ -12,8 +11,6 @@ public class ClassSpecializationSubject : BaseEntity
 
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
-
-    // Removed PlaceholderSubjectCode - leveraging Subject relationship for codes
 
     [Column("semester")]
     public int Semester { get; set; }

@@ -1,9 +1,8 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Persistence/UserSkillRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
 using Supabase;
-using static Supabase.Postgrest.Constants; // To use the Operator enum for direct filtering.
+using static Supabase.Postgrest.Constants;
 
 namespace RogueLearn.User.Infrastructure.Persistence;
 
@@ -13,10 +12,6 @@ public class UserSkillRepository : GenericRepository<UserSkill>, IUserSkillRepos
     {
     }
 
-    // Implementation of the new specialized method.
-    /// <summary>
-    /// Fetches all skills for a specific user using a direct and reliable filter.
-    /// </summary>
     public async Task<IEnumerable<UserSkill>> GetSkillsByAuthIdAsync(Guid authUserId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
@@ -32,8 +27,7 @@ public class UserSkillRepository : GenericRepository<UserSkill>, IUserSkillRepos
         {
             return new List<UserSkill>();
         }
-
-        // Supabase batch insert - sends all records in a single request
+        
         var response = await _supabaseClient
             .From<UserSkill>()
             .Insert(userSkills, cancellationToken: cancellationToken);

@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/SkillsController.cs
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;

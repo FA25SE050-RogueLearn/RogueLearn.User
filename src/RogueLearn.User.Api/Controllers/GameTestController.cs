@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Api/Controllers/GameTestController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using BuildingBlocks.Shared.Authentication;

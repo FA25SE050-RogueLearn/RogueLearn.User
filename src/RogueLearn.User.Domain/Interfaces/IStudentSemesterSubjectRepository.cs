@@ -7,7 +7,6 @@ public interface IStudentSemesterSubjectRepository : IGenericRepository<StudentS
 {
 
     Task<IEnumerable<Subject>> GetSubjectsByUserAsync(Guid authUserId, CancellationToken cancellationToken = default);
-    // ADDED: Specialized method to fetch the grade records safely
     Task<IEnumerable<StudentSemesterSubject>> GetSemesterSubjectsByUserAsync(Guid authUserId, CancellationToken cancellationToken = default);
 }
     

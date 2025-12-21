@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/SubjectSkillMapping.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 

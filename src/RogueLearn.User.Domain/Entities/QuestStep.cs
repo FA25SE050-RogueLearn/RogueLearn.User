@@ -1,9 +1,5 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/QuestStep.cs
 using BuildingBlocks.Shared.Common;
-using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 
 namespace RogueLearn.User.Domain.Entities;
 
@@ -22,7 +18,6 @@ public class QuestStep : BaseEntity
     [Column("description")]
     public string Description { get; set; } = string.Empty;
 
-    // MODIFIED: This stores the content for THIS specific variant.
     [Column("content")]
     public object? Content { get; set; }
 
@@ -35,11 +30,9 @@ public class QuestStep : BaseEntity
     [Column("is_optional")]
     public bool IsOptional { get; set; } = false;
 
-    // ADDED: The difficulty variant for this step (Supportive, Standard, Challenging)
     [Column("difficulty_variant")]
     public string DifficultyVariant { get; set; } = "Standard";
 
-    // ADDED: The logical module grouping (e.g., Module 1 has 3 variants)
     [Column("module_number")]
     public int ModuleNumber { get; set; } = 1;
 

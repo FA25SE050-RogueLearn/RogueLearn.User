@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Skill.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;

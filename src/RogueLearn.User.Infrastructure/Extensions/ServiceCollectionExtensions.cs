@@ -1,4 +1,3 @@
-// src/RogueLearn.User.Infrastructure/Extensions/ServiceCollectionExtensions.cs
 using BuildingBlocks.Shared.Interfaces;
 using BuildingBlocks.Shared.Repositories;
 using Microsoft.AspNetCore.Http;
@@ -9,7 +8,6 @@ using RogueLearn.User.Application.Features.QuestSubmissions.Services;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Interfaces;
-using RogueLearn.User.Infrastructure.Messaging;
 using RogueLearn.User.Infrastructure.Persistence;
 using RogueLearn.User.Infrastructure.Services;
 using Supabase;
@@ -20,11 +18,8 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        // Add HttpClientFactory for making HTTP requests reliably.
         services.AddHttpClient();
 
-        // Register Supabase client as SCOPED with proper JWT handling per request.
-        // This is the correct, stable, and performant approach.
         services.AddScoped<Client>(sp =>
         {
             var config = sp.GetRequiredService<IConfiguration>();
@@ -34,29 +29,18 @@ public static class ServiceCollectionExtensions
                 ?? throw new InvalidOperationException("Supabase URL is not configured");
             var supabaseKey = config["Supabase:ApiKey"]
                 ?? throw new InvalidOperationException("Supabase API Key is not configured");
-
-            // Get the Authorization header from the current request's context.
             var authHeader = httpContextAccessor.HttpContext?.Request?.Headers["Authorization"].ToString();
-
-            // Configure options. The headers set here will be used for all Postgrest requests
-            // made by this specific client instance for the duration of the HTTP request.
             var options = new SupabaseOptions
             {
-                AutoConnectRealtime = false, // Set to false to reduce unnecessary connections.
+                AutoConnectRealtime = false,
                 Headers = new Dictionary<string, string>()
             };
-
-            // Add the user's JWT token to the headers if it's present.
             if (!string.IsNullOrWhiteSpace(authHeader))
             {
                 options.Headers["Authorization"] = authHeader;
             }
 
             var client = new Client(supabaseUrl, supabaseKey, options);
-
-            // The blocking `.GetAwaiter().GetResult()` call is removed.
-            // Initialization is now handled in a non-blocking, fire-and-forget task,
-            // which prevents deadlocks and thread pool starvation that caused the connection errors.
             _ = Task.Run(async () =>
             {
                 try
@@ -65,19 +49,17 @@ public static class ServiceCollectionExtensions
                 }
                 catch
                 {
-                    // Initialization failures are handled gracefully. The client will attempt to
-                    // initialize on first use if this background task fails.
+
                 }
             });
 
             return client;
         });
 
-        // Register Generic Repository
+        // Generic Repository
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
-        // --- All Repository Registrations are now correctly included ---
-        // Register Specific Repositories
+        // Users Repositories
         services.AddScoped<IUserProfileRepository, UserProfileRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
@@ -88,8 +70,6 @@ public static class ServiceCollectionExtensions
         // Academic repositories
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IClassRepository, ClassRepository>();
-
-        // instance of `ClassSpecializationSubjectRepository` when `IClassSpecializationSubjectRepository` is requested.
         services.AddScoped<IClassSpecializationSubjectRepository, ClassSpecializationSubjectRepository>();
         services.AddScoped<IStudentSemesterSubjectRepository, StudentSemesterSubjectRepository>();
         services.AddScoped<IStudentEnrollmentRepository, StudentEnrollmentRepository>();
@@ -117,7 +97,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGameSessionRepository, GameSessionRepository>();
         services.AddScoped<IMatchResultRepository, MatchResultRepository>();
         services.AddScoped<IMatchPlayerSummaryRepository, MatchPlayerSummaryRepository>();
-        // ADDED: Register the feedback repository
         services.AddScoped<IUserQuestStepFeedbackRepository, UserQuestStepFeedbackRepository>();
 
         // Guild repositories
@@ -147,7 +126,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMeetingParticipantRepository, MeetingParticipantRepository>();
         services.AddScoped<IMeetingSummaryRepository, MeetingSummaryRepository>();
 
-        // NEW: Register the shared HTML Cleaning Service
         services.AddScoped<IHtmlCleaningService, HtmlCleaningService>();
 
         // Storage services
@@ -173,16 +151,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILecturerNotificationService, LecturerNotificationService>();
         services.AddScoped<IMeetingNotificationService, MeetingNotificationService>();
 
-        // Add the new ReadingUrlService for sourcing article URLs
+        // ReadingUrlService for sourcing article URLs
         services.AddScoped<IReadingUrlService, ReadingUrlService>();
 
-        // Add the new UrlValidationService for checking live links
+        // UrlValidationService for checking live links
         services.AddScoped<IUrlValidationService, UrlValidationService>();
         services.AddScoped<ActivityValidationService>();
         services.AddScoped<IQuizValidationService, QuizValidationService>();
         services.AddScoped<IKnowledgeCheckValidationService, KnowledgeCheckValidationService>();
-        services.AddScoped<ICodingValidationService, CodingValidationService>(); // ADDED
-        services.AddScoped<IQuestSubmissionRepository, QuestSubmissionRepository>();
+        services.AddScoped<ICodingValidationService, CodingValidationService>();
 
         return services;
     }

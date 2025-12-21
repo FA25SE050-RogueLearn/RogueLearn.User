@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Infrastructure/Persistence/StudentSemesterSubjectRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -18,7 +17,6 @@ public class StudentSemesterSubjectRepository : GenericRepository<StudentSemeste
         CancellationToken cancellationToken = default
         )
     {
-        // FIX: Convert Guid to string for comparison
         var studentSemesterSubjects = await _supabaseClient
             .From<StudentSemesterSubject>()
             .Select("subject_id")
@@ -30,10 +28,8 @@ public class StudentSemesterSubjectRepository : GenericRepository<StudentSemeste
         if (!subjectIds.Any())
             return new List<Subject>();
 
-        // FIX: Convert List<Guid> to List<string> for the IN operator
         var subjectIdsString = subjectIds.Select(id => id.ToString()).ToList();
 
-        // Then get the subjects
         var subjects = await _supabaseClient
             .From<Subject>()
             .Filter("id", Constants.Operator.In, subjectIdsString)
@@ -41,7 +37,7 @@ public class StudentSemesterSubjectRepository : GenericRepository<StudentSemeste
 
         return subjects.Models;
     }
-    // ADDED: Implementation for safe grade fetching
+    
     public async Task<IEnumerable<StudentSemesterSubject>> GetSemesterSubjectsByUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient

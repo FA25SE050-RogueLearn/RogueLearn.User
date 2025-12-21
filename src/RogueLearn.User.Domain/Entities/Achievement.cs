@@ -15,7 +15,6 @@ public class Achievement : BaseEntity
     [Column("description")]
     public string Description { get; set; } = string.Empty;
 
-    // New rule fields
     [Column("rule_type")]
     public string? RuleType { get; set; }
 

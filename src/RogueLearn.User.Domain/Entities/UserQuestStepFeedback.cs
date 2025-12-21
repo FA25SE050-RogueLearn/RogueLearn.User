@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Domain/Entities/UserQuestStepFeedback.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 
@@ -16,16 +15,14 @@ public class UserQuestStepFeedback : BaseEntity
     [Column("auth_user_id")]
     public Guid AuthUserId { get; set; }
 
-    // Added to allow aggregating feedback across different users' quests for the same subject
-    // This enables the "Heat Map" of content errors you requested.
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
 
     [Column("rating")]
-    public int Rating { get; set; } // 1-5
+    public int Rating { get; set; }
 
     [Column("category")]
-    public string Category { get; set; } = string.Empty; // e.g., "ContentError", "TechnicalIssue", "TooDifficult"
+    public string Category { get; set; } = string.Empty;
 
     [Column("comment")]
     public string? Comment { get; set; }

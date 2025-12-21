@@ -13,8 +13,6 @@ public class UserContextService : IUserContextService
     private readonly IRoleRepository _roleRepository;
     private readonly IClassRepository _classRepository;
     private readonly IStudentEnrollmentRepository _studentEnrollmentRepository;
-    // MODIFICATION: Commented out the obsolete repository.
-    // private readonly ICurriculumVersionRepository _curriculumVersionRepository;
     private readonly IUserSkillRepository _userSkillRepository;
     private readonly IUserAchievementRepository _userAchievementRepository;
     private readonly ILogger<UserContextService> _logger;
@@ -25,7 +23,6 @@ public class UserContextService : IUserContextService
         IRoleRepository roleRepository,
         IClassRepository classRepository,
         IStudentEnrollmentRepository studentEnrollmentRepository,
-        // ICurriculumVersionRepository curriculumVersionRepository,
         IUserSkillRepository userSkillRepository,
         IUserAchievementRepository userAchievementRepository,
         ILogger<UserContextService> logger)
@@ -35,7 +32,6 @@ public class UserContextService : IUserContextService
         _roleRepository = roleRepository;
         _classRepository = classRepository;
         _studentEnrollmentRepository = studentEnrollmentRepository;
-        // _curriculumVersionRepository = curriculumVersionRepository;
         _userSkillRepository = userSkillRepository;
         _userAchievementRepository = userAchievementRepository;
         _logger = logger;
@@ -43,7 +39,6 @@ public class UserContextService : IUserContextService
 
     public async Task<UserContextDto?> BuildForAuthUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
     {
-        // Profile is required to build context
         var profile = await _userProfileRepository.GetByAuthIdAsync(authUserId, cancellationToken);
         if (profile is null)
         {
@@ -65,7 +60,6 @@ public class UserContextService : IUserContextService
             Bio = profile.Bio,
         };
 
-        // Roles
         var userRoles = await _userRoleRepository.GetRolesForUserAsync(authUserId, cancellationToken);
         if (userRoles.Any())
         {
@@ -74,7 +68,6 @@ public class UserContextService : IUserContextService
             dto.Roles = roleResults.Where(r => r != null).Select(r => r!.Name).Distinct().ToList();
         }
 
-        // Class summary
         if (profile.ClassId.HasValue)
         {
             var userClass = await _classRepository.GetByIdAsync(profile.ClassId.Value, cancellationToken);
@@ -85,14 +78,12 @@ public class UserContextService : IUserContextService
                     Id = userClass.Id,
                     Name = userClass.Name,
                     RoadmapUrl = userClass.RoadmapUrl,
-                    // Domain enum to int for DTO
                     DifficultyLevel = (int)userClass.DifficultyLevel,
                     SkillFocusAreas = userClass.SkillFocusAreas
                 };
             }
         }
 
-        // Enrollment & Curriculum Version
         CurriculumEnrollmentDto? enrollmentDto = null;
         // Fetch active enrollment using explicit string filters to avoid enum numeric mismatch (22P02)
         var activeEnrollment = await _studentEnrollmentRepository.GetActiveForAuthUserAsync(authUserId, cancellationToken);
@@ -101,38 +92,6 @@ public class UserContextService : IUserContextService
         {
             // fallback to any enrollment
             enrollment = await _studentEnrollmentRepository.FirstOrDefaultAsync(e => e.AuthUserId == authUserId, cancellationToken);
-        }
-        if (enrollment is not null)
-        {
-            // MODIFICATION: The logic to get curriculum version details is commented out because
-            // 'enrollment.CurriculumVersionId' and 'ICurriculumVersionRepository' are obsolete.
-            // TODO: This section needs to be re-implemented to derive version info from the user's
-            // program and its associated subjects, similar to the logic in ProcessAcademicRecordCommandHandler.
-            // var version = await _curriculumVersionRepository.GetByIdAsync(enrollment.CurriculumVersionId, cancellationToken);
-            // if (version is not null)
-            // {
-            //     enrollmentDto = new CurriculumEnrollmentDto
-            //     {
-            //         VersionId = version.Id,
-            //         VersionCode = version.VersionCode,
-            //         EffectiveYear = version.EffectiveYear,
-            //         Status = enrollment.Status.ToString(),
-            //         EnrollmentDate = enrollment.EnrollmentDate,
-            //         ExpectedGraduationDate = enrollment.ExpectedGraduationDate
-            //     };
-            // }
-            // else
-            // {
-            //     enrollmentDto = new CurriculumEnrollmentDto
-            //     {
-            //         VersionId = enrollment.CurriculumVersionId,
-            //         VersionCode = string.Empty,
-            //         EffectiveYear = 0,
-            //         Status = enrollment.Status.ToString(),
-            //         EnrollmentDate = enrollment.EnrollmentDate,
-            //         ExpectedGraduationDate = enrollment.ExpectedGraduationDate
-            //     };
-            // }
         }
         dto.Enrollment = enrollmentDto;
 

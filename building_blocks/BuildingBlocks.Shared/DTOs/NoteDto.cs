@@ -1,5 +1,4 @@
-﻿// building_blocks/BuildingBlocks.Shared/DTOs/NoteDto.cs
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace BuildingBlocks.Shared.DTOs;
 

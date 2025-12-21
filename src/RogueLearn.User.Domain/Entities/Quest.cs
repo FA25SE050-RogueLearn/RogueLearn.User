@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Domain/Entities/Quest.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -10,8 +9,6 @@ namespace RogueLearn.User.Domain.Entities;
 [Table("quests")]
 public class Quest : BaseEntity
 {
-    // REMOVED: QuestChapterId
-
     [Column("title")]
     public string Title { get; set; } = string.Empty;
 
@@ -53,17 +50,9 @@ public class Quest : BaseEntity
     [Column("recommendation_reason")]
     public string? RecommendationReason { get; set; }
 
-    /// <summary>
-    /// Personalized difficulty based on user's academic performance for this subject.
-    /// Values: Challenging (>=8.5), Standard (7.0-8.5), Supportive (&lt;7.0/failed), Adaptive (studying)
-    /// </summary>
     [Column("expected_difficulty")]
     public string ExpectedDifficulty { get; set; } = "Standard";
 
-    /// <summary>
-    /// Human-readable explanation of why this difficulty was assigned.
-    /// Example: "High score (8.7) - advanced content with minimal scaffolding"
-    /// </summary>
     [Column("difficulty_reason")]
     public string? DifficultyReason { get; set; }
 

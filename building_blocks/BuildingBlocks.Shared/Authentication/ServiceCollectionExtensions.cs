@@ -1,4 +1,3 @@
-// RogueLearn.User/building_blocks/BuildingBlocks.Shared/Authentication/ServiceCollectionExtensions.cs
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,4 +1,3 @@
-// src/RogueLearn.User.Infrastructure/Persistence/QuestRepository.cs
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
@@ -12,8 +11,6 @@ public class QuestRepository : GenericRepository<Quest>, IQuestRepository
     public QuestRepository(Client supabaseClient) : base(supabaseClient)
     {
     }
-
-    // REMOVED: GetQuestsByChapterIdsAsync implementation
 
     public async Task<IEnumerable<Quest>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
     {

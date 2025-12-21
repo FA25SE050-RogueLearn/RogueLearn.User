@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/UsersController.cs
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -216,7 +215,4 @@ public class UsersController : ControllerBase
         var result = await _mediator.Send(query, cancellationToken);
         return result is not null ? Ok(result) : NotFound();
     }
-
-    // REMOVED: The InitializeMySkills and EstablishMySkillDependencies endpoints are now obsolete.
-    // Skill and dependency management is now an admin-curated process.
 }

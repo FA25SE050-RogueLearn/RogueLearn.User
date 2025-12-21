@@ -38,13 +38,11 @@ public class GuildPostRepository : GenericRepository<GuildPost>, IGuildPostRepos
 
         if (!string.IsNullOrWhiteSpace(tag))
         {
-            // Attempt to filter tags array; fallback to ILike on title/content if array contains is not supported
             query = query.Filter("tags", Operator.Contains, tag);
         }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            // Basic search on title or content
             query = query.Filter("title", Operator.ILike, $"%{search}%");
         }
 

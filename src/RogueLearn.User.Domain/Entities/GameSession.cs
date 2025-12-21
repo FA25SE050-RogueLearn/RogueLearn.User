@@ -27,12 +27,11 @@ public class GameSession : BaseEntity
     [Column("difficulty")]
     public string? Difficulty { get; set; }
 
-    // Store full question pack as JSONB (stored as JSON string in C#)
     [Column("question_pack")]
     public string? QuestionPackJson { get; set; }
 
     [Column("status")]
-    public string Status { get; set; } = "created"; // created, active, completed
+    public string Status { get; set; } = "created";
 
     [Column("match_result_id")]
     public Guid? MatchResultId { get; set; }

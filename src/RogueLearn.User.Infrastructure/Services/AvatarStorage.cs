@@ -22,7 +22,6 @@ public class AvatarStorage : IAvatarStorage
     {
         var bucketName = "user-avatars";
 
-        // Resolve extension from content type
         string? ext = null;
         var ct = contentType?.ToLowerInvariant();
         ext = ct switch
@@ -56,7 +55,6 @@ public class AvatarStorage : IAvatarStorage
         {
             var storage = _client.Storage.From(bucketName);
 
-            // Determine content type for upload (if not provided)
             var uploadContentType = contentType ?? ext switch
             {
                 "png" => "image/png",

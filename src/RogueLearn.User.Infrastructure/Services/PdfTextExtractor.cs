@@ -20,7 +20,6 @@ public class PdfTextExtractor : IPdfTextExtractor
         {
             foreach (var page in document.GetPages())
             {
-                // Aggregate words into text with spaces
                 foreach (var word in page.GetWords())
                 {
                     sb.Append(word.Text);

@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/UserQuestAttempt.cs
 using BuildingBlocks.Shared.Common;
 using RogueLearn.User.Domain.Enums;
 using Supabase.Postgrest.Attributes;
@@ -38,8 +37,6 @@ public class UserQuestAttempt : BaseEntity
     [Column("notes")]
     public string? Notes { get; set; }
 
-    // ADDED: Snapshot of the difficulty track assigned at start time.
-    // Prevents progress loss if user's grades change later.
     [Column("assigned_difficulty")]
     public string AssignedDifficulty { get; set; } = "Standard";
 

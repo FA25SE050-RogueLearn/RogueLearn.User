@@ -1,7 +1,5 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Domain/Entities/CurriculumProgramSubject.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
-using Supabase.Postgrest.Models;
 
 namespace RogueLearn.User.Domain.Entities;
 

@@ -1,9 +1,7 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Controllers/QuestsController.cs
 using BuildingBlocks.Shared.Authentication;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestActivityProgress;
 using RogueLearn.User.Application.Features.Quests.Commands.StartQuest;
@@ -11,8 +9,7 @@ using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Features.Quests.Queries.GetMyQuestsWithSubjects;
 using RogueLearn.User.Application.Features.Quests.Queries.GetQuestSkills;
 using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitQuizAnswer;
-using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitCodingActivity; // ADDED
-using RogueLearn.User.Domain.Entities;
+using RogueLearn.User.Application.Features.QuestSubmissions.Commands.SubmitCodingActivity;
 using RogueLearn.User.Domain.Enums;
 using RogueLearn.User.Domain.Interfaces;
 using System.Text.Json.Serialization;
@@ -64,9 +61,7 @@ public class QuestsController : ControllerBase
         return Ok(result);
     }
 
-    // REMOVED: GenerateQuestSteps, GetQuestGenerationStatus, GetGenerationProgress
-    // These are now in AdminQuestsController
-
+    
     [HttpPost("{questId:guid}/steps/{stepId:guid}/activities/{activityId:guid}/progress")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

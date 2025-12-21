@@ -18,8 +18,6 @@ public class MessageBus : IMessageBus
     {
         try
         {
-            // For demonstration purposes, we'll just log the message
-            // In a real implementation, you would publish to a message broker like RabbitMQ, Azure Service Bus, etc.
             var serializedMessage = JsonSerializer.Serialize(message, new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -28,7 +26,6 @@ public class MessageBus : IMessageBus
             _logger.LogInformation("Publishing message of type {MessageType}: {Message}", 
                 typeof(T).Name, serializedMessage);
 
-            // Simulate async operation
             await Task.Delay(10, cancellationToken);
 
             _logger.LogInformation("Message published successfully");

@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Domain/Entities/QuestSubmission.cs
 using BuildingBlocks.Shared.Common;
 using Supabase.Postgrest.Attributes;
 

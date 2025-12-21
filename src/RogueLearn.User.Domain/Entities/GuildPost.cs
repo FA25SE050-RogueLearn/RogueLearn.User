@@ -28,12 +28,10 @@ public class GuildPost : BaseEntity
     [Column("is_pinned")]
     public bool IsPinned { get; set; } = false;
 
-    // New: moderation status for post lifecycle
     [Column("status")]
     [JsonConverter(typeof(StringEnumConverter))]
     public GuildPostStatus Status { get; set; } = GuildPostStatus.published;
 
-    // New: lock flag to prevent edits/deletes by authors
     [Column("is_locked")]
     public bool IsLocked { get; set; } = false;
 
@@ -43,7 +41,6 @@ public class GuildPost : BaseEntity
     [Column("attachments")]
     public Dictionary<string, object>? Attachments { get; set; }
 
-    // New: tags for filtering and organization
     [Column("tags")]
     public string[]? Tags { get; set; }
 

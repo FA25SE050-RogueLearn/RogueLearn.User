@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Api/Program.cs
 using RogueLearn.User.Api.Extensions;
 using RogueLearn.User.Api.Middleware;
 using RogueLearn.User.Infrastructure.Extensions;
@@ -6,15 +5,12 @@ using RogueLearn.User.Infrastructure.Logging;
 using Serilog;
 using BuildingBlocks.Shared.Authentication;
 using Hangfire;
-using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.SemanticKernel;
-using Newtonsoft.Json.Converters; // MODIFIED: Changed from System.Text.Json to Newtonsoft.
-using Newtonsoft.Json.Serialization; // ADDED: For CamelCasePropertyNamesContractResolver.
-using System.IO;
-using System.Text;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization; 
 using RogueLearn.User.Api.Utilities;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Api.HealthChecks;
@@ -94,7 +90,6 @@ try
     builder.Services.AddSingleton<IAuthorizationHandler, GameApiKeyHandler>();
 
     var supabaseConnStr = builder.Configuration["Supabase:ConnStr"];
-    //  ADD THIS INSTEAD:
     builder.Services.AddHangfire(configuration => configuration
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
         .UseSimpleAssemblyNameTypeSerializer()
@@ -237,10 +232,6 @@ try
     app.UseSwagger(c =>
     {
         c.RouteTemplate = "swagger/{documentName}/swagger.json";
-
-        // MODIFICATION: The PreSerializeFilters block has been removed entirely
-        // to prevent the '/user-service' prefix from being added to the server URLs
-        // in the generated swagger.json file.
     });
     app.UseSwaggerUI(c =>
     {
