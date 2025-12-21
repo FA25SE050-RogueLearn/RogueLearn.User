@@ -84,7 +84,7 @@ public class ProfilesController : ControllerBase
             Profile = full.Profile,
             Auth = full.Auth,
             Counts = full.Counts,
-            Relations = new SocialRelationsSection
+            Relations = new RelationsSection
             {
                 UserRoles = full.Relations.UserRoles,
                 StudentEnrollments = full.Relations.StudentEnrollments,

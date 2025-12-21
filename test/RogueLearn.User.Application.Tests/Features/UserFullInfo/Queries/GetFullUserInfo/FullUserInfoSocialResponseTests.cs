@@ -15,7 +15,7 @@ public class FullUserInfoSocialResponseTests
         res.Relations.UserAchievements.Add(new UserAchievementItem(Guid.NewGuid(), DateTimeOffset.UtcNow, "Achv", null));
         res.Relations.PartyMembers.Add(new PartyMemberItem(Guid.NewGuid(), "Party", "Member", DateTimeOffset.UtcNow));
         res.Relations.GuildMembers.Add(new GuildMemberItem(Guid.NewGuid(), "Guild", "Member", DateTimeOffset.UtcNow));
-        res.Relations.QuestAttempts.Add(new QuestAttemptItem(Guid.NewGuid(), Guid.NewGuid(), "Quest", "InProgress", 0.5m, 100, DateTimeOffset.UtcNow, null, 10, 2, null));
+        res.Relations.QuestAttempts.Add(new QuestAttemptItem(Guid.NewGuid(), Guid.NewGuid(), "Quest", "InProgress", 0.5m, 100, DateTimeOffset.UtcNow, null, 10, 2));
         res.Relations.UserRoles.Count.Should().Be(1);
         res.Counts.Should().NotBeNull();
     }

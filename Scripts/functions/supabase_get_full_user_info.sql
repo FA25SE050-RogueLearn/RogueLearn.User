@@ -51,14 +51,13 @@ subjects as (
     'subjectId', sts.subject_id,
     'subjectCode', s.subject_code,
     'subjectName', s.subject_name,
-    'semester', sts.semester,
+    'semester', s.semester,
     'status', sts.status,
     'grade', sts.grade
-  ) order by sts.semester nulls last) as data
+  ) order by s.semester nulls last) as data
   from student_semester_subjects sts
-  join student_enrollments se on se.id = sts.enrollment_id
   left join subjects s on s.id = sts.subject_id
-  where se.auth_user_id = p_auth_user_id
+  where sts.auth_user_id = p_auth_user_id
 ),
 skills as (
   select jsonb_agg(jsonb_build_object(
@@ -142,28 +141,27 @@ lecturer_verifs as (
   from lecturer_verification_requests lvr
   where lvr.auth_user_id = p_auth_user_id
 ),
-quest_attempts as (
-  select jsonb_agg(jsonb_build_object(
-    'attemptId', qa.id,
-    'questId', qa.quest_id,
-    'questTitle', q.title,
-    'status', qa.status,
-    'completionPercentage', qa.completion_percentage,
-    'totalExperienceEarned', qa.total_experience_earned,
-    'startedAt', qa.started_at,
-    'completedAt', qa.completed_at,
-    'stepsTotal', (
-      select count(*) from quest_steps qs where qs.quest_id = qa.quest_id
-    ),
-    'stepsCompleted', (
-      select count(*) from user_quest_step_progress usp where usp.attempt_id = qa.id and usp.status = 'Completed'
-    ),
-    'currentStepId', qa.current_step_id
-  )) as data
-  from user_quest_attempts qa
-  left join quests q on q.id = qa.quest_id
-  where qa.auth_user_id = p_auth_user_id
-)
+  quest_attempts as (
+    select jsonb_agg(jsonb_build_object(
+      'attemptId', qa.id,
+      'questId', qa.quest_id,
+      'questTitle', q.title,
+      'status', qa.status,
+      'completionPercentage', qa.completion_percentage,
+      'totalExperienceEarned', qa.total_experience_earned,
+      'startedAt', qa.started_at,
+      'completedAt', qa.completed_at,
+      'stepsTotal', (
+        select count(*) from quest_steps qs where qs.quest_id = qa.quest_id
+      ),
+      'stepsCompleted', (
+        select count(*) from user_quest_step_progress usp where usp.attempt_id = qa.id and usp.status = 'Completed'
+      )
+    )) as data
+    from user_quest_attempts qa
+    left join quests q on q.id = qa.quest_id
+    where qa.auth_user_id = p_auth_user_id
+  )
 select jsonb_build_object(
   'profile', jsonb_build_object(
     'authUserId', (select auth_user_id from profile),
