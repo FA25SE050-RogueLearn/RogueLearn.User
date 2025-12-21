@@ -35,9 +35,6 @@ public class UserQuestAttempt : BaseEntity
     [Column("completion_percentage")]
     public decimal CompletionPercentage { get; set; } = 0.00m;
 
-    [Column("current_step_id")]
-    public Guid? CurrentStepId { get; set; }
-
     [Column("notes")]
     public string? Notes { get; set; }
 
