@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Onboarding/Queries/GetAllRoutes/RouteDto.cs
 namespace RogueLearn.User.Application.Features.Onboarding.Queries.GetAllRoutes;
 
 public class RouteDto

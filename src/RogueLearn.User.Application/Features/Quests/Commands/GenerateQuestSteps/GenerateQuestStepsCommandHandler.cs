@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -140,7 +139,6 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                 using var doc = JsonDocument.Parse(generatedJson);
                 var root = doc.RootElement;
 
-                // ⭐ Extract AI-Generated Smart Title (or fallback to grouper title)
                 string aiTitle = root.TryGetProperty("moduleTitle", out var titleElem)
                     ? titleElem.GetString() ?? module.Title
                     : module.Title;

@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumProgramSubjects/Commands/AddSubjectToProgram/AddSubjectToProgramCommand.cs
 using MediatR;
 using System.Text.Json.Serialization;
 

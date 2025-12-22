@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestSubmissions/Commands/SubmitQuizAnswer/SubmitQuizAnswerCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -62,7 +61,7 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
                 throw new NotFoundException("Quest step", request.StepId);
             }
 
-            // ⭐ NEW: Get or create the attempt
+            // Get or create the attempt
             var attempt = await _userQuestAttemptRepository.FirstOrDefaultAsync(
                 a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
                 cancellationToken);
@@ -111,7 +110,7 @@ public class SubmitQuizAnswerCommandHandler : IRequestHandler<SubmitQuizAnswerCo
                 QuestId = request.QuestId,
                 StepId = request.StepId,
                 ActivityId = request.ActivityId,
-                AttemptId = attempt.Id, // ⭐ USE THE EXISTING ATTEMPT ID
+                AttemptId = attempt.Id,
                 SubmissionData = JsonSerializer.Serialize(request.Answers),
                 Grade = scorePercentage,
                 MaxGrade = request.TotalQuestions,

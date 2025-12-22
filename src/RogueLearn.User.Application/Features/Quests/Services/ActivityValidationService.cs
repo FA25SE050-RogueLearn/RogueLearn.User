@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Services/ActivityValidationService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Interfaces;
 
@@ -26,14 +25,6 @@ public class ActivityValidationService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Validates if an activity can be marked as complete based on type and submission status.
-    /// </summary>
-    /// <param name="activityId">The activity ID to validate</param>
-    /// <param name="userId">The user attempting to complete the activity</param>
-    /// <param name="activityType">The type of activity (Quiz, KnowledgeCheck, Reading, Coding)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Tuple of (canComplete, message)</returns>
     public async Task<(bool canComplete, string message)> ValidateActivityCompletion(
         Guid activityId,
         Guid userId,
@@ -44,7 +35,6 @@ public class ActivityValidationService
             "🔍 Validating {ActivityType} completion for activity {ActivityId} by user {UserId}",
             activityType, activityId, userId);
 
-        // ⭐ OPTION B: Different validation rules per activity type
         switch (activityType)
         {
             case "Quiz":
@@ -114,45 +104,18 @@ public class ActivityValidationService
         return (true, "Quiz passed");
     }
 
-    /// <summary>
-    /// Validates KnowledgeCheck completion.
-    /// 
-    /// Requirements:
-    /// - None! KnowledgeCheck is formative assessment
-    /// - Validation happens locally in the component
-    /// - User can always complete after viewing
-    /// 
-    /// Why no submission record?
-    /// - KnowledgeCheck is for learning/practice, not grading
-    /// - Immediate feedback is provided in the component
-    /// - No need to store results in database
-    /// </summary>
     private (bool canComplete, string message) ValidateKnowledgeCheckCompletion()
     {
         _logger.LogInformation("✅ KnowledgeCheck validation passed (formative assessment - no submission needed)");
         return (true, "Knowledge check completed");
     }
 
-    /// <summary>
-    /// Validates Reading completion.
-    /// 
-    /// Requirements:
-    /// - None! Reading material can always be marked as complete
-    /// - No submission or scoring needed
-    /// </summary>
     private (bool canComplete, string message) ValidateReadingCompletion()
     {
         _logger.LogInformation("✅ Reading validation passed (no validation required)");
         return (true, "Reading material completed");
     }
 
-    /// <summary>
-    /// Validates Coding challenge completion.
-    /// 
-    /// Requirements:
-    /// - None! Coding challenges are handled by separate system
-    /// - User can mark complete when they finish the challenge
-    /// </summary>
     private (bool canComplete, string message) ValidateCodingCompletion()
     {
         _logger.LogInformation("✅ Coding challenge validation passed");

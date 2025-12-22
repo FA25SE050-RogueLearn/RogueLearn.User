@@ -1,9 +1,8 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Infrastructure/Services/HtmlCurriculumExtractionService.cs
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Models;
-using RogueLearn.User.Application.Plugins; // Using ICurriculumExtractionPlugin interface
+using RogueLearn.User.Application.Plugins;
 using RogueLearn.User.Domain.Enums;
 using System.Text.Json;
 using System.Web;
@@ -39,6 +38,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
         };
 
         // Extract Subjects Table
+        // Extract Subjects Table
         var subjects = ExtractSubjects(doc);
         data.Subjects = subjects.Select(s => s.Subject).ToList();
         data.Structure = subjects.Select(s => s.Structure).ToList();
@@ -52,7 +52,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
     {
         var programData = new CurriculumProgramData
         {
-            DegreeLevel = DegreeLevel.Bachelor // Default for FLM
+            DegreeLevel = DegreeLevel.Bachelor
         };
 
         // Find the "Curriculum Details" table by looking for the H1 or just finding the first table with CurriculumCode
@@ -114,7 +114,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
         var versionData = new CurriculumVersionData
         {
             IsActive = true,
-            EffectiveYear = DateTime.UtcNow.Year // Default
+            EffectiveYear = DateTime.UtcNow.Year
         };
 
         var detailsTable = doc.DocumentNode.SelectSingleNode("//table[.//td[contains(text(), 'CurriculumCode')]]");
@@ -177,7 +177,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
 
             var code = HttpUtility.HtmlDecode(cells[0].InnerText).Trim();
 
-            // FILTER: Removed hardcoded filtering to allow linking logic to handle what exists in DB.
+            // Removed hardcoded filtering to allow linking logic to handle what exists in DB.
             // Previously we filtered placeholder codes here, but now we delegate that to the DB existence check.
 
             // The name is often inside an <a> tag
@@ -209,12 +209,12 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
             {
                 SubjectCode = code,
                 TermNumber = semester,
-                IsMandatory = true, // Default to true
+                IsMandatory = true,
                 PrerequisitesText = prereqRaw
             };
 
             // Parse Prerequisites: "PRF192" or "SWE102 or SWE201c"
-            // MODIFICATION: Updated regex to handle special codes like IA_COM*1, IA_GRA_ELE
+            // Updated regex to handle special codes like IA_COM*1, IA_GRA_ELE
             if (!string.IsNullOrWhiteSpace(prereqRaw) && !prereqRaw.Equals("None", StringComparison.OrdinalIgnoreCase))
             {
                 // Matches standard codes (PRF192) and complex codes (SE_COM*1, IA_GRA_ELE)

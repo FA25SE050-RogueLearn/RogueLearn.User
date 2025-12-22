@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestSubmissions/Services/CodingValidationService.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -80,8 +79,6 @@ Return the JSON result.";
         catch (Exception ex)
         {
             _logger.LogError(ex, "AI Grading failed.");
-            // Fail safe: If AI fails, don't block the user, but mark for manual review? 
-            // Or fail and ask to retry. Failing is safer for now.
             return (false, 0, "Grading service unavailable. Please try again.");
         }
     }

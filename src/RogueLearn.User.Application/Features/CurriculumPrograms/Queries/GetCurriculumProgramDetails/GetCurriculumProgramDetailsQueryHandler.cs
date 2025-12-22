@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumPrograms/Queries/GetCurriculumProgramDetails/GetCurriculumProgramDetailsQueryHandler.cs
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -95,7 +94,7 @@ public class GetCurriculumProgramDetailsQueryHandler : IRequestHandler<GetCurric
 
     private SubjectAnalysisDto AnalyzeSubject(Subject subject)
     {
-        // MODIFIED: The check for content is updated to correctly handle a Dictionary, not a string.
+        // The check for content is updated to correctly handle a Dictionary, not a string.
         // It now checks if the dictionary is not null and has any elements.
         var hasContent = subject.Content != null && subject.Content.Any();
         return new SubjectAnalysisDto

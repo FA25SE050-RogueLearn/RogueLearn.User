@@ -1,13 +1,10 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/UpdateSubjectContent/UpdateSubjectContentHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Application.Models;
 using RogueLearn.User.Domain.Interfaces;
-using System.Text.Json; // Keep System.Text.Json for serializing the DTO
+using System.Text.Json;
 using System.Text.Json.Serialization;
-
-// ⭐ Alias Newtonsoft to handle the Dictionary conversion safely
 using NewtonsoftJson = Newtonsoft.Json;
 
 namespace RogueLearn.User.Application.Features.Subjects.Commands.UpdateSubjectContent;
@@ -66,7 +63,7 @@ public class UpdateSubjectContentHandler : IRequestHandler<UpdateSubjectContentC
                 jsonString.Length);
 
             // STEP 2: Deserialize JSON String -> Dictionary (using NEWTONSOFT.JSON)
-            // ⭐ FIXED: We use Newtonsoft here. System.Text.Json would create 'JsonElement' objects,
+            // We use Newtonsoft here. System.Text.Json would create 'JsonElement' objects,
             // which results in {"ValueKind": ...} artifacts when saved to Supabase.
             // Newtonsoft creates JObjects/JArrays/Primitives which Supabase handles correctly.
             var contentDict = NewtonsoftJson.JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonString);

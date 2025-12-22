@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestDifficultyResolver.cs
 using RogueLearn.User.Application.Models; // For AcademicAnalysisReport
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;
@@ -61,7 +60,6 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
         AcademicAnalysisReport? aiReport = null,
         List<string>? subjectSkills = null)
     {
-        // Pre-calculate display values for existing record to preserve context
         string currentStatus = subjectRecord?.Status.ToString() ?? "NotStarted";
         string? currentGradeDisplay = null;
         if (subjectRecord != null)
@@ -80,24 +78,18 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
                                     subjectRecord.Status == SubjectEnrollmentStatus.Studying ||
                                     subjectRecord.Status == SubjectEnrollmentStatus.NotStarted;
 
-        // 1. AI Analysis Check
         if (aiReport != null && canApplyAiAdjustment && currentSubject != null)
         {
-            // Build a set of keywords to check against the AI report
-            // Includes: Subject Name, Subject Code, and Linked Skill Names
             var searchTerms = new List<string>();
 
-            // Add Subject Metadata
             searchTerms.Add(currentSubject.SubjectCode);
             searchTerms.Add(currentSubject.SubjectName);
 
-            // Add Linked Skills
             if (subjectSkills != null && subjectSkills.Any())
             {
                 searchTerms.AddRange(subjectSkills);
             }
 
-            // LOGGING START: Show what we are comparing
             _logger.LogInformation(
                 "🤖 AI Difficulty Check for [{SubjectCode}]: {SubjectName}\n" +
                 "   -> Status: {Status} | Can Apply AI: {CanApply}\n" +
@@ -111,9 +103,7 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
                 string.Join(", ", searchTerms),
                 aiReport.StrongAreas != null ? string.Join(", ", aiReport.StrongAreas) : "None",
                 aiReport.WeakAreas != null ? string.Join(", ", aiReport.WeakAreas) : "None");
-            // LOGGING END
 
-            // Check Weak Areas -> Supportive
             if (aiReport.WeakAreas != null)
             {
                 foreach (var weakArea in aiReport.WeakAreas)
@@ -131,7 +121,6 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
                 }
             }
 
-            // Check Strong Areas -> Challenging
             if (aiReport.StrongAreas != null)
             {
                 foreach (var strongArea in aiReport.StrongAreas)
@@ -152,8 +141,6 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
             _logger.LogInformation("   -> No AI match found. Proceeding to standard rules.");
         }
 
-        // 2. Check Prerequisite Proficiency (Leading Indicator)
-        // If they haven't passed the subject yet, low prereq proficiency suggests they need support
         if (prerequisiteProficiency >= 0.0 && prerequisiteProficiency < 0.3 && (subjectRecord == null || subjectRecord.Status != SubjectEnrollmentStatus.Passed))
         {
             return new QuestDifficultyInfo(
@@ -164,7 +151,6 @@ public class QuestDifficultyResolver : IQuestDifficultyResolver
             );
         }
 
-        // 3. Check Academic Record (Lagging Indicator)
         if (subjectRecord == null)
         {
             return new QuestDifficultyInfo(

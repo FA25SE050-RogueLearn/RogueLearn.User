@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Interfaces/ICurriculumImportStorage.cs
 using RogueLearn.User.Application.Models;
 
 namespace RogueLearn.User.Application.Interfaces;

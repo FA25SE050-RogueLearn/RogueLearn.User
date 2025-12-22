@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/FapExtractionPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using System.Threading;

@@ -36,7 +36,6 @@ public class FileTagSuggestionPlugin : IFileTagSuggestionPlugin
         var clampedMax = Math.Max(1, Math.Min(20, maxTags));
         var systemPrompt = "You are a helpful assistant that extracts topic tags from an attached file.";
 
-        // Guidance: mirror JSON schema used by text-based tag suggestion
         var instructions = $@"Analyze the attached file and propose a concise list of topic tags.
 Return ONLY JSON following this exact schema:
 
@@ -71,7 +70,6 @@ Rules:
 
             if (isPdf)
             {
-                // Without a PDF parser, add raw content for the model to analyze
                 if (attachment.Bytes is { Length: > 0 })
                 {
                     items.Add(new ImageContent(new ReadOnlyMemory<byte>(attachment.Bytes), attachment.ContentType));
@@ -105,7 +103,6 @@ Rules:
             }
             else
             {
-                // Fallback: send raw content if available
                 if (attachment.Bytes != null && attachment.Bytes.Length > 0)
                 {
                     items.Add(new ImageContent(new ReadOnlyMemory<byte>(attachment.Bytes), attachment.ContentType));

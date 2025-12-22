@@ -44,7 +44,7 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<ProcessAcademicRecordResponse>> ProcessMyAcademicRecord(
         [FromForm] string fapHtmlContent,
-        [FromForm] Guid curriculumProgramId, // MODIFIED: User now provides Program ID, not Version ID.
+        [FromForm] Guid curriculumProgramId,
         CancellationToken cancellationToken)
     {
         var authUserId = User.GetAuthUserId();

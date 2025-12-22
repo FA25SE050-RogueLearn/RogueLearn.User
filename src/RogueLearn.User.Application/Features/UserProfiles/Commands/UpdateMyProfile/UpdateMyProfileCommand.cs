@@ -14,7 +14,6 @@ public class UpdateMyProfileCommand : IRequest<UserProfileDto>
     public string? Bio { get; set; }
     public string? PreferencesJson { get; set; }
 
-    // ADDED: Allow updating academic path settings
     public Guid? ClassId { get; set; }
     public Guid? RouteId { get; set; }
 

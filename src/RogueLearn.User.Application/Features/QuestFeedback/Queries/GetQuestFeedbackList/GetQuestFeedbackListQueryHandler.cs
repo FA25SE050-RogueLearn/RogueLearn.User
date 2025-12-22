@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestFeedback/Queries/GetQuestFeedbackList/GetQuestFeedbackListQueryHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;

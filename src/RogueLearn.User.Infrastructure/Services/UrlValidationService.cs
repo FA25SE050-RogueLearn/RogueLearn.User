@@ -120,7 +120,6 @@ public class UrlValidationService : IUrlValidationService
 
             var contentLower = contentSnippet.ToLowerInvariant();
 
-            // Check for "not found" indicators
             foreach (var indicator in UrlValidation.ContentIndicators.NotFoundIndicators)
             {
                 if (contentLower.Contains(indicator))
@@ -199,16 +198,13 @@ public class UrlValidationService : IUrlValidationService
                 string.Empty,
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-            // Remove HTML comments
             var withoutComments = Regex.Replace(withoutStyles,
                 @"<!--.*?-->",
                 string.Empty,
                 RegexOptions.Singleline);
 
-            // Remove all remaining HTML tags
             var textContent = Regex.Replace(withoutComments, @"<[^>]+>", string.Empty);
 
-            // Decode common HTML entities
             textContent = System.Net.WebUtility.HtmlDecode(textContent);
 
             // Normalize whitespace (collapse multiple spaces/newlines into single space)

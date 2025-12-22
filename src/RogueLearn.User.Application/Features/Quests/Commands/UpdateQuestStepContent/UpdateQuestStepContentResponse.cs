@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/UpdateQuestStepContent/UpdateQuestStepContentResponse.cs
 namespace RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStepContent;
 
 public class UpdateQuestStepContentResponse

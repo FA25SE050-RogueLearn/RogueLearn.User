@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumProgramSubjects/Queries/GetSubjectsByProgram/GetSubjectsByProgramQueryHandler.cs
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;

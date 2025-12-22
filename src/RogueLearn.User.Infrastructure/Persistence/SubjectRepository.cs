@@ -124,7 +124,6 @@ public class SubjectRepository : GenericRepository<Subject>, ISubjectRepository
 
         if (searchPattern != null)
         {
-            // Create OR filter with ILike for subject_name and subject_code
             var orFilters = new List<IPostgrestQueryFilter>
             {
                 new QueryFilter("subject_name", Operator.ILike, searchPattern),

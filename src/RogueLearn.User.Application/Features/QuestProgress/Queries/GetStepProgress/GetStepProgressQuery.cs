@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestProgress/Queries/GetStepProgress/GetStepProgressQuery.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.QuestProgress.Queries.GetStepProgress;

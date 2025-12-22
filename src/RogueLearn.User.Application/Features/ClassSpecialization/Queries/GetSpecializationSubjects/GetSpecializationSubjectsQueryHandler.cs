@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/ClassSpecialization/Queries/GetSpecializationSubjects/GetSpecializationSubjectsQueryHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;

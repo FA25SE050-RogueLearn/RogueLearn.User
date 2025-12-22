@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetAllQuests/AdminQuestDto.cs
 using RogueLearn.User.Domain.Enums;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetAllQuests;

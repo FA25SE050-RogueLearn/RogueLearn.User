@@ -1,10 +1,8 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestProgress/Queries/GetUserProgressForQuest/GetUserProgressForQuestQueryHandler.cs
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
-// MODIFICATION: Namespace updated.
+
 namespace RogueLearn.User.Application.Features.QuestProgress.Queries.GetUserProgressForQuest;
 
-// MODIFICATION: Class name and request/response types updated.
 public class GetUserProgressForQuestQueryHandler : IRequestHandler<GetUserProgressForQuestQuery, GetUserProgressForQuestResponse?>
 {
     private readonly IUserQuestAttemptRepository _attemptRepository;
@@ -22,7 +20,7 @@ public class GetUserProgressForQuestQueryHandler : IRequestHandler<GetUserProgre
             a => a.AuthUserId == request.AuthUserId && a.QuestId == request.QuestId,
             cancellationToken);
 
-        // MODIFICATION START: Instead of returning null when no progress is found,
+        // Instead of returning null when no progress is found,
         // we now construct a default response with a "NotStarted" status. This ensures
         // the controller returns a 200 OK instead of a 404 Not Found.
         if (attempt == null)
@@ -35,7 +33,6 @@ public class GetUserProgressForQuestQueryHandler : IRequestHandler<GetUserProgre
                 StepStatuses = new Dictionary<Guid, string>() // Return an empty dictionary for steps.
             };
         }
-        // MODIFICATION END
 
         var stepProgresses = await _stepProgressRepository.FindAsync(sp => sp.AttemptId == attempt.Id, cancellationToken);
 

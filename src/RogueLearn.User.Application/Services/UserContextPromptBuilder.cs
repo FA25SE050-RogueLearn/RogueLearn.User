@@ -43,11 +43,9 @@ public class UserContextPromptBuilder : IPromptBuilder
         prompt.AppendLine("## Student Performance Summary");
         prompt.AppendLine();
 
-        // Add user information
         prompt.AppendLine($"**Student:** {userProfile.FirstName} {userProfile.LastName} ({userProfile.Username})");
         prompt.AppendLine();
 
-        // Add class/roadmap information
         prompt.AppendLine("### Learning Track & Career Roadmap");
         prompt.AppendLine($"**Learning Track:** {userClass.Name}");
         if (!string.IsNullOrEmpty(userClass.Description))
@@ -71,7 +69,6 @@ public class UserContextPromptBuilder : IPromptBuilder
         }
         prompt.AppendLine();
 
-        // Calculate overall GPA
         var completedSubjects = semesterSubjects
             .Where(ss => ss.Status == SubjectEnrollmentStatus.Passed)
             .ToList();
@@ -96,7 +93,6 @@ public class UserContextPromptBuilder : IPromptBuilder
             prompt.AppendLine();
         }
 
-        // Group subjects by status
         var subjectsByStatus = semesterSubjects
             .GroupBy(ss => ss.Status)
             .OrderBy(g => GetStatusPriority(g.Key))
@@ -137,7 +133,6 @@ public class UserContextPromptBuilder : IPromptBuilder
             }
         }
 
-        // Add statistics
         prompt.AppendLine("### Statistics");
         prompt.AppendLine();
         prompt.AppendLine($"- **Total Subjects:** {semesterSubjects.Count}");

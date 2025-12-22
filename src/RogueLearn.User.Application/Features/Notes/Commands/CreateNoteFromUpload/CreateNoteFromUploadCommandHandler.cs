@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Notes/Commands/CreateNoteFromUpload/CreateNoteFromUploadCommandHandler.cs
 using AutoMapper;
 using MediatR;
 using RogueLearn.User.Application.Exceptions;

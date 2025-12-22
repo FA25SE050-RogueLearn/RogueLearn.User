@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GenerateQuestStepsCommand.cs
 using MediatR;
 using RogueLearn.User.Domain.Entities;
 using System.Text.Json.Serialization;

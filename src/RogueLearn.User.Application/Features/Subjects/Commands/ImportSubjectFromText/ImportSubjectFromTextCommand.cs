@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/ImportSubjectFromText/ImportSubjectFromTextCommand.cs
 using MediatR;
 using RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;
 using System.Text.Json.Serialization;

@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/UpdateQuestActivityProgress/UpdateQuestActivityProgressCommandHandler.cs
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Entities;

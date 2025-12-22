@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Commands/CreateSubject/CreateSubjectCommandValidator.cs
 using FluentValidation;
 
 namespace RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;

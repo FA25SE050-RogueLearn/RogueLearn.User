@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumPrograms/Queries/GetCurriculumProgramDetails/CurriculumProgramDetailsResponse.cs
 using RogueLearn.User.Domain.Enums;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;

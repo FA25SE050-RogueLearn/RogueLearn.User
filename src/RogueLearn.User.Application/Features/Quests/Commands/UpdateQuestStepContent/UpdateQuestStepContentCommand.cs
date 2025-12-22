@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/UpdateQuestStepContent/UpdateQuestStepContentCommand.cs
 using MediatR;
 using System.Text.Json.Serialization;
 

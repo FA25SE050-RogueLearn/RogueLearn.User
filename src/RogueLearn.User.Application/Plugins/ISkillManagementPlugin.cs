@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/ISkillManagementPlugin.cs
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.SemanticKernel;
 
 namespace RogueLearn.User.Application.Plugins;

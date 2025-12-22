@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Skills/Queries/GetSkillTree/GetSkillTreeQueryHandler.cs
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
 using System.Linq;

@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddRogueLearnAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        // MODIFIED LOGIC: Prioritize 'AuthAuthority' for JWT validation.
+        // Prioritize 'AuthAuthority' for JWT validation.
         // This allows consumer services (like Quest) to specify a separate authority,
         // while the authority service itself (User) can fall back to its own Supabase config.
         var authAuthorityUrl = configuration["AuthAuthority:Url"] ?? configuration["Supabase:Url"];

@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestFeedback/Commands/ResolveQuestStepFeedback/ResolveQuestStepFeedbackCommandValidator.cs
 using FluentValidation;
 
 namespace RogueLearn.User.Application.Features.QuestFeedback.Commands.ResolveQuestStepFeedback;

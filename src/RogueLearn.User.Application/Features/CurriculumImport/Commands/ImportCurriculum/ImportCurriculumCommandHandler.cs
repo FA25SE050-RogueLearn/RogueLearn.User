@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Commands/ImportCurriculum/ImportCurriculumCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;

@@ -175,7 +175,6 @@ public static class EscapeSequenceCleaner
             var cleaned = CleanEscapeSequences(rawJson);
             using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
 
-            // ⭐ UPDATED: Validate structure
             // Support BOTH old schema (root 'activities') AND new schema (root 'standard')
             var root = doc.RootElement;
             bool isOldSchema = root.TryGetProperty("activities", out _);

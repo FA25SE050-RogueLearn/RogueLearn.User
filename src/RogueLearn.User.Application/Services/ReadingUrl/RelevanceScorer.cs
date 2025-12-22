@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/RelevanceScorer.cs
 namespace RogueLearn.User.Application.Services;
 
 public static class RelevanceScorer

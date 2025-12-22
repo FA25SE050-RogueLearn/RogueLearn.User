@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Queries/GetAllSubjects/PaginatedSubjectsResponse.cs
 namespace RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 
 public class PaginatedSubjectsResponse

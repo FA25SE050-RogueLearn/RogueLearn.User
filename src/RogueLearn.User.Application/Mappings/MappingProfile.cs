@@ -1,4 +1,3 @@
-// src/RogueLearn.User.Application/Mappings/MappingProfile.cs
 using AutoMapper;
 using RogueLearn.User.Application.Features.ClassSpecialization.Commands.AddSpecializationSubject;
 using RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
@@ -29,7 +28,7 @@ using RogueLearn.User.Application.Features.Quests.Queries.GetQuestById;
 using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestSteps;
 using RogueLearn.User.Application.Features.Parties.DTOs;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
-using RogueLearn.User.Application.Features.QuestFeedback.Queries.GetQuestFeedbackList; // ADDED
+using RogueLearn.User.Application.Features.QuestFeedback.Queries.GetQuestFeedbackList;
 
 namespace RogueLearn.User.Application.Mappings;
 
@@ -48,8 +47,8 @@ public class MappingProfile : Profile
         CreateMap<UserRole, UserRoleDto>()
           .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
           .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
-          .ForMember(dest => dest.RoleName, opt => opt.Ignore()) // Will be set manually
-          .ForMember(dest => dest.Description, opt => opt.Ignore()); // Will be set manually
+          .ForMember(dest => dest.RoleName, opt => opt.Ignore()) 
+          .ForMember(dest => dest.Description, opt => opt.Ignore()); 
 
         // CurriculumProgram mappings
         CreateMap<CurriculumProgram, GetAllCurriculumProgramDto>();
@@ -80,7 +79,8 @@ public class MappingProfile : Profile
 
         //  Mappings for the Onboarding feature
         CreateMap<CurriculumProgram, RouteDto>();
-        // Updated Class mapping to support CRUD
+
+        // Class mappings
         CreateMap<Class, ClassDto>()
             .ForMember(dest => dest.SkillFocusAreas, opt => opt.MapFrom(src => src.SkillFocusAreas ?? Array.Empty<string>()));
 
@@ -101,7 +101,7 @@ public class MappingProfile : Profile
         CreateMap<QuestStep, QuestStepDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
 
-        // Mapping for GenerateQuestSteps command (returns GeneratedQuestStepDto):
+        // Mapping for GenerateQuestSteps
         CreateMap<QuestStep, GeneratedQuestStepDto>()
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
         // Parties feature mappings
@@ -123,7 +123,7 @@ public class MappingProfile : Profile
 
         // Meetings mappings
         CreateMap<Meeting, MeetingDto>()
-            .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status ?? RogueLearn.User.Domain.Enums.MeetingStatus.Scheduled))
+            .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status ?? Domain.Enums.MeetingStatus.Scheduled))
             .ReverseMap();
         CreateMap<MeetingParticipant, MeetingParticipantDto>().ReverseMap();
 
@@ -135,8 +135,6 @@ public class MappingProfile : Profile
     {
         if (content is null)
             return null;
-
-        // If content is a string, attempt to parse JSON; otherwise return as-is or normalize JsonElement
         if (content is string s)
         {
             if (string.IsNullOrWhiteSpace(s))
@@ -149,7 +147,6 @@ public class MappingProfile : Profile
             }
             catch
             {
-                // If the content is not valid JSON, return it as a plain string
                 return s;
             }
         }
@@ -158,8 +155,6 @@ public class MappingProfile : Profile
         {
             return ConvertJsonElement(element);
         }
-
-        // For already structured content (e.g., dictionaries/lists), return as-is
         return content;
     }
 

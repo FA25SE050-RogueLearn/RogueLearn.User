@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestProgress/Queries/GetStepProgress/GetStepProgressQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
@@ -53,7 +52,6 @@ public class GetStepProgressQueryHandler : IRequestHandler<GetStepProgressQuery,
                 throw new NotFoundException("QuestStep", request.StepId);
             }
 
-            // ⭐ CRITICAL VALIDATION: Ensure Step matches User's Locked Difficulty
             string lockedDifficulty = attempt.AssignedDifficulty ?? "Standard";
             if (!string.Equals(questStep.DifficultyVariant, lockedDifficulty, StringComparison.OrdinalIgnoreCase))
             {

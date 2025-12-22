@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/GenerateQuestSteps/GeneratedQuestStepDto.cs
 using RogueLearn.User.Domain.Enums;
 using System.Text.Json;
 
