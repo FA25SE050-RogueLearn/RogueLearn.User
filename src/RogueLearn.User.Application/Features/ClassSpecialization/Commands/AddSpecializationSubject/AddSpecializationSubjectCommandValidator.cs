@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/ClassSpecialization/Commands/AddSpecializationSubject/AddSpecializationSubjectCommandValidator.cs
 using FluentValidation;
 
 namespace RogueLearn.User.Application.Features.ClassSpecialization.Commands.AddSpecializationSubject;

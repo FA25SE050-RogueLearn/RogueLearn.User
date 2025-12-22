@@ -141,15 +141,13 @@ public class TaggingSuggestionService : ITaggingSuggestionService
         var s = (label ?? string.Empty).Trim();
         if (s.Length == 0) return s;
         var lower = s.ToLowerInvariant();
-        // Basic plural normalization
         if (lower.EndsWith("ies") && lower.Length > 3)
-            lower = lower[..^3] + "y"; // studies -> study
+            lower = lower[..^3] + "y";
         else if (lower.EndsWith("es") && lower.Length > 4)
-            lower = lower[..^2]; // classes -> class, boxes -> box
+            lower = lower[..^2];
         else if (lower.EndsWith("s") && lower.Length > 3)
-            lower = lower[..^1]; // challenges -> challenge
+            lower = lower[..^1];
 
-        // Common synonyms normalization
         lower = lower.Replace(".net", "dotnet");
         lower = lower.Replace("c#", "csharp");
 

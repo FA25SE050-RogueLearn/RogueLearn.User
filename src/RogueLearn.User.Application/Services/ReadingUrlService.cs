@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrlService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Interfaces;
 
@@ -111,7 +110,6 @@ public class ReadingUrlService : IReadingUrlService
                 }
             }
 
-            // ⭐ RATE LIMITING: Execute searches with delays
             var aggregatedResults = new List<string>();
             int queryIndex = 0;
 

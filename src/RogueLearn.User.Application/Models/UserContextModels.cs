@@ -10,7 +10,6 @@ public class UserContextDto
     public string? DisplayName { get; set; }
     public string? ProfileImageUrl { get; set; }
     public string? Bio { get; set; }
-    // Raw JSON string for preferences; null means not set
     public string? PreferencesJson { get; set; }
 
     public List<string> Roles { get; set; } = new();

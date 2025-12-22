@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/ICurriculumExtractionPlugin.cs
-namespace RogueLearn.User.Application.Plugins;
+﻿namespace RogueLearn.User.Application.Plugins;
 
 /// <summary>
 /// Defines a plugin specifically for extracting the main curriculum structure.

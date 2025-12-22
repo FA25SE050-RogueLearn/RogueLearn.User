@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Queries/GetClassSubjects/GetStudentClassSubjectsQuery.cs
 using MediatR;
 using RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;
 

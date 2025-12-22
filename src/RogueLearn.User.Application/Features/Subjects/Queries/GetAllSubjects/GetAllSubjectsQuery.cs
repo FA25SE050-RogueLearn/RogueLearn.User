@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Subjects/Queries/GetAllSubjects/GetAllSubjectsQuery.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.Subjects.Queries.GetAllSubjects;

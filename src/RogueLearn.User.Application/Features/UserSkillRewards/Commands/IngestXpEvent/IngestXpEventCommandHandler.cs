@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/UserSkillRewards/Commands/IngestXpEvent/IngestXpEventCommandHandler.cs
 using MediatR;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;

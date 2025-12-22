@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/UserProfiles/Queries/GetUserProfileByAuthId/UserProfileDto.cs
 namespace RogueLearn.User.Application.Features.UserProfiles.Queries.GetUserProfileByAuthId;
 
 public class UserProfileDto
@@ -17,7 +16,6 @@ public class UserProfileDto
     public string? Bio { get; set; }
     public string? PreferencesJson { get; set; }
     public List<string> Roles { get; set; } = new();
-    // MODIFICATION: Add the missing properties required by the onboarding flow.
     public Guid? ClassId { get; set; }
     public Guid? RouteId { get; set; }
 }

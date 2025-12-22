@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestFeedback/Commands/SubmitQuestStepFeedback/SubmitQuestStepFeedbackCommand.cs
 using MediatR;
 using System.Text.Json.Serialization;
 

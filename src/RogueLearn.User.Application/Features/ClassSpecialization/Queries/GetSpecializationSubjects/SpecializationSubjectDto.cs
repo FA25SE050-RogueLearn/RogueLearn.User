@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/ClassSpecialization/Queries/GetSpecializationSubjects/SpecializationSubjectDto.cs
 namespace RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
 
 public class SpecializationSubjectDto

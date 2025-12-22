@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/ClassSpecialization/Commands/AddSpecializationSubject/AddSpecializationSubjectCommand.cs
 using MediatR;
 using RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSpecializationSubjects;
 using System.Text.Json.Serialization;

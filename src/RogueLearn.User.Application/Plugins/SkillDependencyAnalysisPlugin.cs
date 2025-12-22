@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Plugins/SkillDependencyAnalysisPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using System.Text.Json;

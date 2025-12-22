@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestSubmissions/Commands/SubmitQuizAnswer/SubmitQuizAnswerCommand.cs
 using MediatR;
 using System.Text.Json.Serialization;
 

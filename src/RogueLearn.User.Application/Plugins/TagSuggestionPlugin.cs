@@ -48,7 +48,6 @@ Text to analyze:
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to generate tag suggestions using AI");
-            // Return minimal empty structure to avoid parse failures
             return JsonSerializer.Serialize(new { tags = Array.Empty<object>() });
         }
     }

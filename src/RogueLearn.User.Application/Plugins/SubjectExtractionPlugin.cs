@@ -1,9 +1,6 @@
-﻿// RogueLearn.User/src/RogueLearn.User/Application/Plugins/SubjectExtractionPlugin.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RogueLearn.User.Application.Plugins;
 
@@ -44,7 +41,6 @@ Important Rules:
 Text to extract from:
 ";
 
-        // MODIFIED: Corrected the variable name from 'rawText' to 'rawSubjectText' to match the method parameter.
         var prompt = header + rawSubjectText + @"
 
 Return only the JSON object.";

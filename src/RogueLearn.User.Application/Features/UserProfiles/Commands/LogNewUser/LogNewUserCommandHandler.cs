@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/UserProfiles/Commands/LogNewUser/LogNewUserCommandHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 

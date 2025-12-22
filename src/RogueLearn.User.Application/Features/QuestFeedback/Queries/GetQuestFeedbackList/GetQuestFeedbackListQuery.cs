@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestFeedback/Queries/GetQuestFeedbackList/GetQuestFeedbackListQuery.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.QuestFeedback.Queries.GetQuestFeedbackList;

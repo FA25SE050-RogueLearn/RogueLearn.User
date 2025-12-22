@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/CurriculumImport/Queries/ValidateSyllabus/SyllabusDataValidator.cs
 using FluentValidation;
 using RogueLearn.User.Application.Models;
 
@@ -52,11 +51,9 @@ public class SyllabusContentValidator : AbstractValidator<SyllabusContent>
             .SetValidator(new SyllabusSessionValidator())
             .When(x => x.SessionSchedule != null);
 
-        // MODIFICATION START: Added validation for the new top-level ConstructiveQuestions property.
         RuleForEach(x => x.ConstructiveQuestions)
             .SetValidator(new ConstructiveQuestionValidator())
             .When(x => x.ConstructiveQuestions != null);
-        // MODIFICATION END
     }
 }
 

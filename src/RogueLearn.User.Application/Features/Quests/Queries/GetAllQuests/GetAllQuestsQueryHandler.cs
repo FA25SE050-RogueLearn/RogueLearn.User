@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetAllQuests/GetAllQuestsQueryHandler.cs
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
 using Microsoft.Extensions.Logging;

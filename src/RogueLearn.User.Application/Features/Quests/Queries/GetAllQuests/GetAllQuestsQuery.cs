@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetAllQuests/GetAllQuestsQuery.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetAllQuests;

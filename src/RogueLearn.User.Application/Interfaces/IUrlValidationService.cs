@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Interfaces/IUrlValidationService.cs
-namespace RogueLearn.User.Application.Interfaces;
+﻿namespace RogueLearn.User.Application.Interfaces;
 
 /// <summary>
 /// Defines a service for validating the accessibility of a URL.

@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepGenerationService.cs
 using Hangfire;
 using Hangfire.Server;
 using MediatR;
@@ -42,8 +41,6 @@ public class QuestStepGenerationService : IQuestStepGenerationService
     /// Does NOT retry on:
     /// - BadRequestException (validation error)
     /// - Other permanent errors
-    /// 
-    /// ⭐ UPDATED: Uses PerformContext to access Hangfire job ID for progress tracking
     /// </summary>
     [AutomaticRetry(Attempts = 4, DelaysInSeconds = new[] { 30, 60, 120 })]
     public async Task GenerateQuestStepsAsync(Guid adminId, Guid questId, PerformContext context)

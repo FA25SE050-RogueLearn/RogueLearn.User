@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/AiQueryClassificationService.cs
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using RogueLearn.User.Application.Models;
@@ -18,7 +17,7 @@ public interface IAiQueryClassificationService
         List<SyllabusSessionDto> sessions,
         string subjectContext,
         SubjectCategory category,
-        List<string> technologyKeywords,  // ← ✅ ADD THIS LINE
+        List<string> technologyKeywords,
         CancellationToken cancellationToken);
 }
 
@@ -240,7 +239,6 @@ public class AiQueryClassificationService : IAiQueryClassificationService
 
     public async Task<List<string>> GenerateQueryVariantsAsync(string topic, string subjectContext, SubjectCategory category, CancellationToken cancellationToken)
     {
-        // Try cache first
         var cacheKey = $"queries_{category}_{topic.GetHashCode()}";
         var cached = await _memoryStore.GetAsync(cacheKey, cancellationToken);
         if (!string.IsNullOrWhiteSpace(cached))
@@ -285,7 +283,6 @@ public class AiQueryClassificationService : IAiQueryClassificationService
                             if (!string.IsNullOrWhiteSpace(q))
                             {
                                 var cleaned = q.Trim();
-                                // Validate query quality
                                 if (IsValidQuery(cleaned, topic, category))
                                 {
                                     queries.Add(cleaned);
@@ -299,7 +296,6 @@ public class AiQueryClassificationService : IAiQueryClassificationService
                 {
                     _logger.LogInformation("✅ Generated {Count} validated search queries via AI", queries.Count);
 
-                    // Cache successful queries
                     try
                     {
                         await _memoryStore.SetAsync(cacheKey, JsonSerializer.Serialize(queries), cancellationToken);
@@ -341,7 +337,6 @@ public class AiQueryClassificationService : IAiQueryClassificationService
         sb.AppendLine($"- Category: {category}");
         sb.AppendLine();
 
-        // Category-specific instructions
         switch (category)
         {
             case SubjectCategory.Programming:

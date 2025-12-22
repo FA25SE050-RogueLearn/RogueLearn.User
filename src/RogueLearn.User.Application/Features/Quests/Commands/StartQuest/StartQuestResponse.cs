@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/StartQuest/StartQuestResponse.cs
 namespace RogueLearn.User.Application.Features.Quests.Commands.StartQuest;
 
 public record StartQuestResponse

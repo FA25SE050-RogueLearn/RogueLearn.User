@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepsPromptBuilder.cs
 using System.Text;
 using System.Text.Json;
 using RogueLearn.User.Application.Models;

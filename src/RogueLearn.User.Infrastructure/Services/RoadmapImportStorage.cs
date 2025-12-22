@@ -32,7 +32,6 @@ public class RoadmapImportStorage : IRoadmapImportStorage
             var prefix = $"roadmap/{safeClass}/attachments/";
             var filePath = prefix + $"{rawTextHash}.pdf";
 
-            // Read stream into bytes for upload
             using var ms = new MemoryStream();
             await pdfStream.CopyToAsync(ms, cancellationToken);
             var bytes = ms.ToArray();

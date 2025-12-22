@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/ReadingUrl/SearchResultFilter.cs
 using Microsoft.Extensions.Logging;
 
 namespace RogueLearn.User.Application.Services;

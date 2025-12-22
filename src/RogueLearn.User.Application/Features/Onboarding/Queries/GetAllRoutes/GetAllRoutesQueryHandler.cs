@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Onboarding/Queries/GetAllRoutes/GetAllRoutesQueryHandler.cs
 using AutoMapper;
 using MediatR;
 using Microsoft.Extensions.Logging;

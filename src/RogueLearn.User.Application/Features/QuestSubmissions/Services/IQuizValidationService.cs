@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestSubmissions/Services/IQuizValidationService.cs
 namespace RogueLearn.User.Application.Features.QuestSubmissions.Services;
 
 public interface IQuizValidationService

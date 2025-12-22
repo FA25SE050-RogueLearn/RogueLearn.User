@@ -1,11 +1,9 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/SubjectImportService.cs
 using AutoMapper;
 using Hangfire.Console;
 using Hangfire.Server;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Common;
 using RogueLearn.User.Application.Exceptions;
-using RogueLearn.User.Application.Features.Subjects.Commands.CreateSubject;
 using RogueLearn.User.Application.Features.Subjects.Commands.ImportSubjectFromText;
 using RogueLearn.User.Application.Interfaces;
 using RogueLearn.User.Application.Models;
@@ -61,9 +59,7 @@ public class SubjectImportService : ISubjectImportService
         var cancellationToken = CancellationToken.None; // Background jobs usually run to completion or perform context cancellation
         UpdateProgress(context, 0, "Starting HTML processing...");
 
-        // ============================================================================
-        // PHASE 1: Extract & Validate (0-20%)
-        // ============================================================================
+        // Phase 1: Extract & Validate (0-20%)
         _logger.LogInformation("Cleaning HTML...");
         var cleanText = _htmlCleaningService.ExtractCleanTextFromHtml(request.RawText);
 
@@ -171,9 +167,7 @@ public class SubjectImportService : ISubjectImportService
             rawTextHash,
             cancellationToken);
 
-        // ============================================================================
-        // PHASE 5: Save to Database (85-100%)
-        // ============================================================================
+        // Phase 5: Save to Database (85-100%)
         UpdateProgress(context, 90, "Saving subject to database...");
 
         var existingSubject = await _subjectRepository.FirstOrDefaultAsync(
@@ -193,11 +187,8 @@ public class SubjectImportService : ISubjectImportService
 
     private void UpdateProgress(PerformContext context, int percentage, string message)
     {
-        // 1. Write to Hangfire Console for detailed logs in Dashboard
         context.WriteLine($"{percentage}% - {message}");
 
-        // 2. Update Job Parameter for API polling
-        // We serialize a small JSON object so the frontend can easily read { "percent": 50, "message": "..." }
         var status = new { Percent = percentage, Message = message, Timestamp = DateTime.UtcNow };
         var connection = Hangfire.JobStorage.Current.GetConnection();
         connection.SetJobParameter(context.BackgroundJob.Id, "ImportProgress", JsonSerializer.Serialize(status));
@@ -213,18 +204,15 @@ public class SubjectImportService : ISubjectImportService
     {
         var totalSessions = syllabusData.Content.SessionSchedule!.Count;
 
-        // STEP 1: Classify subject category
         var subjectCategory = await _aiQueryService.ClassifySubjectAsync(
             syllabusData.SubjectName,
             syllabusData.SubjectCode,
             syllabusData.Description ?? string.Empty,
             cancellationToken);
 
-        // STEP 2: Build subject context
         var subjectContext = BuildSubjectContext(syllabusData);
         var technologyKeywords = ContextKeywordExtractor.ExtractTechnologyKeywords(subjectContext);
 
-        // STEP 3: BATCH QUERY GENERATION
         var sessionsToEnrich = syllabusData.Content.SessionSchedule
             .Take(MAX_SESSIONS_TO_ENRICH)
             .ToList();
@@ -259,7 +247,6 @@ public class SubjectImportService : ISubjectImportService
 
         UpdateProgress(context, 60, "Searching for high-quality resources...");
 
-        // Rate limit concurrent searches
         var semaphore = new SemaphoreSlim(2, 2);
         int processedCount = 0;
 
@@ -302,13 +289,9 @@ public class SubjectImportService : ISubjectImportService
             {
                 semaphore.Release();
                 Interlocked.Increment(ref processedCount);
-                // Report progress every few items
                 if (processedCount % 3 == 0)
                 {
-                    // Map 60-80% progress range to this loop
                     int progress = 60 + (int)((double)processedCount / sessionsToEnrich.Count * 20);
-                    // Don't overwhelm the job storage
-                    // context.WriteLine($"Processed {processedCount}/{sessionsToEnrich.Count} sessions..."); 
                 }
             }
         });

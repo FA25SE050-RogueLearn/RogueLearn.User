@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Services/TopicGrouperService.cs
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Models;
 using System.Text.RegularExpressions;
@@ -37,7 +36,6 @@ public class TopicGrouperService : ITopicGrouperService
         if (sessions == null || !sessions.Any())
             return new List<QuestStepDefinition>();
 
-        // Sort by session number to ensure chronological order
         var sortedSessions = sessions.OrderBy(s => s.SessionNumber).ToList();
         var modules = new List<QuestStepDefinition>();
         var currentModule = new QuestStepDefinition { ModuleNumber = 1 };
@@ -50,7 +48,6 @@ public class TopicGrouperService : ITopicGrouperService
             var session = sortedSessions[i];
             var topic = NormalizeTopic(session.Topic);
 
-            // Decision: Should we start a new module?
             bool shouldBreak = ShouldStartNewModule(
                 currentModule.Sessions.Count,
                 currentTopics,
@@ -60,11 +57,9 @@ public class TopicGrouperService : ITopicGrouperService
 
             if (shouldBreak)
             {
-                // Finalize current module
                 FinalizeModule(currentModule);
                 modules.Add(currentModule);
 
-                // Start new module
                 currentModule = new QuestStepDefinition
                 {
                     ModuleNumber = modules.Count + 1
@@ -72,12 +67,10 @@ public class TopicGrouperService : ITopicGrouperService
                 currentTopics.Clear();
             }
 
-            // Add session to current module
             currentModule.Sessions.Add(session);
             currentTopics.Add(topic);
         }
 
-        // Add the final module
         if (currentModule.Sessions.Any())
         {
             FinalizeModule(currentModule);
@@ -124,10 +117,6 @@ public class TopicGrouperService : ITopicGrouperService
 
     private void FinalizeModule(QuestStepDefinition module)
     {
-        // Simplified Logic: The AI will generate the "Smart" title.
-        // Here we just provide a basic context title (e.g., "Module 1: [First Topic]")
-        // This avoids the "weird long title" issue by delegating creativity to the LLM.
-
         var topics = module.Sessions
             .Select(s => s.Topic)
             .Where(t => !string.IsNullOrWhiteSpace(t))
@@ -137,8 +126,6 @@ public class TopicGrouperService : ITopicGrouperService
 
         if (topics.Count > 0)
         {
-            // Just use the first topic as a hint/placeholder.
-            // The prompt builder will pass the full list of topics to the AI.
             string baseTopic = CleanTitle(topics[0]);
             module.Title = baseTopic;
         }
