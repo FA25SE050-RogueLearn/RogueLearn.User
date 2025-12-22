@@ -311,6 +311,8 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         // It returns the AuthUserId as the virtual LearningPathId
 
         // The freshly generated or retrieved AI Analysis Report is passed to the quest generation logic.
+        // NOTE: The GenerateQuestLineCommandHandler logic is responsible for setting the initial CurrentStepId
+        // when creating new "NotStarted" attempts.
         var questLineCommand = new GenerateQuestLine
         {
             AuthUserId = request.AuthUserId,

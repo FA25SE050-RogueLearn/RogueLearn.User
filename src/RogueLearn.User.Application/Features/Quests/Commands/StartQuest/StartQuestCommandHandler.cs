@@ -19,6 +19,7 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
     private readonly ISubjectSkillMappingRepository _mappingRepository;
     private readonly ISkillDependencyRepository _skillDependencyRepository;
     private readonly IUserSkillRepository _userSkillRepository;
+    private readonly IQuestStepRepository _questStepRepository; // Added for fetching steps
 
     private readonly ILogger<StartQuestCommandHandler> _logger;
 
@@ -30,6 +31,7 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
         ISubjectSkillMappingRepository mappingRepository,
         ISkillDependencyRepository skillDependencyRepository,
         IUserSkillRepository userSkillRepository,
+        IQuestStepRepository questStepRepository, // Injected
         ILogger<StartQuestCommandHandler> logger)
     {
         _attemptRepository = attemptRepository;
@@ -39,6 +41,7 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
         _mappingRepository = mappingRepository;
         _skillDependencyRepository = skillDependencyRepository;
         _userSkillRepository = userSkillRepository;
+        _questStepRepository = questStepRepository; // Assigned
         _logger = logger;
     }
 
@@ -127,6 +130,14 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             calculatedDifficulty = quest.ExpectedDifficulty;
         }
 
+        // --- RESOLVE CURRENT STEP ID ---
+        // Find the first step (Step #1) for the assigned difficulty to set as CurrentStepId
+        var allSteps = await _questStepRepository.GetByQuestIdAsync(request.QuestId, cancellationToken);
+        var firstStep = allSteps
+            .Where(s => string.Equals(s.DifficultyVariant, calculatedDifficulty, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => s.StepNumber)
+            .FirstOrDefault();
+
         if (existingAttempt != null)
         {
             // If already active, respect history unless it was just a preview ("NotStarted")
@@ -148,6 +159,12 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             existingAttempt.StartedAt = DateTimeOffset.UtcNow;
             existingAttempt.UpdatedAt = DateTimeOffset.UtcNow;
 
+            // Set the CurrentStepId if we found a valid step
+            if (firstStep != null)
+            {
+                existingAttempt.CurrentStepId = firstStep.Id;
+            }
+
             await _attemptRepository.UpdateAsync(existingAttempt, cancellationToken);
 
             return new StartQuestResponse
@@ -166,6 +183,7 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             QuestId = request.QuestId,
             Status = QuestAttemptStatus.InProgress,
             AssignedDifficulty = calculatedDifficulty,
+            CurrentStepId = firstStep?.Id, // Initialize CurrentStepId
             Notes = $"First attempt. Prereq Prof: {prerequisiteProficiency:P0}",
             StartedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,

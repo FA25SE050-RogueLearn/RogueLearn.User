@@ -91,14 +91,13 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
             var (activityXp, activitySkillId, activityTitle) = ExtractActivityDetails(step.Content, request.ActivityId);
 
+            // Fetch all steps for the quest to calculate the XP cap for the current difficulty.
+            // We use this list later for updating current step as well.
+            var allQuestSteps = (await _questStepRepository.GetByQuestIdAsync(request.QuestId, cancellationToken)).ToList();
+
             // This is the core logic for XP capping.
-            // It ensures that a user's total experience for a quest does not exceed the
-            // maximum possible for their currently assigned difficulty level. This is crucial for
-            // re-attempts at higher difficulties, as it prevents earning unlimited XP.
             if (activityXp > 0)
             {
-                // Fetch all steps for the quest to calculate the XP cap for the current difficulty.
-                var allQuestSteps = await _questStepRepository.GetByQuestIdAsync(request.QuestId, cancellationToken);
                 var maxExperienceForDifficulty = allQuestSteps
                     .Where(s => string.Equals(s.DifficultyVariant, attempt.AssignedDifficulty, StringComparison.OrdinalIgnoreCase))
                     .Sum(s => s.ExperiencePoints);
@@ -107,17 +106,11 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 var potentialNewTotalXp = attempt.TotalExperienceEarned + activityXp;
                 var newTotalXp = Math.Min(potentialNewTotalXp, maxExperienceForDifficulty);
 
-                // This logic correctly handles both UPGRADE and DOWNGRADE scenarios:
-                // 1. UPGRADE: If a user earned 1000 XP on Standard (cap 1000) and moves to Challenging (cap 1500),
-                //    they can earn up to 500 additional XP. `newTotalXp` will be greater than `attempt.TotalExperienceEarned`,
-                //    so the `if` block executes.
-                // 2. DOWNGRADE: If a user earned 1500 XP on Challenging and moves to Standard (cap 1000),
-                //    `newTotalXp` will be capped at 1000. The condition `if (1000 > 1500)` will be FALSE.
-                //    This correctly prevents any new XP from being awarded and preserves their higher score of 1500.
                 if (newTotalXp > attempt.TotalExperienceEarned)
                 {
                     var xpGained = newTotalXp - attempt.TotalExperienceEarned;
                     attempt.TotalExperienceEarned = newTotalXp;
+                    // Update attempt immediately for XP
                     await _attemptRepository.UpdateAsync(attempt, cancellationToken);
 
                     // The XP event is dispatched with the actual XP gained after capping.
@@ -167,6 +160,29 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             {
                 stepProgress.Status = StepCompletionStatus.Completed;
                 stepProgress.CompletedAt = DateTimeOffset.UtcNow;
+
+                // --- UPDATE CURRENT STEP ID LOGIC ---
+                // Since this step is now complete, we should point the attempt to the NEXT step in the sequence.
+                var userTrackSteps = allQuestSteps
+                   .Where(s => string.Equals(s.DifficultyVariant, currentDifficulty, StringComparison.OrdinalIgnoreCase))
+                   .OrderBy(s => s.StepNumber)
+                   .ToList();
+
+                var currentStepIndex = userTrackSteps.FindIndex(s => s.Id == request.StepId);
+
+                // If we found the current step and there is a next step
+                if (currentStepIndex >= 0 && currentStepIndex < userTrackSteps.Count - 1)
+                {
+                    var nextStep = userTrackSteps[currentStepIndex + 1];
+                    attempt.CurrentStepId = nextStep.Id;
+                    _logger.LogInformation("Advancing Quest {QuestId} CurrentStep to {StepNumber} ({StepId})", request.QuestId, nextStep.StepNumber, nextStep.Id);
+                    await _attemptRepository.UpdateAsync(attempt, cancellationToken);
+                }
+                else if (currentStepIndex == userTrackSteps.Count - 1)
+                {
+                    _logger.LogInformation("Quest {QuestId} finished last step. CurrentStepId remains on last step or can be cleared.", request.QuestId);
+                    // Optionally logic to mark quest as fully completed happens in UpdateQuestCompletionPercentage
+                }
             }
             else
             {
@@ -180,6 +196,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
             progressChanged = true;
             stepProgress.Status = StepCompletionStatus.InProgress;
             stepProgress.CompletedAt = null;
+            // If user undoes completion, we generally don't revert CurrentStepId back automatically 
+            // as they might be reviewing. But typically CurrentStepId implies "Next Actionable Step".
         }
 
         if (isNewStepProgress)
