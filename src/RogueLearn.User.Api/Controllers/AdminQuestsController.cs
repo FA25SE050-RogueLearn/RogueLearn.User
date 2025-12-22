@@ -9,6 +9,8 @@ using RogueLearn.User.Application.Features.Quests.Queries.GetAdminQuestDetails;
 using RogueLearn.User.Application.Features.Quests.Queries.GetAllQuests;
 using RogueLearn.User.Application.Services;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Application.Features.Quests.Commands.UpdateQuestStatus; // Added reference
+using RogueLearn.User.Domain.Enums; // Added reference
 
 namespace RogueLearn.User.Api.Controllers;
 
@@ -85,6 +87,31 @@ public class AdminQuestsController : ControllerBase
     {
         var result = await _mediator.Send(new EnsureMasterQuestsCommand());
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Updates the lifecycle status of a Master Quest (Draft -> Published -> Archived).
+    /// Only Published quests are generated for students.
+    /// </summary>
+    [HttpPatch("{id:guid}/status")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateQuestStatus(Guid id, [FromBody] UpdateStatusRequest request)
+    {
+        if (!Enum.TryParse<QuestStatus>(request.Status, true, out var newStatus))
+        {
+            return BadRequest("Invalid status. Allowed: Draft, Published, Archived.");
+        }
+
+        var command = new UpdateQuestStatusCommand
+        {
+            QuestId = id,
+            NewStatus = newStatus
+        };
+
+        await _mediator.Send(command);
+        return NoContent();
     }
 
     /// <summary>
@@ -218,6 +245,11 @@ public class AdminQuestsController : ControllerBase
             return StatusCode(500, new { message = "Error retrieving progress" });
         }
     }
+}
+
+public class UpdateStatusRequest
+{
+    public string Status { get; set; } = string.Empty;
 }
 
 public class GeneratedQuestStepsResponse

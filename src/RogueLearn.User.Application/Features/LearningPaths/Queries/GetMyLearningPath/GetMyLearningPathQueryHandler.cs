@@ -106,8 +106,12 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
             ss => ss.AuthUserId == request.AuthUserId, cancellationToken))
             .ToDictionary(ss => ss.SubjectId);
 
+        // MODIFIED: Added check for QuestStatus.Published
         var masterQuests = (await _questRepository.GetAllAsync(cancellationToken))
-            .Where(q => q.SubjectId.HasValue && allSubjectIds.Contains(q.SubjectId.Value) && q.IsActive)
+            .Where(q => q.SubjectId.HasValue
+                        && allSubjectIds.Contains(q.SubjectId.Value)
+                        && q.IsActive
+                        && q.Status == QuestStatus.Published)
             .ToDictionary(q => q.SubjectId!.Value);
 
         var attempts = (await _attemptRepository.FindAsync(

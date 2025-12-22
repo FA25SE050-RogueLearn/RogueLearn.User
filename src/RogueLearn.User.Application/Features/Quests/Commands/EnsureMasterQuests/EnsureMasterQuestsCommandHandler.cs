@@ -57,7 +57,7 @@ public class EnsureMasterQuestsCommandHandler : IRequestHandler<EnsureMasterQues
                 // Defaults for Master Shell
                 QuestType = QuestType.Practice,
                 DifficultyLevel = DifficultyLevel.Intermediate,
-                Status = QuestStatus.NotStarted, // Default state
+                Status = QuestStatus.Draft, // Default state
                 IsActive = true,
 
                 CreatedAt = DateTimeOffset.UtcNow,
