@@ -16,6 +16,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
     private readonly IQuestStepRepository _questStepRepository;
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IQuestRepository _questRepository;
+    private readonly IQuestSubmissionRepository _submissionRepository; // Added dependency
     private readonly IMediator _mediator;
     private readonly ILogger<UpdateQuestActivityProgressCommandHandler> _logger;
 
@@ -25,6 +26,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         IQuestStepRepository questStepRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IQuestRepository questRepository,
+        IQuestSubmissionRepository submissionRepository, // Injected
         IMediator mediator,
         ILogger<UpdateQuestActivityProgressCommandHandler> logger)
     {
@@ -33,6 +35,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
         _questStepRepository = questStepRepository;
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _questRepository = questRepository;
+        _submissionRepository = submissionRepository; // Assigned
         _mediator = mediator;
         _logger = logger;
     }
@@ -50,10 +53,9 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
         if (attempt == null) throw new NotFoundException("Quest not started.");
 
-        // 3. Resolve Difficulty (Now using stored value)
         string currentDifficulty = attempt.AssignedDifficulty ?? "Standard";
 
-        // 4. Get or Create Step Progress
+        // 3. Get or Create Step Progress
         var stepProgress = await _stepProgressRepository.FirstOrDefaultAsync(
             p => p.AttemptId == attempt.Id && p.StepId == request.StepId,
             cancellationToken);
@@ -85,6 +87,19 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
 
         if (request.Status == StepCompletionStatus.Completed && !isAlreadyCompleted)
         {
+            // --- SECURITY CHECK: VERIFY QUIZ PASSING ---
+            bool isQuiz = IsQuizActivity(step, request.ActivityId);
+            if (isQuiz)
+            {
+                var submission = await _submissionRepository.GetLatestByActivityAndUserAsync(request.ActivityId, request.AuthUserId, cancellationToken);
+                if (submission == null || submission.IsPassed != true)
+                {
+                    _logger.LogWarning("User {UserId} tried to complete Quiz {ActivityId} without a passing submission.", request.AuthUserId, request.ActivityId);
+                    throw new BadRequestException("You must pass the quiz with a score of 70% or higher before completing this activity.");
+                }
+            }
+            // -------------------------------------------
+
             completedList.Add(request.ActivityId);
             stepProgress.CompletedActivityIds = completedList.ToArray();
             progressChanged = true;
@@ -153,7 +168,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 }
             }
 
-            bool isQuiz = IsQuizActivity(step, request.ActivityId);
+ 
             bool isCompleteByCount = CheckIfStepIsComplete(step, completedList);
 
             if (isQuiz || isCompleteByCount)
