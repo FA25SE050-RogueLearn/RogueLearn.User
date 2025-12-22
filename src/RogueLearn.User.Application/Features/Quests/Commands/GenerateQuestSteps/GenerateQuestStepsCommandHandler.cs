@@ -165,7 +165,10 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
                             {
                                 foreach (var activity in activitiesList)
                                 {
+                                    // FORCE OVERWRITE: Always generate a new GUID
+                                    // This fixes the issue where AI returns "supp-reading-1" or non-GUID strings
                                     activity["activityId"] = Guid.NewGuid().ToString();
+
                                     PatchActivityExperience(activity);
                                 }
                             }
