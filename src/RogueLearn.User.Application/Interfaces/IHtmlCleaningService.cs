@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Interfaces/IHtmlCleaningService.cs
-namespace RogueLearn.User.Application.Interfaces;
+﻿namespace RogueLearn.User.Application.Interfaces;
 
 /// <summary>
 /// Defines a service for cleaning and pre-processing raw HTML content

@@ -81,7 +81,7 @@ public static class Sources
         "forum.freecodecamp.org",
         "discuss.codecademy.com",
         "answers.unity.com",
-        "community.atlassian.com", // ⭐ ADDED: Block Jira/Atlassian community threads
+        "community.atlassian.com",
         "/forum/",
         "/forums/",
         "/discussion/",

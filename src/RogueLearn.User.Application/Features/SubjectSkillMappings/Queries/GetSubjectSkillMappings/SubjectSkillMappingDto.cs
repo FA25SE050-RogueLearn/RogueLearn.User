@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/SubjectSkillMappings/Queries/GetSubjectSkillMappings/SubjectSkillMappingDto.cs
 namespace RogueLearn.User.Application.Features.SubjectSkillMappings.Queries.GetSubjectSkillMappings;
 
 public class SubjectSkillMappingDto

@@ -177,7 +177,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
 
             var code = HttpUtility.HtmlDecode(cells[0].InnerText).Trim();
 
-            // FILTER: Removed hardcoded filtering to allow linking logic to handle what exists in DB.
+            // Removed hardcoded filtering to allow linking logic to handle what exists in DB.
             // Previously we filtered placeholder codes here, but now we delegate that to the DB existence check.
 
             // The name is often inside an <a> tag
@@ -214,7 +214,7 @@ public class HtmlCurriculumExtractionService : ICurriculumExtractionPlugin
             };
 
             // Parse Prerequisites: "PRF192" or "SWE102 or SWE201c"
-            // MODIFICATION: Updated regex to handle special codes like IA_COM*1, IA_GRA_ELE
+            // Updated regex to handle special codes like IA_COM*1, IA_GRA_ELE
             if (!string.IsNullOrWhiteSpace(prereqRaw) && !prereqRaw.Equals("None", StringComparison.OrdinalIgnoreCase))
             {
                 // Matches standard codes (PRF192) and complex codes (SE_COM*1, IA_GRA_ELE)

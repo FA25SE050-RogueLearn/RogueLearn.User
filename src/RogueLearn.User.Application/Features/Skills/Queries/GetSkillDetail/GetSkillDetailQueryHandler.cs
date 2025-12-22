@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Skills/Queries/GetSkillDetail/GetSkillDetailQueryHandler.cs
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Entities;
@@ -111,7 +110,6 @@ public class GetSkillDetailQueryHandler : IRequestHandler<GetSkillDetailQuery, S
                 var prereqUserSkill = userSkillMap.GetValueOrDefault(dep.PrerequisiteSkillId);
                 var prereqLevel = prereqUserSkill?.Level ?? 0;
 
-                // ⭐ CHANGE: Prerequisite is only met if Level >= Threshold (5)
                 var isMet = prereqLevel >= SKILL_MASTERY_LEVEL_THRESHOLD;
 
                 var status = isMet
@@ -134,7 +132,6 @@ public class GetSkillDetailQueryHandler : IRequestHandler<GetSkillDetailQuery, S
         {
             if (relatedSkills.TryGetValue(dep.SkillId, out var unlockSkill))
             {
-                // ⭐ CHANGE: Unlocks are only available if THIS skill is mastered
                 var isAvailable = level >= SKILL_MASTERY_LEVEL_THRESHOLD;
 
                 dto.Unlocks.Add(new DependencyStatusDto

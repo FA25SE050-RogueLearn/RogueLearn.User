@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/SubjectSkillMappings/Commands/AddSubjectSkillMapping/AddSubjectSkillMappingResponse.cs
 namespace RogueLearn.User.Application.Features.SubjectSkillMappings.Commands.AddSubjectSkillMapping;
 
 public class AddSubjectSkillMappingResponse

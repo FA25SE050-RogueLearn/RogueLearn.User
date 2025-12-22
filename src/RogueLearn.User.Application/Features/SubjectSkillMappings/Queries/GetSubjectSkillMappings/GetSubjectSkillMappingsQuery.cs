@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/SubjectSkillMappings/Queries/GetSubjectSkillMappings/GetSubjectSkillMappingsQuery.cs
 using MediatR;
 using System.Text.Json.Serialization;
 

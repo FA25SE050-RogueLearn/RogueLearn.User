@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/SubjectSkillMappings/Queries/GetSubjectSkillMappings/GetSubjectSkillMappingsQueryHandler.cs
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
 

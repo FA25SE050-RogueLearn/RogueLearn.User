@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetCompletedActivities/GetCompletedActivitiesQuery.cs
 using MediatR;
 using System.Text.Json;
 

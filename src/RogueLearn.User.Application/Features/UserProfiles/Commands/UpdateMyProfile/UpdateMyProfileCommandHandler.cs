@@ -18,7 +18,6 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
     private readonly IMapper _mapper;
     private readonly ILogger<UpdateMyProfileCommandHandler> _logger;
 
-    // ADDED: Repositories for validation
     private readonly IClassRepository _classRepository;
     private readonly ICurriculumProgramRepository _curriculumProgramRepository;
 
@@ -81,7 +80,7 @@ public class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProfileComm
         if (request.LastName != null) profile.LastName = string.IsNullOrWhiteSpace(request.LastName) ? null : request.LastName;
         if (request.Bio != null) profile.Bio = request.Bio; // allow empty string to clear bio
 
-        // ADDED: Academic path updates with validation
+        // Academic path updates with validation
         if (request.ClassId.HasValue)
         {
             var classExists = await _classRepository.ExistsAsync(request.ClassId.Value, cancellationToken);

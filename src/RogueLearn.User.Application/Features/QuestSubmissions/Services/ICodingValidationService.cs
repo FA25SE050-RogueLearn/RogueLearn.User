@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestSubmissions/Services/ICodingValidationService.cs
 namespace RogueLearn.User.Application.Features.QuestSubmissions.Services;
 
 public interface ICodingValidationService

@@ -1,5 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Interfaces/IReadingUrlService.cs
-
 using RogueLearn.User.Application.Services;
 
 namespace RogueLearn.User.Application.Interfaces;

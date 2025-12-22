@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Notes/Commands/CreateNoteFromUpload/CreateNoteFromUploadCommand.cs
 using MediatR;
 using RogueLearn.User.Application.Features.Notes.Commands.CreateNote;
 

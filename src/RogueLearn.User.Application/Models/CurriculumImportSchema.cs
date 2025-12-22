@@ -119,7 +119,6 @@ public class SyllabusData
 
     [JsonPropertyName("description")]
     public string? Description { get; set; }
-    // ⭐ ADD THIS NEW FIELD
     /// <summary>
     /// Technology stack/platforms taught in this subject (optional, can be extracted by AI or inferred).
     /// Examples: "Android, Kotlin, Java", "ASP.NET Core, C#", "React, JavaScript"
@@ -127,13 +126,11 @@ public class SyllabusData
     [JsonPropertyName("technologyStack")]
     public string? TechnologyStack { get; set; }
 
-    // MODIFICATION START: Added PreRequisite and Semester properties.
     [JsonPropertyName("preRequisite")]
     public string? PreRequisite { get; set; }
 
     [JsonPropertyName("semester")]
     public int? Semester { get; set; }
-    // MODIFICATION END
 
     [Required]
     public int VersionNumber { get; set; } = 1;

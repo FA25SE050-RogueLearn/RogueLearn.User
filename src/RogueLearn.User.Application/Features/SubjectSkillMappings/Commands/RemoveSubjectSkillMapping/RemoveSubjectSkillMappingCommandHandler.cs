@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/SubjectSkillMappings/Commands/RemoveSubjectSkillMapping/RemoveSubjectSkillMappingCommandHandler.cs
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Interfaces;

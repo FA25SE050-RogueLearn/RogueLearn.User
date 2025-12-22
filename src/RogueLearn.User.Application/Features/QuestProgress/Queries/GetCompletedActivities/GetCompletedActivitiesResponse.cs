@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/QuestProgress/Queries/GetCompletedActivities/GetCompletedActivitiesResponse.cs
 namespace RogueLearn.User.Application.Features.QuestProgress.Queries.GetCompletedActivities;
 
 public class GetCompletedActivitiesResponse

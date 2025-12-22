@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestDifficultyResolver.cs
 using RogueLearn.User.Application.Models; // For AcademicAnalysisReport
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Enums;

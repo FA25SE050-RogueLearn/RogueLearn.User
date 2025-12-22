@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Queries/GetAcademicStatus/GetAcademicStatusQuery.cs
 using MediatR;
 
 namespace RogueLearn.User.Application.Features.Student.Queries.GetAcademicStatus;

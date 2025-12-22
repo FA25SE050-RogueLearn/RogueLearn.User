@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Queries/GetQuestStepContent/QuestStepContentResponse.cs
 using System.Text.Json.Serialization;
 
 namespace RogueLearn.User.Application.Features.Quests.Queries.GetQuestStepContent;

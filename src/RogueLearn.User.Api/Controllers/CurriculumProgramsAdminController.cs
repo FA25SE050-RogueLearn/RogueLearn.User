@@ -11,7 +11,7 @@ namespace RogueLearn.User.Api.Controllers;
 
 [ApiController]
 [Route("api/admin/programs/{programId:guid}")]
-[AdminOnly]  // ⭐ Add this attribute
+[AdminOnly] 
 public class CurriculumProgramsAdminController : ControllerBase
 {
     private readonly IMediator _mediator;

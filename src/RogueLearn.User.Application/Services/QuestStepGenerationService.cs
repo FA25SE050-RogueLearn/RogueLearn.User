@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Services/QuestStepGenerationService.cs
 using Hangfire;
 using Hangfire.Server;
 using MediatR;

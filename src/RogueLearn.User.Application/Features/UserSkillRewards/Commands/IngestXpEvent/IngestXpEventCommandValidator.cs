@@ -1,4 +1,3 @@
-// RogueLearn.User/src/RogueLearn.User.Application/Features/UserSkillRewards/Commands/IngestXpEvent/IngestXpEventCommandValidator.cs
 using FluentValidation;
 
 namespace RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;

@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/SubjectSkillMappings/Commands/RemoveSubjectSkillMapping/RemoveSubjectSkillMappingCommand.cs
 using MediatR;
 using System.Text.Json.Serialization;
 

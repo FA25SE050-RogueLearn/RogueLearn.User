@@ -68,7 +68,7 @@ public static class ServiceCollectionExtensions
         });
 
         // Register extraction plugins
-        // MODIFICATION: Swapped CurriculumExtractionPlugin for HtmlCurriculumExtractionService (Non-AI)
+        // Swapped CurriculumExtractionPlugin for HtmlCurriculumExtractionService (Non-AI)
         services.AddScoped<ICurriculumExtractionPlugin, HtmlCurriculumExtractionService>();
 
         services.AddScoped<ISyllabusExtractionPlugin, SyllabusExtractionPlugin>();

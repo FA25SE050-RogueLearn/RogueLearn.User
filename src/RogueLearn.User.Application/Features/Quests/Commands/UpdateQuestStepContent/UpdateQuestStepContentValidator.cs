@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Quests/Commands/UpdateQuestStepContent/UpdateQuestStepContentValidator.cs
 using FluentValidation;
 using Newtonsoft.Json.Linq;
 using System.Text.Json;

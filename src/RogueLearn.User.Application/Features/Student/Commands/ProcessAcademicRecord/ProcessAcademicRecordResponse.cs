@@ -1,5 +1,4 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Commands/ProcessAcademicRecord/ProcessAcademicRecordResponse.cs
-using RogueLearn.User.Application.Models; // For AcademicAnalysisReport
+using RogueLearn.User.Application.Models; 
 
 namespace RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 
@@ -13,8 +12,6 @@ public class ProcessAcademicRecordResponse
     public double CalculatedGpa { get; set; }
 
     public XpAwardSummary? XpAwarded { get; set; }
-
-    // ADDED: The AI analysis report
     public AcademicAnalysisReport? AnalysisReport { get; set; }
 }
 

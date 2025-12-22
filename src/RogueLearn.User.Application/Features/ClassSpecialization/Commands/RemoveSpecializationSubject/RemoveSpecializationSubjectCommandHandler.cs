@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/ClassSpecialization/Commands/RemoveSpecializationSubject/RemoveSpecializationSubjectCommandHandler.cs
 using MediatR;
 using RogueLearn.User.Application.Exceptions;
 using RogueLearn.User.Domain.Interfaces;

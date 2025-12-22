@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Student/Queries/GetAcademicStatus/GetAcademicStatusResponse.cs
 namespace RogueLearn.User.Application.Features.Student.Queries.GetAcademicStatus;
 
 public class GetAcademicStatusResponse

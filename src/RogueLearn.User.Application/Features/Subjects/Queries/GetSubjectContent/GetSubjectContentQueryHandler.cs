@@ -78,7 +78,7 @@ public class GetSubjectContentQueryHandler : IRequestHandler<GetSubjectContentQu
             // Add global converters
             options.Converters.Add(new JsonStringEnumConverter());
 
-            // ADDED: Register the custom converter for SyllabusSessionDto to handle
+            // Register the custom converter for SyllabusSessionDto to handle
             // both PascalCase keys AND the {"ValueKind": 7} corruption issue.
             options.Converters.Add(new SyllabusSessionDtoConverter());
 

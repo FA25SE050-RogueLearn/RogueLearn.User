@@ -1,4 +1,3 @@
-﻿// RogueLearn.User/src/RogueLearn.User.Application/Features/Onboarding/Queries/GetAllClasses/ClassDto.cs
 namespace RogueLearn.User.Application.Features.Onboarding.Queries.GetAllClasses;
 
 public class ClassDto
