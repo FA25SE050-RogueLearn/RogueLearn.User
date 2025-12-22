@@ -74,7 +74,7 @@ public class QuestStepsPromptBuilder
 
         // 3. Skills
         prompt.AppendLine("## 3. Skill Mapping");
-        prompt.AppendLine("Assign a `skillId` from this list to EVERY activity you create:");
+        prompt.AppendLine("Assign a `skillId` from this list to EVERY activity you create. If none match perfectly, use the first one.");
         if (relevantSkills.Any())
         {
             var skillsJson = JsonSerializer.Serialize(
@@ -114,7 +114,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"type\": \"KnowledgeCheck\",");
-        prompt.AppendLine("  \"activityId\": \"placeholder-id\",");
+        prompt.AppendLine("  \"activityId\": \"GUID\","); // Enforcing placeholder
         prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
         prompt.AppendLine("  \"payload\": {");
         prompt.AppendLine("    \"experiencePoints\": 30,");
@@ -145,7 +145,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"type\": \"Quiz\",");
-        prompt.AppendLine("  \"activityId\": \"placeholder-id\",");
+        prompt.AppendLine("  \"activityId\": \"GUID\","); // Enforcing placeholder
         prompt.AppendLine("  \"skillId\": \"skill-uuid-here\",");
         prompt.AppendLine("  \"payload\": {");
         prompt.AppendLine("    \"experiencePoints\": 80,");
@@ -239,26 +239,26 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine();
         prompt.AppendLine("```json");
         prompt.AppendLine("{");
-        prompt.AppendLine("  \"moduleTitle\": \"Smart, Engaging Title in Title Case (Max 60 chars)\",");
+        prompt.AppendLine("  \"moduleTitle\": \"Smart, Engaging Title\",");
         prompt.AppendLine("  \"supportive\": {");
         prompt.AppendLine("    \"activities\": [");
-        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
-        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, \"questions\": [ { \"question\": \"...\", \"options\": [...], \"answer\": \"Full Text Answer\" } ] } },"); // Updated schema hint
-        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
-        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, ... } },");
-        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 60, \"questions\": [7-8 questions] } }");
+        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
+        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, \"questions\": [ { \"question\": \"...\", \"options\": [...], \"answer\": \"Full Text Answer\" } ] } },"); // Updated schema hint
+        prompt.AppendLine("      { \"type\": \"Reading\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 10, ... } },");
+        prompt.AppendLine("      { \"type\": \"KnowledgeCheck\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 25, ... } },");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 60, \"questions\": [7-8 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  },");
         prompt.AppendLine("  \"standard\": {");
         prompt.AppendLine("    \"activities\": [");
         prompt.AppendLine("      // ... similar structure, strictly alternating Reading -> KnowledgeCheck ...");
-        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 80, \"questions\": [8-9 questions] } }");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 80, \"questions\": [8-9 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  },");
         prompt.AppendLine("  \"challenging\": {");
         prompt.AppendLine("    \"activities\": [");
         prompt.AppendLine("      // ... similar structure, strictly alternating Reading -> KnowledgeCheck ...");
-        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"placeholder\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 100, \"questions\": [9-10 questions] } }");
+        prompt.AppendLine("      { \"type\": \"Quiz\", \"activityId\": \"GUID\", \"skillId\": \"...\", \"payload\": { \"experiencePoints\": 100, \"questions\": [9-10 questions] } }");
         prompt.AppendLine("    ]");
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
@@ -298,7 +298,7 @@ public class QuestStepsPromptBuilder
         prompt.AppendLine("- [ ] Quiz has correct question count (Supportive: 7-8, Standard: 8-9, Challenging: 9-10)");
         prompt.AppendLine("- [ ] KnowledgeChecks have 3-4 questions each");
         prompt.AppendLine("- [ ] All Reading activities with URLs use APPROVED RESOURCE URLs");
-        prompt.AppendLine("- [ ] Every activity has a valid skillId and activityId");
+        prompt.AppendLine("- [ ] Every activity has a valid skillId and activityId=\"GUID\"");
         prompt.AppendLine("- [ ] Output is pure JSON (no markdown fences, no explanatory text)");
         prompt.AppendLine("- [ ] Questions are grouped in `questions` arrays for KnowledgeCheck and Quiz");
         prompt.AppendLine("- [ ] No Coding activities included");

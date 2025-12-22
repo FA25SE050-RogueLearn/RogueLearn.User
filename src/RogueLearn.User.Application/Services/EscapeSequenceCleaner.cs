@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 
 namespace RogueLearn.User.Application.Services;
 
@@ -8,20 +9,132 @@ namespace RogueLearn.User.Application.Services;
 public static class EscapeSequenceCleaner
 {
     /// <summary>
+    /// Complete cleaning pipeline - tries multiple strategies
+    /// </summary>
+    public static (bool success, string? cleanedJson, string? error) CleanAndValidate(string rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return (false, null, "Input JSON is empty");
+        }
+
+        // Remove markdown code fences if present
+        rawJson = Regex.Replace(rawJson, @"^```json\s*", "", RegexOptions.Multiline);
+        rawJson = Regex.Replace(rawJson, @"^```\s*$", "", RegexOptions.Multiline);
+        rawJson = rawJson.Trim();
+
+        // Strategy 1: Fix literal newlines and basic cleaning
+        try
+        {
+            var preProcessed = FixLiteralNewlines(rawJson);
+            var cleaned = CleanEscapeSequences(preProcessed);
+            using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
+
+            // Support BOTH old schema (root 'activities') AND new schema (root 'standard')
+            var root = doc.RootElement;
+            bool isOldSchema = root.TryGetProperty("activities", out _);
+            bool isNewSchema = root.TryGetProperty("standard", out _) || root.TryGetProperty("Standard", out _);
+
+            if (!isOldSchema && !isNewSchema)
+            {
+                return (false, null, "JSON root missing required keys (either 'activities' or 'standard')");
+            }
+
+            return (true, cleaned, null);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            // Strategy 2: Aggressive normalization
+            try
+            {
+                var preProcessed = FixLiteralNewlines(rawJson);
+                var normalized = NormalizeEscapeSequences(preProcessed);
+                var cleaned = CleanEscapeSequences(normalized);
+
+                using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
+
+                var root = doc.RootElement;
+                bool isOldSchema = root.TryGetProperty("activities", out _);
+                bool isNewSchema = root.TryGetProperty("standard", out _) || root.TryGetProperty("Standard", out _);
+
+                if (!isOldSchema && !isNewSchema)
+                {
+                    return (false, null, "Missing required keys after normalization");
+                }
+
+                return (true, cleaned, null);
+            }
+            catch (System.Text.Json.JsonException ex2)
+            {
+                return (false, null, $"JSON parsing failed: {ex2.Message} (Line: {ex2.LineNumber}, Position: {ex2.BytePositionInLine})");
+            }
+            catch (Exception ex2)
+            {
+                return (false, null, $"Unexpected error during normalization: {ex2.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, null, $"Unexpected error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Fixes literal newlines inside JSON strings that break parsing.
+    /// This is the PRIMARY fix for "Expected end of string, but instead reached end of data" errors.
+    /// </summary>
+    private static string FixLiteralNewlines(string json)
+    {
+        var sb = new StringBuilder(json.Length);
+        bool inString = false;
+        char? prevChar = null;
+
+        for (int i = 0; i < json.Length; i++)
+        {
+            char c = json[i];
+
+            // Track if we're inside a string (but not if the quote is escaped)
+            if (c == '"' && prevChar != '\\')
+            {
+                inString = !inString;
+                sb.Append(c);
+                prevChar = c;
+                continue;
+            }
+
+            // If we're in a string and hit a newline/carriage return/tab, replace with space
+            if (inString)
+            {
+                if (c == '\n' || c == '\r' || c == '\t')
+                {
+                    sb.Append(' '); // Replace literal newline/tab with space
+                    prevChar = ' ';
+                    continue;
+                }
+            }
+
+            sb.Append(c);
+            prevChar = c;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Cleans escape sequences in JSON string values by converting them to readable text
     /// </summary>
     public static string CleanEscapeSequences(string json)
     {
         if (string.IsNullOrEmpty(json)) return json;
 
-        // Use verbatim string (@"...") to avoid double-escaping hell
-        // This regex finds all JSON string values: "anything here"
-        return Regex.Replace(json, @"""([^""\\]*(\\.[^""\\]*)*)""", match =>
+        // FIXED REGEX: Use RegexOptions.Singleline to handle multi-line matches
+        // This makes . match newlines as well
+        return Regex.Replace(json, @"""((?:[^""\\]|\\.)*)""", match =>
         {
             var value = match.Groups[1].Value;
             var cleaned = CleanStringValue(value);
             return $"\"{cleaned}\"";
-        });
+        }, RegexOptions.Singleline);
     }
 
     /// <summary>
@@ -152,75 +265,6 @@ public static class EscapeSequenceCleaner
         }
 
         return json;
-    }
-
-    /// <summary>
-    /// Complete cleaning pipeline - tries multiple strategies
-    /// </summary>
-    public static (bool success, string? cleanedJson, string? error) CleanAndValidate(string rawJson)
-    {
-        if (string.IsNullOrWhiteSpace(rawJson))
-        {
-            return (false, null, "Input JSON is empty");
-        }
-
-        // Remove markdown code fences if present
-        rawJson = Regex.Replace(rawJson, @"^```json\s*", "", RegexOptions.Multiline);
-        rawJson = Regex.Replace(rawJson, @"^```\s*$", "", RegexOptions.Multiline);
-        rawJson = rawJson.Trim();
-
-        // Strategy 1: Basic cleaning
-        try
-        {
-            var cleaned = CleanEscapeSequences(rawJson);
-            using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
-
-            // Support BOTH old schema (root 'activities') AND new schema (root 'standard')
-            var root = doc.RootElement;
-            bool isOldSchema = root.TryGetProperty("activities", out _);
-            bool isNewSchema = root.TryGetProperty("standard", out _) || root.TryGetProperty("Standard", out _);
-
-            if (!isOldSchema && !isNewSchema)
-            {
-                return (false, null, "JSON root missing required keys (either 'activities' or 'standard')");
-            }
-
-            return (true, cleaned, null);
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            // Strategy 2: Aggressive normalization
-            try
-            {
-                var normalized = NormalizeEscapeSequences(rawJson);
-                var cleaned = CleanEscapeSequences(normalized);
-
-                using var doc = System.Text.Json.JsonDocument.Parse(cleaned);
-
-                var root = doc.RootElement;
-                bool isOldSchema = root.TryGetProperty("activities", out _);
-                bool isNewSchema = root.TryGetProperty("standard", out _) || root.TryGetProperty("Standard", out _);
-
-                if (!isOldSchema && !isNewSchema)
-                {
-                    return (false, null, "Missing required keys after normalization");
-                }
-
-                return (true, cleaned, null);
-            }
-            catch (System.Text.Json.JsonException ex2)
-            {
-                return (false, null, $"JSON parsing failed: {ex2.Message} (Line: {ex2.LineNumber}, Position: {ex2.BytePositionInLine})");
-            }
-            catch (Exception ex2)
-            {
-                return (false, null, $"Unexpected error during normalization: {ex2.Message}");
-            }
-        }
-        catch (Exception ex)
-        {
-            return (false, null, $"Unexpected error: {ex.Message}");
-        }
     }
 
     /// <summary>
