@@ -47,8 +47,8 @@ public class MappingProfile : Profile
         CreateMap<UserRole, UserRoleDto>()
           .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
           .ForMember(dest => dest.AssignedAt, opt => opt.MapFrom(src => src.AssignedAt))
-          .ForMember(dest => dest.RoleName, opt => opt.Ignore()) 
-          .ForMember(dest => dest.Description, opt => opt.Ignore()); 
+          .ForMember(dest => dest.RoleName, opt => opt.Ignore())
+          .ForMember(dest => dest.Description, opt => opt.Ignore());
 
         // CurriculumProgram mappings
         CreateMap<CurriculumProgram, GetAllCurriculumProgramDto>();
