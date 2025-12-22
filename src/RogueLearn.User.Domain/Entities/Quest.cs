@@ -31,7 +31,7 @@ public class Quest : BaseEntity
 
     [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
-    public QuestStatus Status { get; set; } = QuestStatus.NotStarted;
+    public QuestStatus Status { get; set; } = QuestStatus.Draft;
 
     [Column("subject_id")]
     public Guid? SubjectId { get; set; }

@@ -98,10 +98,14 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
 
         var allDependencies = await _skillDependencyRepository.GetAllAsync(cancellationToken);
 
-        // OPTIMIZATION: Pre-fetch all relevant quests in one batch to avoid N+1 queries in the loop
+        // OPTIMIZATION: Pre-fetch all relevant quests in one batch
+        // FIX: Added filtering for QuestStatus.Published. Students should only see published quests.
         var allQuests = await _questRepository.GetAllAsync(cancellationToken);
         var activeQuestsBySubject = allQuests
-            .Where(q => q.IsActive && q.SubjectId.HasValue && allSubjectIds.Contains(q.SubjectId.Value))
+            .Where(q => q.IsActive
+                        && q.Status == QuestStatus.Published
+                        && q.SubjectId.HasValue
+                        && allSubjectIds.Contains(q.SubjectId.Value))
             .GroupBy(q => q.SubjectId!.Value)
             .ToDictionary(g => g.Key, g => g.First());
 
@@ -134,15 +138,13 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
 
             if (!shouldGenerate)
             {
-                // _logger.LogDebug("Skipping subject {Code} - Prerequisites not met or future semester.", subject.SubjectCode);
                 skippedCount++;
                 continue;
             }
 
-            // OPTIMIZED: Use pre-fetched dictionary instead of database call
             if (!activeQuestsBySubject.TryGetValue(subject.Id, out var masterQuest))
             {
-                // _logger.LogWarning("No Master Quest found for subject {Code} ({Id}). Skipping.", subject.SubjectCode, subject.Id);
+                // This now correctly skips Draft quests
                 continue;
             }
 
@@ -196,7 +198,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 }
             }
 
-            // C. Calculate Personalized Difficulty with Logging
+            // C. Calculate Personalized Difficulty
             var difficultyInfo = _difficultyResolver.ResolveDifficulty(
                 gradeRecord,
                 proficiency,
@@ -204,12 +206,11 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                 request.AiAnalysisReport,
                 subjectSkillNames);
 
-            // Log if AI influenced the difficulty
             if (difficultyInfo.DifficultyReason.Contains("Aligned with identified", StringComparison.OrdinalIgnoreCase))
             {
                 difficultyAdjustedCount++;
-                _logger.LogInformation("🤖 AI ADJUSTMENT: Quest '{SubjectCode}' ({SubjectName}) set to '{Difficulty}' based on analysis. Skills checked: [{Skills}]",
-                    subject.SubjectCode, subject.SubjectName, difficultyInfo.ExpectedDifficulty, string.Join(", ", subjectSkillNames));
+                _logger.LogInformation("🤖 AI ADJUSTMENT: Quest '{SubjectCode}' ({SubjectName}) set to '{Difficulty}' based on analysis.",
+                    subject.SubjectCode, subject.SubjectName, difficultyInfo.ExpectedDifficulty);
             }
 
             // D. Create or Update the User's Attempt
@@ -219,11 +220,6 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
 
             if (existingAttempt == null)
             {
-                // This logic block handles the case where a user has no prior attempt for a quest.
-                // A new UserQuestAttempt is created with a 'NotStarted' status.
-                // The 'AssignedDifficulty' is set based on the calculated personalized difficulty,
-                // and a note is added explaining the reason for this assignment. This pre-populates
-                // the user's quest line with difficulty predictions before they start.
                 var newAttempt = new UserQuestAttempt
                 {
                     AuthUserId = request.AuthUserId,
@@ -238,40 +234,23 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             }
             else
             {
-                // This logic handles existing quest attempts, enabling dynamic difficulty adjustments
-                // based on the user's updated academic performance (e.g., a new GPA).
                 var oldDifficulty = existingAttempt.AssignedDifficulty;
                 var newDifficulty = difficultyInfo.ExpectedDifficulty;
-
                 var oldLevel = GetDifficultyLevel(oldDifficulty);
                 var newLevel = GetDifficultyLevel(newDifficulty);
 
-                // This condition now triggers an update if the difficulty is different in any way (upgrade or downgrade).
-                // This ensures the quest difficulty always reflects the user's most current academic standing.
                 if (newLevel != oldLevel)
                 {
-                    string changeType = newLevel > oldLevel ? "Upgrading" : "Downgrading";
-                    _logger.LogInformation("{ChangeType} quest '{QuestTitle}' difficulty from {Old} to {New} for user {UserId} based on performance.",
-                        changeType, masterQuest.Title, oldDifficulty, newDifficulty, request.AuthUserId);
-
-                    // Deleting existing step progress is essential for both upgrades and downgrades.
-                    // This action ensures the user starts the new difficulty track from the beginning,
-                    // preventing data inconsistencies where progress is tied to steps that are no longer valid for the attempt.
                     await _stepProgressRepository.DeleteByAttemptIdAsync(existingAttempt.Id, cancellationToken);
 
                     existingAttempt.AssignedDifficulty = newDifficulty;
                     existingAttempt.Notes = $"Difficulty changed to {newDifficulty} on {DateTime.UtcNow:yyyy-MM-dd}. Reason: {difficultyInfo.DifficultyReason}";
-
-                    // Reset progress for a re-attempt. The 'total_experience_earned' is intentionally
-                    // preserved to allow the user to earn additional XP up to the new difficulty's cap.
                     existingAttempt.Status = QuestAttemptStatus.InProgress;
                     existingAttempt.CompletionPercentage = 0;
                     existingAttempt.CompletedAt = null;
 
                     await _userQuestAttemptRepository.UpdateAsync(existingAttempt, cancellationToken);
                 }
-                // If the quest has not yet been started, we can safely update the predicted difficulty
-                // without affecting any in-progress data.
                 else if (existingAttempt.Status == QuestAttemptStatus.NotStarted)
                 {
                     existingAttempt.AssignedDifficulty = newDifficulty;
@@ -279,30 +258,19 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
                     existingAttempt.UpdatedAt = DateTimeOffset.UtcNow;
                     await _userQuestAttemptRepository.UpdateAsync(existingAttempt, cancellationToken);
                 }
-                // Case 3: The new difficulty is the same as the old one. No action is needed.
             }
         }
 
-        if (difficultyAdjustedCount == 0)
-        {
-            _logger.LogInformation("ℹ️ No quests were adjusted based on AI analysis. Difficulty defaulted to Standard/Prereq-based logic.");
-        }
-        else
+        if (difficultyAdjustedCount > 0)
         {
             _logger.LogInformation("✅ AI Analysis influenced {Count} quest difficulties.", difficultyAdjustedCount);
         }
 
-        _logger.LogInformation("Quest generation complete. Generated/Updated: {Gen}, Skipped (Locked): {Skip}", generatedCount, skippedCount);
+        _logger.LogInformation("Quest generation complete. Generated/Updated: {Gen}, Skipped: {Skip}", generatedCount, skippedCount);
 
         return new GenerateQuestLineResponse { LearningPathId = request.AuthUserId };
     }
 
-    /// <summary>
-    /// Converts string-based difficulty names to a numeric level for comparison.
-    /// This allows for easy upgrading (e.g., from Supportive (1) to Standard (2)).
-    /// </summary>
-    /// <param name="difficulty">The difficulty string ('Supportive', 'Standard', 'Challenging').</param>
-    /// <returns>A numeric representation of the difficulty level.</returns>
     private int GetDifficultyLevel(string difficulty)
     {
         return difficulty.ToLowerInvariant() switch
@@ -310,7 +278,7 @@ public class GenerateQuestLineCommandHandler : IRequestHandler<GenerateQuestLine
             "supportive" => 1,
             "standard" => 2,
             "challenging" => 3,
-            _ => 2 // Default to Standard if the value is unexpected
+            _ => 2
         };
     }
 }

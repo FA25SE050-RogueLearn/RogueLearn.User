@@ -27,6 +27,7 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
     {
         _logger.LogInformation("Fetching quests for user {AuthUserId}", request.AuthUserId);
 
+        // 1. Get the user's specific attempts
         var attempts = (await _attemptRepository.FindAsync(a => a.AuthUserId == request.AuthUserId, cancellationToken)).ToList();
         if (!attempts.Any())
         {
@@ -34,9 +35,13 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
             return new List<MyQuestWithSubjectDto>();
         }
 
-        var questIds = attempts.Select(a => a.QuestId).Distinct().ToList();
+        // 2. Map Attempt to Quest ID for joining later
+        var attemptMap = attempts.ToDictionary(a => a.QuestId, a => a);
+        var questIds = attemptMap.Keys.ToList();
+
+        // 3. Get the Master Quest definitions
         var quests = (await _questRepository.GetByIdsAsync(questIds, cancellationToken))
-            .Where(q => q.IsActive)
+            .Where(q => q.IsActive) // Keep IsActive check for soft-deletes
             .ToList();
 
         if (!quests.Any())
@@ -45,6 +50,7 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
             return new List<MyQuestWithSubjectDto>();
         }
 
+        // 4. Get Subjects
         var subjectIds = quests
             .Where(q => q.SubjectId.HasValue)
             .Select(q => q.SubjectId!.Value)
@@ -54,14 +60,21 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
         var subjects = await _subjectRepository.GetByIdsAsync(subjectIds, cancellationToken);
         var subjectMap = subjects.ToDictionary(s => s.Id, s => s);
 
+        // 5. Construct DTO
+        // CRITICAL FIX: The 'Status' field must reflect the USER'S progress (from Attempt),
+        // not the Master Quest's status (which would just be 'Published').
         var result = quests.Select(q =>
         {
             subjectMap.TryGetValue(q.SubjectId ?? Guid.Empty, out var subj);
+            var userAttempt = attemptMap.GetValueOrDefault(q.Id);
+
             return new MyQuestWithSubjectDto
             {
                 QuestId = q.Id,
                 Title = q.Title,
-                Status = q.Status.ToString(),
+                // Map the User's Attempt Status (e.g., InProgress, Completed)
+                // Fallback to "NotStarted" if for some reason the attempt is missing (shouldn't happen given logic above)
+                Status = userAttempt?.Status.ToString() ?? "NotStarted",
                 SubjectId = q.SubjectId,
                 SubjectCode = subj?.SubjectCode,
                 SubjectName = subj?.SubjectName,
@@ -73,4 +86,3 @@ public class GetMyQuestsWithSubjectsQueryHandler : IRequestHandler<GetMyQuestsWi
         return result;
     }
 }
-
