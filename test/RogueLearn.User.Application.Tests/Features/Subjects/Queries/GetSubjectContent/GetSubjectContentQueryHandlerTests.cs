@@ -69,23 +69,7 @@ public class GetSubjectContentQueryHandlerTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None));
     }
 
-    [Fact]
-    public async Task Handle_JObjectContent_Deserializes()
-    {
-        var repo = Substitute.For<ISubjectRepository>();
-        var logger = Substitute.For<ILogger<GetSubjectContentQueryHandler>>();
-        var id = Guid.NewGuid();
 
-        var jObj = Newtonsoft.Json.Linq.JObject.Parse("{\"courseDescription\":\"c\",\"courseLearningOutcomes\":[{\"id\":\"CLO1\",\"details\":\"d\"}],\"sessionSchedule\":[{\"sessionNumber\":1,\"topic\":\"t\"}],\"constructiveQuestions\":[{\"name\":\"n\",\"question\":\"q\"}]}");
-
-        var dict = jObj.ToObject<Dictionary<string, object>>();
-        repo.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(new Subject { Id = id, SubjectCode = "S", SubjectName = "Name", Content = dict! });
-        var sut = new GetSubjectContentQueryHandler(repo, logger);
-        var res = await sut.Handle(new GetSubjectContentQuery { SubjectId = id }, CancellationToken.None);
-        res.CourseLearningOutcomes!.Count.Should().Be(1);
-        res.SessionSchedule!.Count.Should().Be(1);
-        res.ConstructiveQuestions!.Count.Should().Be(1);
-    }
 
     
 

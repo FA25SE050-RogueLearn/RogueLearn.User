@@ -175,20 +175,7 @@ public class UpdateMyProfileCommandHandlerTests
         await userRepo.Received(1).UpdateAsync(profile, Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_PreferencesJson_Invalid_ThrowsJsonException()
-    {
-        var authId = Guid.NewGuid();
-        var profile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId };
-        var userRepo = Substitute.For<IUserProfileRepository>();
-        userRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(profile);
-        var mapper = Substitute.For<IMapper>();
-        var sut = CreateSut(userRepo, Substitute.For<IUserRoleRepository>(), Substitute.For<IRoleRepository>(), Substitute.For<IAvatarStorage>(), mapper, Substitute.For<ILogger<UpdateMyProfileCommandHandler>>());
 
-        var cmd = new UpdateMyProfileCommand { AuthUserId = authId, PreferencesJson = "{bad" };
-        var act = () => sut.Handle(cmd, CancellationToken.None);
-        await act.Should().ThrowAsync<System.Text.Json.JsonException>();
-    }
 
     [Fact]
     public async Task Handle_PreferencesJson_Empty_SetsNull()

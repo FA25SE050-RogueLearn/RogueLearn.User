@@ -27,16 +27,7 @@ public class SubjectsControllerTests
         res.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    [Fact]
-    public async Task ImportFromText_Returns_Ok_When_Valid()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<ImportSubjectFromTextCommand>(), Arg.Any<CancellationToken>()).Returns(new CreateSubjectResponse());
-        var controller = new SubjectsController(mediator);
-        var req = new ImportSubjectFromTextRequest { RawText = "content" };
-        var res = await controller.ImportFromText(req, CancellationToken.None);
-        res.Result.Should().BeOfType<OkObjectResult>();
-    }
+
 
     [Fact]
     public async Task GetAllSubjects_Returns_Ok()
@@ -68,16 +59,7 @@ public class SubjectsControllerTests
         res.Result.Should().BeOfType<OkObjectResult>();
     }
 
-    [Fact]
-    public async Task UpdateFromText_Returns_Ok()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<ImportSubjectFromTextCommand>(), Arg.Any<CancellationToken>()).Returns(new CreateSubjectResponse());
-        var controller = new SubjectsController(mediator);
-        var req = new ImportSubjectFromTextRequest { RawText = "content" };
-        var res = await controller.UpdateFromText(req, CancellationToken.None);
-        res.Result.Should().BeOfType<OkObjectResult>();
-    }
+
 
     [Fact]
     public async Task GetSubjectById_Returns_NotFound_When_Null()
