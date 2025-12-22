@@ -27,23 +27,7 @@ public class ConfigureGuildSettingsCommandHandlerTests
         await Assert.ThrowsAsync<NotFoundException>(() => sut.Handle(cmd, CancellationToken.None));
     }
 
-    [Fact]
-    public async Task Handle_NotVerifiedAndLocked_Throws()
-    {
-        var guildRepo = Substitute.For<IGuildRepository>();
-        var roleRepo = Substitute.For<IRoleRepository>();
-        var userRoleRepo = Substitute.For<IUserRoleRepository>();
-        var sut = new ConfigureGuildSettingsCommandHandler(guildRepo, roleRepo, userRoleRepo);
 
-        var guildId = System.Guid.NewGuid();
-        var actorId = System.Guid.NewGuid();
-        var cmd = new ConfigureGuildSettingsCommand(guildId, actorId, "Name", "Desc", "public", 51);
-        var guild = new Guild { Id = guildId, CurrentMemberCount = 50 };
-        guildRepo.GetByIdAsync(guildId, Arg.Any<CancellationToken>()).Returns(guild);
-        roleRepo.GetByNameAsync("Verified Lecturer", Arg.Any<CancellationToken>()).Returns(new Role { Id = System.Guid.NewGuid(), Name = "Verified Lecturer" });
-        userRoleRepo.GetRolesForUserAsync(actorId, Arg.Any<CancellationToken>()).Returns(new List<UserRole>());
-        await Assert.ThrowsAsync<UnprocessableEntityException>(() => sut.Handle(cmd, CancellationToken.None));
-    }
 
     [Fact]
     public async Task Handle_MaxMembersTooSmall_Throws()

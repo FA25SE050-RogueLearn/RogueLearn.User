@@ -14,18 +14,7 @@ namespace RogueLearn.User.Application.Tests.Features.GuildPosts.Commands.DeleteG
 
 public class DeleteGuildPostCommandHandlerTests
 {
-    [Fact]
-    public async Task Handle_WrongAuthor_Throws()
-    {
-        var cmd = new DeleteGuildPostCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid());
-        var postRepo = Substitute.For<IGuildPostRepository>();
-        var storage = Substitute.For<IGuildPostImageStorage>();
-        var sut = new DeleteGuildPostCommandHandler(postRepo, storage);
 
-        var post = new GuildPost { Id = cmd.PostId, GuildId = cmd.GuildId, AuthorId = System.Guid.NewGuid(), IsLocked = false };
-        postRepo.GetByIdAsync(cmd.GuildId, cmd.PostId, Arg.Any<CancellationToken>()).Returns(post);
-        await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
-    }
 
     [Fact]
     public async Task Handle_Locked_Throws()

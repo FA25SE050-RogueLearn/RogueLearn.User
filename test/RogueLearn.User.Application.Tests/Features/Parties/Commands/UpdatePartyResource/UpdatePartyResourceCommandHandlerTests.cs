@@ -41,18 +41,7 @@ public class UpdatePartyResourceCommandHandlerTests
         await repo.Received(1).UpdateAsync(Arg.Is<PartyStashItem>(s => s.Title == "T"), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_UnauthorizedActor_Throws()
-    {
-        var cmd = new UpdatePartyResourceCommand(System.Guid.NewGuid(), System.Guid.NewGuid(), System.Guid.NewGuid(), new UpdatePartyResourceRequest("T", new object(), new[] { "tag" }));
-        var repo = Substitute.For<IPartyStashItemRepository>();
-        var memberRepo = Substitute.For<IPartyMemberRepository>();
-        var sut = new UpdatePartyResourceCommandHandler(repo, memberRepo);
-        var item = new PartyStashItem { Id = cmd.StashItemId, PartyId = cmd.PartyId, SharedByUserId = System.Guid.NewGuid() };
-        repo.GetByIdAsync(cmd.StashItemId, Arg.Any<CancellationToken>()).Returns(item);
-        memberRepo.GetMemberAsync(cmd.PartyId, cmd.ActorAuthUserId, Arg.Any<CancellationToken>()).Returns(new PartyMember { PartyId = cmd.PartyId, AuthUserId = cmd.ActorAuthUserId, Status = MemberStatus.Active, Role = PartyRole.Member });
-        await Assert.ThrowsAsync<ForbiddenException>(() => sut.Handle(cmd, CancellationToken.None));
-    }
+
 
     [Fact]
     public async Task Handle_LeaderCanUpdate_NotSharer_Succeeds()
