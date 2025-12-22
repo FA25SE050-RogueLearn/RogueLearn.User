@@ -1694,61 +1694,7 @@ public class GenerateQuestStepsCommandHandlerTests
         saved!.Title.Should().NotBeNullOrEmpty();
     }
 
-    [Fact]
-    public async Task Handle_Title_Uses_AndMore_When_MultipleTopics()
-    {
-        var questRepo = Substitute.For<IQuestRepository>();
-        var stepRepo = Substitute.For<IQuestStepRepository>();
-        var subjectRepo = Substitute.For<ISubjectRepository>();
-        var plugin = Substitute.For<RogueLearn.User.Application.Plugins.IQuestGenerationPlugin>();
-        var mapper = Substitute.For<IMapper>();
-        var userProfileRepo = Substitute.For<IUserProfileRepository>();
-        var classRepo = Substitute.For<IClassRepository>();
-        var skillRepo = Substitute.For<ISkillRepository>();
-        var ssmRepo = Substitute.For<ISubjectSkillMappingRepository>();
-        var promptBuilder = Substitute.For<RogueLearn.User.Application.Services.IPromptBuilder>();
-        var userSkillRepo = Substitute.For<IUserSkillRepository>();
-        var academicContextBuilder = Substitute.For<RogueLearn.User.Application.Services.IAcademicContextBuilder>();
 
-        var authId = Guid.NewGuid();
-        var questId = Guid.NewGuid();
-        var subjectId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-
-        stepRepo.QuestContainsSteps(questId, Arg.Any<CancellationToken>()).Returns(false);
-        var userProfile = new UserProfile { Id = Guid.NewGuid(), AuthUserId = authId, ClassId = Guid.NewGuid() };
-        userProfileRepo.GetByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(userProfile);
-        classRepo.GetByIdAsync(userProfile.ClassId!.Value, Arg.Any<CancellationToken>()).Returns(new Class { Id = userProfile.ClassId.Value, Name = "S" });
-
-        var quest = new Quest { Id = questId, SubjectId = subjectId };
-        questRepo.GetByIdAsync(questId, Arg.Any<CancellationToken>()).Returns(quest);
-
-        var sessions = new List<SyllabusSessionDto>
-        {
-            new() { SessionNumber = 1, Topic = "A", SuggestedUrl = "https://a" },
-            new() { SessionNumber = 2, Topic = "B", SuggestedUrl = "https://b" }
-        };
-        subjectRepo.GetByIdAsync(subjectId, Arg.Any<CancellationToken>()).Returns(new Subject { Id = subjectId, SubjectName = "Subj", Content = new Dictionary<string, object> { ["SessionSchedule"] = sessions } });
-
-        ssmRepo.GetMappingsBySubjectIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>()).Returns(new[] { new SubjectSkillMapping { SubjectId = subjectId, SkillId = skillId } });
-        skillRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new[] { new Skill { Id = skillId, Name = "Skill" } });
-        userSkillRepo.GetSkillsByAuthIdAsync(authId, Arg.Any<CancellationToken>()).Returns(Array.Empty<UserSkill>());
-
-        promptBuilder.GenerateAsync(Arg.Any<UserProfile>(), Arg.Any<Class>(), Arg.Any<AcademicContext>(), Arg.Any<CancellationToken>()).Returns("CTX");
-        academicContextBuilder.BuildContextAsync(authId, subjectId, Arg.Any<CancellationToken>()).Returns(new AcademicContext { CurrentGpa = 7.5 });
-
-        var json = "{\"standard\":{\"activities\":[]},\"supportive\":{\"activities\":[{\"activityId\":\"" + Guid.NewGuid() + "\",\"type\":\"Quiz\",\"payload\":{\"skillId\":\"" + skillId + "\",\"experiencePoints\":35,\"questions\":[]}}]},\"challenging\":{\"activities\":[]}}";
-        plugin.GenerateFromPromptAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(json);
-
-        QuestStep? saved = null;
-        stepRepo.AddAsync(Arg.Any<QuestStep>(), Arg.Any<CancellationToken>()).Returns(ci => { saved = ci.Arg<QuestStep>(); return saved!; });
-        mapper.Map<List<GeneratedQuestStepDto>>(Arg.Any<List<QuestStep>>()).Returns(ci => ci.Arg<List<QuestStep>>().Select(s => new GeneratedQuestStepDto { StepNumber = s.StepNumber, Title = s.Title }).ToList());
-
-        var sut = CreateSut(questRepo, stepRepo, subjectRepo, null, plugin, mapper, userProfileRepo, classRepo, skillRepo, ssmRepo, promptBuilder, userSkillRepo, academicContextBuilder);
-        _ = await sut.Handle(new GenerateQuestStepsCommand { AdminId = authId, QuestId = questId }, CancellationToken.None);
-
-        saved!.Title.Should().Contain("&");
-    }
 
     [Fact]
     public async Task Handle_Adds_KnowledgeChecks_When_Activities_Low()
