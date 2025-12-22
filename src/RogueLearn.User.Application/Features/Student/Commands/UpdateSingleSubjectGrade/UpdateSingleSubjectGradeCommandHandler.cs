@@ -86,10 +86,14 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         }
 
         // 4. Update Properties
+        // Logic Change: We trust the user-provided status explicitly.
+        // We do NOT override it based on the grade (e.g. 9.0 but Failed due to attendance is valid).
+
         record.Grade = request.Grade.ToString("F1");
-        record.Status = request.Status;
+        record.Status = request.Status; // Trust the status from the command
         record.CreditsEarned = request.Status == SubjectEnrollmentStatus.Passed ? subject.Credits : 0;
 
+        // Handle Academic Year updates
         if (!string.IsNullOrWhiteSpace(request.AcademicYear))
         {
             record.AcademicYear = request.AcademicYear;
@@ -99,9 +103,19 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
             record.AcademicYear = $"{DateTime.UtcNow.Year}";
         }
 
+        // Handle completion date logic
         if (request.Status == SubjectEnrollmentStatus.Passed)
         {
-            record.CompletedAt = DateTimeOffset.UtcNow;
+            // If it wasn't passed before, set completed date
+            if (!record.CompletedAt.HasValue)
+            {
+                record.CompletedAt = DateTimeOffset.UtcNow;
+            }
+        }
+        else
+        {
+            // If status changed to NotPassed/Studying, clear completion date
+            record.CompletedAt = null;
         }
 
         // 5. Persist Changes
@@ -124,32 +138,30 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
             xpSummary = await AwardXpForSubjectAsync(request.AuthUserId, subject, request.Grade, cancellationToken);
         }
 
-        // 7. OPTIMIZED: Update Difficulty Directly (Skipping full AI analysis)
-        // Find the Master Quest associated with this subject
+        // 7. Update Difficulty Directly
         var masterQuest = await _questRepository.GetActiveQuestBySubjectIdAsync(subject.Id, cancellationToken);
 
         if (masterQuest != null)
         {
-            // Find user's existing attempt
             var attempt = await _userQuestAttemptRepository.FirstOrDefaultAsync(
                 a => a.AuthUserId == request.AuthUserId && a.QuestId == masterQuest.Id,
                 cancellationToken);
 
-            // Calculate new difficulty based purely on the new grade
-            // NOTE: We pass -1.0 for proficiency to skip prerequisite checks, assuming the grade is the primary signal now
+            // Calculate difficulty.
+            // IMPORTANT: The resolver logic needs to handle cases where High Grade + NotPassed = Supportive/Standard (Retake)
+            // We pass the updated record which now has the explicit user status.
             var difficultyInfo = _difficultyResolver.ResolveDifficulty(record, -1.0, subject);
             var newDifficulty = difficultyInfo.ExpectedDifficulty;
 
             if (attempt == null)
             {
-                // Create new attempt with correct difficulty
                 attempt = new UserQuestAttempt
                 {
                     AuthUserId = request.AuthUserId,
                     QuestId = masterQuest.Id,
                     Status = QuestAttemptStatus.NotStarted,
                     AssignedDifficulty = newDifficulty,
-                    Notes = difficultyInfo.DifficultyReason, // e.g. "Excellent score (9.0) - advanced content"
+                    Notes = difficultyInfo.DifficultyReason,
                     StartedAt = DateTimeOffset.UtcNow
                 };
                 await _userQuestAttemptRepository.AddAsync(attempt, cancellationToken);
@@ -157,25 +169,35 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
             }
             else
             {
-                // Update existing attempt if difficulty changed
-                if (attempt.AssignedDifficulty != newDifficulty)
+                // Logic change: Always allow update if status changed, even if difficulty string is same (to update reason)
+                bool difficultyChanged = attempt.AssignedDifficulty != newDifficulty;
+
+                // If the user failed (NotPassed), we might want to reset their progress even if difficulty stays "Standard"
+                // to force a retake flow. However, usually difficulty change triggers the reset.
+                // Let's stick to difficulty change triggering reset for now to be safe.
+
+                if (difficultyChanged)
                 {
-                    _logger.LogInformation("Adjusting difficulty for {SubjectCode} from {Old} to {New} based on grade update.",
+                    _logger.LogInformation("Adjusting difficulty for {SubjectCode} from {Old} to {New} based on grade/status update.",
                         subject.SubjectCode, attempt.AssignedDifficulty, newDifficulty);
 
-                    // If they are downgrading or upgrading, reset step progress to align with new track
                     await _stepProgressRepository.DeleteByAttemptIdAsync(attempt.Id, cancellationToken);
 
                     attempt.AssignedDifficulty = newDifficulty;
                     attempt.Notes = $"Difficulty updated on {DateTime.UtcNow:yyyy-MM-dd}. Reason: {difficultyInfo.DifficultyReason}";
 
-                    // Reset status to allow re-attempting on new track
                     if (attempt.Status == QuestAttemptStatus.Completed)
                     {
                         attempt.Status = QuestAttemptStatus.InProgress;
                     }
-                    attempt.CurrentStepId = null; // Will be re-set when they click Start/Resume
+                    attempt.CurrentStepId = null;
 
+                    await _userQuestAttemptRepository.UpdateAsync(attempt, cancellationToken);
+                }
+                else
+                {
+                    // Update notes/reason even if difficulty didn't change
+                    attempt.Notes = $"Grade updated. Reason: {difficultyInfo.DifficultyReason}";
                     await _userQuestAttemptRepository.UpdateAsync(attempt, cancellationToken);
                 }
             }
