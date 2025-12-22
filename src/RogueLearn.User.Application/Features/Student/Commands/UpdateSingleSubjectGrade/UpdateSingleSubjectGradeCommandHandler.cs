@@ -1,7 +1,6 @@
 ﻿using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Application.Exceptions;
-using RogueLearn.User.Application.Features.Quests.Commands.GenerateQuestLineFromCurriculum;
 using RogueLearn.User.Application.Features.Student.Commands.ProcessAcademicRecord;
 using RogueLearn.User.Application.Features.UserSkillRewards.Commands.IngestXpEvent;
 using RogueLearn.User.Application.Services;
@@ -17,6 +16,10 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
     private readonly ISubjectRepository _subjectRepository;
     private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly IGradeExperienceCalculator _gradeExperienceCalculator;
+    private readonly IQuestRepository _questRepository;
+    private readonly IUserQuestAttemptRepository _userQuestAttemptRepository;
+    private readonly IQuestDifficultyResolver _difficultyResolver;
+    private readonly IUserQuestStepProgressRepository _stepProgressRepository;
     private readonly IMediator _mediator;
     private readonly ILogger<UpdateSingleSubjectGradeCommandHandler> _logger;
 
@@ -25,6 +28,10 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         ISubjectRepository subjectRepository,
         ISubjectSkillMappingRepository subjectSkillMappingRepository,
         IGradeExperienceCalculator gradeExperienceCalculator,
+        IQuestRepository questRepository,
+        IUserQuestAttemptRepository userQuestAttemptRepository,
+        IQuestDifficultyResolver difficultyResolver,
+        IUserQuestStepProgressRepository stepProgressRepository,
         IMediator mediator,
         ILogger<UpdateSingleSubjectGradeCommandHandler> logger)
     {
@@ -32,6 +39,10 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         _subjectRepository = subjectRepository;
         _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _gradeExperienceCalculator = gradeExperienceCalculator;
+        _questRepository = questRepository;
+        _userQuestAttemptRepository = userQuestAttemptRepository;
+        _difficultyResolver = difficultyResolver;
+        _stepProgressRepository = stepProgressRepository;
         _mediator = mediator;
         _logger = logger;
     }
@@ -54,7 +65,6 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         }
 
         // 3. Find or Create Student Semester Subject Record
-        // Note: Using FindAsync because GetByIdAsync expects the record ID, not composite key
         var existingRecords = await _semesterSubjectRepository.FindAsync(
             ss => ss.AuthUserId == request.AuthUserId && ss.SubjectId == request.SubjectId,
             cancellationToken);
@@ -80,14 +90,12 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         record.Status = request.Status;
         record.CreditsEarned = request.Status == SubjectEnrollmentStatus.Passed ? subject.Credits : 0;
 
-        // If updating an existing record, update AcademicYear only if provided, otherwise keep existing
         if (!string.IsNullOrWhiteSpace(request.AcademicYear))
         {
             record.AcademicYear = request.AcademicYear;
         }
         else if (isNewRecord)
         {
-            // Default for new records if not provided
             record.AcademicYear = $"{DateTime.UtcNow.Year}";
         }
 
@@ -109,28 +117,69 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         _logger.LogInformation("Successfully updated grade record for {SubjectCode}. New Grade: {Grade}, Status: {Status}",
             subject.SubjectCode, record.Grade, record.Status);
 
-        // 6. Award XP if Passed (Reusing logic from bulk import via shared helper or direct implementation)
-        // Since this is a single update, we can implement the logic directly here for clarity
+        // 6. Award XP if Passed
         XpAwardSummary? xpSummary = null;
-
         if (record.Status == SubjectEnrollmentStatus.Passed)
         {
             xpSummary = await AwardXpForSubjectAsync(request.AuthUserId, subject, request.Grade, cancellationToken);
         }
 
-        // 7. Trigger Quest Line Update
-        // This ensures the quest for this subject (if any) gets its difficulty/status updated
-        // and unlocks any subsequent quests dependent on this one.
-        var questLineCommand = new GenerateQuestLine
-        {
-            AuthUserId = request.AuthUserId,
-            // We pass null for analysis report as we are doing a single update, 
-            // the difficulty resolver will use standard logic or existing cached analysis if applicable
-            AiAnalysisReport = null
-        };
+        // 7. OPTIMIZED: Update Difficulty Directly (Skipping full AI analysis)
+        // Find the Master Quest associated with this subject
+        var masterQuest = await _questRepository.GetActiveQuestBySubjectIdAsync(subject.Id, cancellationToken);
 
-        // Fire and forget or await? Await ensures consistency before returning.
-        await _mediator.Send(questLineCommand, cancellationToken);
+        if (masterQuest != null)
+        {
+            // Find user's existing attempt
+            var attempt = await _userQuestAttemptRepository.FirstOrDefaultAsync(
+                a => a.AuthUserId == request.AuthUserId && a.QuestId == masterQuest.Id,
+                cancellationToken);
+
+            // Calculate new difficulty based purely on the new grade
+            // NOTE: We pass -1.0 for proficiency to skip prerequisite checks, assuming the grade is the primary signal now
+            var difficultyInfo = _difficultyResolver.ResolveDifficulty(record, -1.0, subject);
+            var newDifficulty = difficultyInfo.ExpectedDifficulty;
+
+            if (attempt == null)
+            {
+                // Create new attempt with correct difficulty
+                attempt = new UserQuestAttempt
+                {
+                    AuthUserId = request.AuthUserId,
+                    QuestId = masterQuest.Id,
+                    Status = QuestAttemptStatus.NotStarted,
+                    AssignedDifficulty = newDifficulty,
+                    Notes = difficultyInfo.DifficultyReason, // e.g. "Excellent score (9.0) - advanced content"
+                    StartedAt = DateTimeOffset.UtcNow
+                };
+                await _userQuestAttemptRepository.AddAsync(attempt, cancellationToken);
+                _logger.LogInformation("Created new quest attempt for {SubjectCode} with difficulty {Difficulty}", subject.SubjectCode, newDifficulty);
+            }
+            else
+            {
+                // Update existing attempt if difficulty changed
+                if (attempt.AssignedDifficulty != newDifficulty)
+                {
+                    _logger.LogInformation("Adjusting difficulty for {SubjectCode} from {Old} to {New} based on grade update.",
+                        subject.SubjectCode, attempt.AssignedDifficulty, newDifficulty);
+
+                    // If they are downgrading or upgrading, reset step progress to align with new track
+                    await _stepProgressRepository.DeleteByAttemptIdAsync(attempt.Id, cancellationToken);
+
+                    attempt.AssignedDifficulty = newDifficulty;
+                    attempt.Notes = $"Difficulty updated on {DateTime.UtcNow:yyyy-MM-dd}. Reason: {difficultyInfo.DifficultyReason}";
+
+                    // Reset status to allow re-attempting on new track
+                    if (attempt.Status == QuestAttemptStatus.Completed)
+                    {
+                        attempt.Status = QuestAttemptStatus.InProgress;
+                    }
+                    attempt.CurrentStepId = null; // Will be re-set when they click Start/Resume
+
+                    await _userQuestAttemptRepository.UpdateAsync(attempt, cancellationToken);
+                }
+            }
+        }
 
         return new UpdateSingleSubjectGradeResponse
         {
@@ -149,8 +198,6 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         CancellationToken cancellationToken)
     {
         var summary = new XpAwardSummary();
-
-        // Get mappings
         var mappings = await _subjectSkillMappingRepository.FindAsync(m => m.SubjectId == subject.Id, cancellationToken);
         if (!mappings.Any()) return summary;
 
@@ -160,8 +207,6 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
         foreach (var mapping in mappings)
         {
             var xpAmount = _gradeExperienceCalculator.CalculateXpAward(grade, semester, mapping.RelevanceWeight);
-
-            // Use IngestXpEventCommand for idempotency
             var response = await _mediator.Send(new IngestXpEventCommand
             {
                 AuthUserId = authUserId,
@@ -169,7 +214,7 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
                 Points = xpAmount,
                 SourceService = "ManualGradeUpdate",
                 SourceType = "GradeUpdate",
-                SourceId = subject.Id, // Idempotency key
+                SourceId = subject.Id,
                 Reason = $"Manual grade update: {subject.SubjectCode} ({grade:F1}/10.0)"
             }, cancellationToken);
 
