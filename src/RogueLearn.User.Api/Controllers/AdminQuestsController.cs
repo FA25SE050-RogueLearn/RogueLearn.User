@@ -93,7 +93,7 @@ public class AdminQuestsController : ControllerBase
     /// Updates the lifecycle status of a Master Quest (Draft -> Published -> Archived).
     /// Only Published quests are generated for students.
     /// </summary>
-    [HttpPatch("{id:guid}/status")]
+    [HttpPut("{id:guid}/status")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
