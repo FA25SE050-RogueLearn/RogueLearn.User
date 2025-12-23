@@ -10,4 +10,5 @@ public interface IMeetingRepository
     Task<IEnumerable<Meeting>> GetByGuildAsync(Guid guildId, CancellationToken cancellationToken = default);
     Task<Meeting> AddAsync(Meeting entity, CancellationToken cancellationToken = default);
     Task UpdateAsync(Meeting entity, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid meetingId, CancellationToken cancellationToken = default);
 }

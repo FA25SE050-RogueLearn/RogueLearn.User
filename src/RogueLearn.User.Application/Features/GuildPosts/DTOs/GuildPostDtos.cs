@@ -13,6 +13,7 @@ public record GuildPostDto
     public Dictionary<string, object>? Attachments { get; init; }
     public bool IsPinned { get; init; }
     public bool IsLocked { get; init; }
+    public bool IsAnnouncement { get; init; }
     public GuildPostStatus Status { get; init; }
     public int CommentCount { get; init; }
     public int LikeCount { get; init; }

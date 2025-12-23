@@ -300,6 +300,36 @@ public class GuildPostsController : ControllerBase
         return NoContent();
     }
 
+
+
+    /// <summary>
+    /// Set a guild post as announcement.
+    /// </summary>
+    [HttpPut("~/api/guilds/{guildId:guid}/posts/{postId:guid}/announce")]
+    [GuildMasterOnly("guildId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetAnnouncementPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new SetAnnouncementPostCommand(guildId, postId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Unset a guild post as announcement.
+    /// </summary>
+    [HttpPut("~/api/guilds/{guildId:guid}/posts/{postId:guid}/unannounce")]
+    [GuildMasterOnly("guildId")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UnsetAnnouncementPost([FromRoute] Guid guildId, [FromRoute] Guid postId, CancellationToken cancellationToken)
+    {
+        await _mediator.Send(new UnsetAnnouncementPostCommand(guildId, postId), cancellationToken);
+        return NoContent();
+    }
+
     /// <summary>
     /// Unpin a guild post.
     /// </summary>
