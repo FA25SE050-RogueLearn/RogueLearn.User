@@ -25,9 +25,6 @@ public class UserQuestAttempt : BaseEntity
     [Column("completed_at")]
     public DateTimeOffset? CompletedAt { get; set; }
 
-    [Column("abandoned_at")]
-    public DateTimeOffset? AbandonedAt { get; set; }
-
     [Column("total_experience_earned")]
     public int TotalExperienceEarned { get; set; } = 0;
 

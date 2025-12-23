@@ -39,6 +39,5 @@ public class SkillQuestDto
 {
     public Guid QuestId { get; set; }
     public string Title { get; set; } = string.Empty;
-    public int XpReward { get; set; }
     public string Type { get; set; } = string.Empty; // "Quest" or "Boss Fight"
 }
