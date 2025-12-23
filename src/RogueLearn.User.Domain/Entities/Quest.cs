@@ -23,12 +23,6 @@ public class Quest : BaseEntity
     [JsonConverter(typeof(StringEnumConverter))]
     public DifficultyLevel DifficultyLevel { get; set; }
 
-    [Column("estimated_duration_minutes")]
-    public int? EstimatedDurationMinutes { get; set; }
-
-    [Column("experience_points_reward")]
-    public int ExperiencePointsReward { get; set; } = 0;
-
     [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
     public QuestStatus Status { get; set; } = QuestStatus.Draft;
@@ -46,9 +40,6 @@ public class Quest : BaseEntity
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     [Column("is_recommended")]
     public bool IsRecommended { get; set; } = false;
-
-    [Column("recommendation_reason")]
-    public string? RecommendationReason { get; set; }
 
     [Column("expected_difficulty")]
     public string ExpectedDifficulty { get; set; } = "Standard";

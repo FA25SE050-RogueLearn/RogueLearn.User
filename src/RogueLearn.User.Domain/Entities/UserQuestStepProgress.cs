@@ -25,18 +25,6 @@ public class UserQuestStepProgress : BaseEntity
     [Column("completed_at")]
     public DateTimeOffset? CompletedAt { get; set; }
 
-    [Column("submission_data")]
-    public string? SubmissionData { get; set; }
-
-    [Column("feedback")]
-    public string? Feedback { get; set; }
-
-    [Column("experience_earned")]
-    public int ExperienceEarned { get; set; } = 0;
-
-    [Column("attempts_count")]
-    public int AttemptsCount { get; set; } = 0;
-
     [Column("completed_activity_ids")]
     public Guid[]? CompletedActivityIds { get; set; }
 

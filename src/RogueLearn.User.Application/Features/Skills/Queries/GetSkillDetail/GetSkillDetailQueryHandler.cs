@@ -151,7 +151,6 @@ public class GetSkillDetailQueryHandler : IRequestHandler<GetSkillDetailQuery, S
             {
                 QuestId = q.Id,
                 Title = q.Title,
-                XpReward = q.ExperiencePointsReward,
                 Type = "Quest"
             });
         }

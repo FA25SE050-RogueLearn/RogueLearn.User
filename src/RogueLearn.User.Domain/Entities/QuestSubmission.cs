@@ -27,17 +27,11 @@ public class QuestSubmission : BaseEntity
     [Column("submitted_at")]
     public DateTimeOffset SubmittedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    [Column("graded_at")]
-    public DateTimeOffset? GradedAt { get; set; }
-
     [Column("grade")]
     public decimal? Grade { get; set; }
 
     [Column("max_grade")]
     public decimal MaxGrade { get; set; }
-
-    [Column("feedback")]
-    public string? Feedback { get; set; }
 
     [Column("is_passed")]
     public bool? IsPassed { get; set; }

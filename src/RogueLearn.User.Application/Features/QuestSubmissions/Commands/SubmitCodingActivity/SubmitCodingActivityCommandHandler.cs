@@ -81,7 +81,6 @@ public class SubmitCodingActivityCommandHandler : IRequestHandler<SubmitCodingAc
             Grade = score,
             MaxGrade = 100,
             IsPassed = isPassed,
-            Feedback = feedback,
             SubmittedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
