@@ -11,6 +11,12 @@ public class AdminOnlyAttribute : Attribute, IAsyncAuthorizationFilter
 {
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
+        // Allow preflight OPTIONS requests to pass through for CORS
+        if (context.HttpContext.Request.Method.Equals("OPTIONS", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         // Check if user is authenticated
         if (!context.HttpContext.User.Identity?.IsAuthenticated ?? true)
         {
@@ -38,7 +44,7 @@ public class AdminOnlyAttribute : Attribute, IAsyncAuthorizationFilter
         {
             // Get user's roles from database
             var userRoles = await userRoleRepository.GetRolesForUserAsync(authUserId, CancellationToken.None);
-            
+
             // Check if user has any roles
             if (!userRoles.Any())
             {
