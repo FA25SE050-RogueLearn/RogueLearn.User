@@ -59,3 +59,31 @@ public class UnlockGuildPostCommandHandler : IRequestHandler<UnlockGuildPostComm
         return Unit.Value;
     }
 }
+
+public class SetAnnouncementPostCommandHandler : IRequestHandler<SetAnnouncementPostCommand, Unit>
+{
+    private readonly IGuildPostRepository _repo;
+    public SetAnnouncementPostCommandHandler(IGuildPostRepository repo) => _repo = repo;
+    public async Task<Unit> Handle(SetAnnouncementPostCommand request, CancellationToken cancellationToken)
+    {
+        var post = await _repo.GetByIdAsync(request.GuildId, request.PostId, cancellationToken) ?? throw new NotFoundException("GuildPost", request.PostId.ToString());
+        post.IsAnnouncement = true;
+        post.UpdatedAt = DateTimeOffset.UtcNow;
+        await _repo.UpdateAsync(post, cancellationToken);
+        return Unit.Value;
+    }
+}
+
+public class UnsetAnnouncementPostCommandHandler : IRequestHandler<UnsetAnnouncementPostCommand, Unit>
+{
+    private readonly IGuildPostRepository _repo;
+    public UnsetAnnouncementPostCommandHandler(IGuildPostRepository repo) => _repo = repo;
+    public async Task<Unit> Handle(UnsetAnnouncementPostCommand request, CancellationToken cancellationToken)
+    {
+        var post = await _repo.GetByIdAsync(request.GuildId, request.PostId, cancellationToken) ?? throw new NotFoundException("GuildPost", request.PostId.ToString());
+        post.IsAnnouncement = false;
+        post.UpdatedAt = DateTimeOffset.UtcNow;
+        await _repo.UpdateAsync(post, cancellationToken);
+        return Unit.Value;
+    }
+}
