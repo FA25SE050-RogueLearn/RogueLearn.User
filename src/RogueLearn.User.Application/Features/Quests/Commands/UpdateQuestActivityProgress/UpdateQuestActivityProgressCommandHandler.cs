@@ -136,8 +136,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                             AuthUserId = request.AuthUserId,
                             SkillId = activitySkillId.Value,
                             Points = xpGained,
-                            SourceService = "QuestSystem",
-                            SourceType = "ActivityComplete",
+                            // REVERTED: Using QuestComplete enum value string
+                            SourceService = SkillRewardSourceType.QuestComplete.ToString(),
                             SourceId = request.ActivityId,
                             Reason = $"Completed: {activityTitle ?? "Quest Activity"}"
                         }, cancellationToken);
@@ -157,8 +157,8 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                                     AuthUserId = request.AuthUserId,
                                     SkillId = primaryMapping.SkillId,
                                     Points = xpGained,
-                                    SourceService = "QuestSystem",
-                                    SourceType = "ActivityComplete",
+                                    // REVERTED: Using QuestComplete enum value string
+                                    SourceService = SkillRewardSourceType.QuestComplete.ToString(),
                                     SourceId = request.ActivityId,
                                     Reason = $"Completed: {activityTitle ?? "Quest Activity"} (Primary Skill Fallback)"
                                 }, cancellationToken);
@@ -168,7 +168,7 @@ public class UpdateQuestActivityProgressCommandHandler : IRequestHandler<UpdateQ
                 }
             }
 
- 
+
             bool isCompleteByCount = CheckIfStepIsComplete(step, completedList);
 
             if (isQuiz || isCompleteByCount)

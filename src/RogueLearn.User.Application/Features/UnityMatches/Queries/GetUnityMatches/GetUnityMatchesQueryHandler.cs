@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RogueLearn.User.Domain.Entities;
+using RogueLearn.User.Domain.Enums; // For SkillRewardSourceType
 using RogueLearn.User.Domain.Interfaces;
 
 namespace RogueLearn.User.Application.Features.UnityMatches.Queries.GetUnityMatches;
@@ -13,6 +14,7 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
     private readonly IGameSessionRepository _gameSessionRepository;
     private readonly IMatchPlayerSummaryRepository _matchPlayerSummaryRepository;
     private readonly IUserSkillRewardRepository _userSkillRewardRepository;
+    private readonly ISkillRepository _skillRepository; // Added dependency
     private readonly ILogger<GetUnityMatchesQueryHandler> _logger;
 
     public GetUnityMatchesQueryHandler(
@@ -20,12 +22,14 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
         IGameSessionRepository gameSessionRepository,
         IMatchPlayerSummaryRepository matchPlayerSummaryRepository,
         IUserSkillRewardRepository userSkillRewardRepository,
+        ISkillRepository skillRepository, // Injected
         ILogger<GetUnityMatchesQueryHandler> logger)
     {
         _matchResultRepository = matchResultRepository;
         _gameSessionRepository = gameSessionRepository;
         _matchPlayerSummaryRepository = matchPlayerSummaryRepository;
         _userSkillRewardRepository = userSkillRewardRepository;
+        _skillRepository = skillRepository; // Assigned
         _logger = logger;
     }
 
@@ -121,15 +125,24 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
                 {
                     try
                     {
+                        // Use CodeBattle enum because Unity matches are CodeBattle
                         var rewards = await _userSkillRewardRepository.GetBySourceAllAsync(
                             rewardUserId.Value,
-                            "UserService",
+                            SkillRewardSourceType.CodeBattle,
                             m.Id,
                             cancellationToken: cancellationToken);
 
                         if (rewards != null && rewards.Any())
                         {
-                            matchData = AttachRewards(matchData, rewards);
+                            // Fetch skill names needed for these rewards
+                            var skillIds = rewards.Select(r => r.SkillId).Distinct().ToList();
+                            // In a real optimized scenario, we'd use GetByIdsAsync, but assuming GetAllAsync is cached/fast or we iterate.
+                            // Since we don't have GetByIdsAsync in ISkillRepository interface based on context, we might fetch one by one or assume small set.
+                            // But usually GenericRepository has GetAll. Let's use GetAll and filter in memory if GetByIds isn't available.
+                            var allSkills = await _skillRepository.GetAllAsync(cancellationToken);
+                            var skillMap = allSkills.Where(s => skillIds.Contains(s.Id)).ToDictionary(s => s.Id, s => s.Name);
+
+                            matchData = AttachRewards(matchData, rewards, skillMap);
                         }
                         else
                         {
@@ -162,16 +175,17 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
         return true;
     }
 
-    private static string AttachRewards(string matchData, IEnumerable<UserSkillReward> rewards)
+    private static string AttachRewards(string matchData, IEnumerable<UserSkillReward> rewards, Dictionary<Guid, string> skillMap)
     {
         var node = JsonNode.Parse(string.IsNullOrWhiteSpace(matchData) ? "{}" : matchData) as JsonObject ?? new JsonObject();
         var xpArr = new JsonArray();
         foreach (var r in rewards)
         {
+            var skillName = skillMap.TryGetValue(r.SkillId, out var name) ? name : "Unknown Skill";
             var obj = new JsonObject
             {
                 ["skillId"] = r.SkillId.ToString(),
-                ["skillName"] = r.SkillName,
+                ["skillName"] = skillName,
                 ["pointsAwarded"] = r.PointsAwarded
             };
             xpArr.Add(obj);

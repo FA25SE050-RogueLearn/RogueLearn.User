@@ -472,8 +472,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
                     AuthUserId = authUserId,
                     SkillId = mapping.SkillId,
                     Points = xpAmount,
-                    SourceService = "AcademicRecord",
-                    SourceType = "GradeImport",
+                    SourceService = SkillRewardSourceType.AcademicRecord.ToString(),
                     SourceId = subject.Id,  // Idempotency key
                     Reason = $"Academic grade: {subject.SubjectCode} ({grade:F1}/10.0) - {tierInfo.Description}"
                 }, cancellationToken);

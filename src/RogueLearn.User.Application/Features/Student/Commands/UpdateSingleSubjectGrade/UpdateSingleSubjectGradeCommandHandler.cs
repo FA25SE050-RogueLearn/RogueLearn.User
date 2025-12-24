@@ -234,8 +234,7 @@ public class UpdateSingleSubjectGradeCommandHandler : IRequestHandler<UpdateSing
                 AuthUserId = authUserId,
                 SkillId = mapping.SkillId,
                 Points = xpAmount,
-                SourceService = "ManualGradeUpdate",
-                SourceType = "GradeUpdate",
+                SourceService = SkillRewardSourceType.AcademicRecord.ToString(),
                 SourceId = subject.Id,
                 Reason = $"Manual grade update: {subject.SubjectCode} ({grade:F1}/10.0)"
             }, cancellationToken);

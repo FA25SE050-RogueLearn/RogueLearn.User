@@ -4,8 +4,8 @@ public enum SkillRewardSourceType
 {
     QuestComplete,
     BossFight,
-    PartyActivity,
-    GuildActivity,
-    MeetingParticipation,
-    CodeChallenge
+    CodeChallenge,
+    RogueLearn,
+    CodeBattle,
+    AcademicRecord
 }

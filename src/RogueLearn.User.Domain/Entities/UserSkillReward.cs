@@ -12,18 +12,15 @@ public class UserSkillReward : BaseEntity
     [Column("auth_user_id")]
     public Guid AuthUserId { get; set; }
 
+    // Renamed column in DB from source_type -> source_service
+    // The C# property 'SourceService' now holds the ENUM value.
+    // The original string 'source_service' column is gone.
     [Column("source_service")]
-    public string SourceService { get; set; } = string.Empty;
-
-    [Column("source_type")]
     [JsonConverter(typeof(StringEnumConverter))]
-    public SkillRewardSourceType SourceType { get; set; }
+    public SkillRewardSourceType SourceService { get; set; }
 
     [Column("source_id")]
     public Guid? SourceId { get; set; }
-
-    [Column("skill_name")]
-    public string SkillName { get; set; } = string.Empty;
 
     [Column("skill_id")]
     public Guid SkillId { get; set; }
