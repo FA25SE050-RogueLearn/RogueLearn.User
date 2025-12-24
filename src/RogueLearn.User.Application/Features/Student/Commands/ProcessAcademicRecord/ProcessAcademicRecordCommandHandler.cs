@@ -236,7 +236,7 @@ public class ProcessAcademicRecordCommandHandler : IRequestHandler<ProcessAcadem
         {
             if (IsExcludedSubject(subjectRecord))
             {
-                _logger.LogInformation("🚫 Skipping excluded subject: {Code}", subjectRecord.SubjectCode);
+                _logger.LogInformation(" Skipping excluded subject: {Code}", subjectRecord.SubjectCode);
                 recordsIgnored++;
                 continue;
             }

@@ -76,6 +76,7 @@ public class GenerateQuestStepsCommandHandler : IRequestHandler<GenerateQuestSte
         if (questHasSteps)
         {
             _logger.LogWarning("Quest {QuestId} already has steps. Proceeding (might create duplicates if not cleared).", request.QuestId);
+            throw new BadRequestException("Quest has already have quest steps");
         }
 
         var quest = await _questRepository.GetByIdAsync(request.QuestId, cancellationToken)
