@@ -37,7 +37,8 @@ try
     Console.WriteLine($"[DEBUG] AI Provider from ENV: {Environment.GetEnvironmentVariable("AI__Provider")}");
     Console.WriteLine($"[DEBUG] Google Model from ENV: {Environment.GetEnvironmentVariable("AI__Google__Model")}");
     Console.WriteLine($"[DEBUG] Google ApiKey from ENV: {(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AI__Google__ApiKey")) ? "YES" : "NO")}");
-
+    Console.WriteLine($"[DEBUG] Groq ApiKey from ENV: {Environment.GetEnvironmentVariable("GROQ_API_KEY")}");
+    Console.WriteLine($"[DEBUG] Groq BaseUrl from ENV: {Environment.GetEnvironmentVariable("GROQ_BASE_URL")}");
 
     // Check if IConfiguration can read them
     var config = builder.Configuration;
@@ -45,6 +46,9 @@ try
     Console.WriteLine($"[DEBUG] Google Model from IConfiguration: {config["AI:Google:Model"]}");
     var googleApiKey = config["AI:Google:ApiKey"];
     Console.WriteLine($"[DEBUG] Google ApiKey from IConfiguration: {(!string.IsNullOrEmpty(googleApiKey) ? "YES (Length: " + googleApiKey?.Length + ")" : "NO")}");
+
+    var groqApiKey = config["GROQ_API_KEY"];
+    Console.WriteLine($"[DEBUG] Groq ApiKey from IConfiguration: {(!string.IsNullOrEmpty(groqApiKey) ? "YES (Length: " + groqApiKey?.Length + ")" : "NO")}");
     // --- END DEBUGGING ---
 
     // Add Serilog to the host
