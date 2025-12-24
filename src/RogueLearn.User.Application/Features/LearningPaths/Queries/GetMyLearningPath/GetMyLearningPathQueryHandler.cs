@@ -254,7 +254,6 @@ public class GetMyLearningPathQueryHandler : IRequestHandler<GetMyLearningPathQu
                         ExpectedDifficulty = displayDifficulty,
                         DifficultyReason = diffReason,
                         IsRecommended = masterQuest.IsRecommended,
-                        RecommendationReason = masterQuest.RecommendationReason,
                         SubjectGrade = studentRecord?.Grade,
                         SubjectStatus = studentRecord?.Status.ToString() ?? "NotStarted",
                         LearningPathId = virtualPathId,

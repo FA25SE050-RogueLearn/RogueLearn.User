@@ -21,9 +21,6 @@ public class QuestStep : BaseEntity
     [Column("content")]
     public object? Content { get; set; }
 
-    [Column("validation_criteria")]
-    public string? ValidationCriteria { get; set; }
-
     [Column("experience_points")]
     public int ExperiencePoints { get; set; } = 0;
 
