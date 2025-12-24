@@ -50,6 +50,32 @@ public class EnsureMasterQuestsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CreatesMissingMasterQuest_ForSubjectsWithoutQuest()
+    {
+        var subjectRepo = Substitute.For<ISubjectRepository>();
+        var questRepo = Substitute.For<IQuestRepository>();
+        var sut = CreateSut(subjectRepo, questRepo);
+
+        var s1 = new Subject { Id = Guid.NewGuid(), SubjectCode = "MTH101", SubjectName = "Math", Description = "Desc" };
+        var s2 = new Subject { Id = Guid.NewGuid(), SubjectCode = "PHY101", SubjectName = "Physics" };
+        subjectRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Subject> { s1, s2 });
+
+        var q1 = new Quest { Id = Guid.NewGuid(), SubjectId = s1.Id };
+        questRepo.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Quest> { q1 });
+
+        var result = await sut.Handle(new EnsureMasterQuestsCommand(), CancellationToken.None);
+
+        result.CreatedCount.Should().Be(1);
+        result.ExistingCount.Should().Be(1);
+        await questRepo.Received(1).AddAsync(Arg.Is<Quest>(q =>
+            q.SubjectId == s2.Id &&
+            q.Title.StartsWith(s2.SubjectCode) &&
+            q.IsActive == true &&
+            q.QuestType == QuestType.Practice), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+
     public async Task Handle_NoSubjects_NoCreation()
     {
         var subjectRepo = Substitute.For<ISubjectRepository>();
