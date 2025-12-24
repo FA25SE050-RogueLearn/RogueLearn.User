@@ -7,6 +7,7 @@ public class QuestDetailsDto
     public Guid Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    // Removed IsRecommended, DifficultyLevel, etc.
     public List<QuestStepDto> Steps { get; set; } = new();
 }
 

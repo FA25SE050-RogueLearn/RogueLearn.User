@@ -27,7 +27,8 @@ public class QuestSummaryDto
     public Guid LearningPathId { get; set; }
     public Guid ChapterId { get; set; }
     public Guid? SubjectId { get; set; }
-    public bool IsRecommended { get; set; }
+
+    // Removed IsRecommended as the source property on Quest is deleted.
 
     /// <summary>
     /// Expected difficulty based on user's academic performance: Challenging, Standard, Supportive, Adaptive

@@ -65,11 +65,11 @@ public class GetAllQuestsQueryHandler : IRequestHandler<GetAllQuestsQuery, Pagin
             Title = q.Title,
             Description = q.Description,
             QuestType = q.QuestType.ToString(),
-            DifficultyLevel = q.DifficultyLevel.ToString(),
+            // Removed DifficultyLevel mapping
             Status = q.Status.ToString(),
             IsActive = q.IsActive,
-            IsRecommended = q.IsRecommended,
-            ExpectedDifficulty = q.ExpectedDifficulty,
+            // Removed IsRecommended mapping
+            // Removed ExpectedDifficulty mapping
             SubjectCode = q.SubjectId.HasValue && subjectMap.TryGetValue(q.SubjectId.Value, out var s) ? s.SubjectCode : null,
             SubjectName = q.SubjectId.HasValue && subjectMap.TryGetValue(q.SubjectId.Value, out var sn) ? sn.SubjectName : null,
             CreatedAt = q.CreatedAt,

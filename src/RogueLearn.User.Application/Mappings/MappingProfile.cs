@@ -73,7 +73,17 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.Content, opt => opt.MapFrom(src => ParseJsonContent(src.Content)));
 
         // Class Specialization mappings
-        CreateMap<ClassSpecializationSubject, SpecializationSubjectDto>();
+        // This handles mapping from the JOINED Subject entity directly to the DTO
+        CreateMap<Subject, SpecializationSubjectDto>()
+            .ForMember(dest => dest.SubjectId, opt => opt.MapFrom(src => src.Id))
+            .ForMember(dest => dest.ClassId, opt => opt.Ignore()); // ClassId must be set manually
+
+        // This handles the CREATE command return type mapping
+        CreateMap<ClassSpecializationSubject, SpecializationSubjectDto>()
+             .ForMember(dest => dest.SubjectCode, opt => opt.Ignore()) // Not available on entity
+             .ForMember(dest => dest.SubjectName, opt => opt.Ignore()) // Not available on entity
+             .ForMember(dest => dest.Semester, opt => opt.Ignore());   // Not available on entity
+
         CreateMap<AddSpecializationSubjectCommand, ClassSpecializationSubject>()
             .ForMember(dest => dest.Id, opt => opt.Ignore());
 

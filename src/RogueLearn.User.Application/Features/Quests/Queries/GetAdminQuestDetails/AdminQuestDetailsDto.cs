@@ -8,7 +8,7 @@ public class AdminQuestDetailsDto
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string QuestType { get; set; } = string.Empty;
-    public string DifficultyLevel { get; set; } = string.Empty;
+    // Removed DifficultyLevel
     public string Status { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public string? SubjectCode { get; set; }

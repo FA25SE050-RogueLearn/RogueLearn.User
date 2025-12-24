@@ -39,7 +39,7 @@ public class GetAdminQuestDetailsQueryHandler : IRequestHandler<GetAdminQuestDet
             Title = quest.Title,
             Description = quest.Description,
             QuestType = quest.QuestType.ToString(),
-            DifficultyLevel = quest.DifficultyLevel.ToString(),
+            // Removed DifficultyLevel mapping
             Status = quest.Status.ToString(),
             IsActive = quest.IsActive
         };

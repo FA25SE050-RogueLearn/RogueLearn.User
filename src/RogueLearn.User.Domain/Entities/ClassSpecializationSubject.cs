@@ -11,7 +11,4 @@ public class ClassSpecializationSubject : BaseEntity
 
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
-
-    [Column("semester")]
-    public int Semester { get; set; }
 }

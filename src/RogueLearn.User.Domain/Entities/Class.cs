@@ -9,31 +9,32 @@ namespace RogueLearn.User.Domain.Entities;
 [Table("classes")]
 public class Class : BaseEntity
 {
-  [Column("name")]
-  public string Name { get; set; } = string.Empty;
+    [Column("name")]
+    public string Name { get; set; } = string.Empty;
 
-  [Column("description")]
-  public string? Description { get; set; }
+    [Column("description")]
+    public string? Description { get; set; }
 
-  [Column("roadmap_url")]
-  public string? RoadmapUrl { get; set; }
+    [Column("roadmap_url")]
+    public string? RoadmapUrl { get; set; }
 
-  [Column("skill_focus_areas")]
-  public string[]? SkillFocusAreas { get; set; }
+    [Column("skill_focus_areas")]
+    public string[]? SkillFocusAreas { get; set; }
 
-  [Column("difficulty_level")]
-  [JsonConverter(typeof(StringEnumConverter))]
-  public DifficultyLevel DifficultyLevel { get; set; } = DifficultyLevel.Beginner;
+    [Column("difficulty_level")]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public DifficultyLevel DifficultyLevel { get; set; } = DifficultyLevel.Beginner;
 
-  [Column("estimated_duration_months")]
-  public int? EstimatedDurationMonths { get; set; }
+    [Column("estimated_duration_months")]
+    public int? EstimatedDurationMonths { get; set; }
 
-  [Column("is_active")]
-  public bool IsActive { get; set; } = true;
+    [Column("is_active")]
+    public bool IsActive { get; set; } = true;
 
-  [Column("created_at")]
-  public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
-  [Column("updated_at")]
-  public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    // Made nullable to handle nulls in DB
+    [Column("updated_at")]
+    public DateTimeOffset? UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

@@ -6,7 +6,6 @@ namespace RogueLearn.User.Application.Features.ClassSpecialization.Commands.AddS
 /// FluentValidation rules for <see cref="AddSpecializationSubjectCommand"/>.
 /// Checklist compliance:
 /// - Validate required inputs (ClassId, SubjectId).
-/// - Sanity check for Semester.
 /// - Rely on pipeline behavior to stop early on validation failures.
 /// </summary>
 public class AddSpecializationSubjectCommandValidator : AbstractValidator<AddSpecializationSubjectCommand>
@@ -18,8 +17,5 @@ public class AddSpecializationSubjectCommandValidator : AbstractValidator<AddSpe
 
         RuleFor(x => x.SubjectId)
             .NotEmpty().WithMessage("SubjectId is required.");
-
-        RuleFor(x => x.Semester)
-            .GreaterThan(0).WithMessage("Semester must be greater than 0.");
     }
 }

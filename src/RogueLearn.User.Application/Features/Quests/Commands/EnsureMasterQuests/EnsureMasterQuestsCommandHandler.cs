@@ -56,16 +56,14 @@ public class EnsureMasterQuestsCommandHandler : IRequestHandler<EnsureMasterQues
 
                 // Defaults for Master Shell
                 QuestType = QuestType.Practice,
-                DifficultyLevel = DifficultyLevel.Intermediate,
+                // Removed DifficultyLevel assignment
                 Status = QuestStatus.Draft, // Default state
                 IsActive = true,
 
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
 
-                // Initial Difficulty Metadata
-                ExpectedDifficulty = "Standard",
-                DifficultyReason = "Master Template Default"
+                // Removed ExpectedDifficulty and DifficultyReason assignments
             };
 
             await _questRepository.AddAsync(masterQuest, cancellationToken);

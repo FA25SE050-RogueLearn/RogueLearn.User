@@ -20,7 +20,7 @@ public class GetSpecializationSubjectsQueryHandlerTests
         var sut = new GetSpecializationSubjectsQueryHandler(repo, mapper);
 
         var query = new GetSpecializationSubjectsQuery { ClassId = System.Guid.NewGuid() };
-        var items = new List<ClassSpecializationSubject> { new() { Id = System.Guid.NewGuid(), ClassId = query.ClassId, SubjectId = System.Guid.NewGuid(), Semester = 1 } };
+        var items = new List<ClassSpecializationSubject> { new() { Id = System.Guid.NewGuid(), ClassId = query.ClassId, SubjectId = System.Guid.NewGuid() } };
         repo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<System.Func<ClassSpecializationSubject, bool>>>(), Arg.Any<CancellationToken>()).Returns(items);
         mapper.Map<List<SpecializationSubjectDto>>(items).Returns(new List<SpecializationSubjectDto> { new() { Id = items[0].Id, ClassId = items[0].ClassId, SubjectId = items[0].SubjectId, Semester = items[0].Semester } });
 
