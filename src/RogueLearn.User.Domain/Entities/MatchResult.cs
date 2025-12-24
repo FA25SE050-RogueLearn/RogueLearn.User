@@ -7,7 +7,7 @@ namespace RogueLearn.User.Domain.Entities;
 public class MatchResult : BaseEntity
 {
     [Column("match_id")]
-    public string MatchId { get; set; } = string.Empty;
+    public Guid MatchId { get; set; }
 
     [Column("start_utc")]
     public DateTime StartUtc { get; set; }

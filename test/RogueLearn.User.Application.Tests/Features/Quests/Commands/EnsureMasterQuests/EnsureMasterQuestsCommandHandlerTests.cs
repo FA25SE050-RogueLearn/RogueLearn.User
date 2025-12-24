@@ -75,6 +75,7 @@ public class EnsureMasterQuestsCommandHandlerTests
     }
 
     [Fact]
+
     public async Task Handle_NoSubjects_NoCreation()
     {
         var subjectRepo = Substitute.For<ISubjectRepository>();

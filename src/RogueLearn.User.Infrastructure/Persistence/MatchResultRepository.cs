@@ -12,7 +12,7 @@ public class MatchResultRepository : GenericRepository<MatchResult>, IMatchResul
     {
     }
 
-    public async Task<MatchResult?> GetByMatchIdAsync(string matchId, CancellationToken cancellationToken = default)
+    public async Task<MatchResult?> GetByMatchIdAsync(Guid matchId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
             .From<MatchResult>()

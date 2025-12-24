@@ -175,7 +175,7 @@ try
 
     builder.Services.AddApiServices();
 
-    builder.Services.AddSingleton(sp =>
+    builder.Services.AddSingleton<AudioClient>(sp =>
     {
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("OpenAIAudio");
         var apiKey = Environment.GetEnvironmentVariable("GROQ_API_KEY")
@@ -186,7 +186,7 @@ try
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             logger.LogWarning("OpenAI API key missing; AudioClient will not be usable.");
-            return null;
+            return null!;
         }
 
         var client = new OpenAIClient(

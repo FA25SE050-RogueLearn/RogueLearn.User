@@ -27,6 +27,7 @@ public class GetGuildPostsQueryHandler : IRequestHandler<GetGuildPostsQuery, IEn
             Attachments = p.Attachments,
             IsPinned = p.IsPinned,
             IsLocked = p.IsLocked,
+            IsAnnouncement = p.IsAnnouncement,
             Status = p.Status,
             CommentCount = p.CommentCount,
             LikeCount = p.LikeCount,

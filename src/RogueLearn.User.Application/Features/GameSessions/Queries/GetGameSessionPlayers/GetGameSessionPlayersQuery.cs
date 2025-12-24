@@ -31,15 +31,11 @@ namespace RogueLearn.User.Application.Features.GameSessions.Queries.GetGameSessi
 
         public async Task<IReadOnlyList<GetGameSessionPlayersResponse>> Handle(GetGameSessionPlayersQuery request, CancellationToken cancellationToken)
         {
-            var summaries = await _matchPlayerSummaryRepository.GetBySessionIdAsync(request.SessionId);
-
-            if (summaries.Count == 0)
+            var summaries = new List<MatchPlayerSummary>();
+            var session = await _gameSessionRepository.GetBySessionIdAsync(request.SessionId);
+            if (session?.MatchResultId != null)
             {
-                var session = await _gameSessionRepository.GetBySessionIdAsync(request.SessionId);
-                if (session?.MatchResultId != null)
-                {
-                    summaries = await _matchPlayerSummaryRepository.GetByMatchResultIdAsync(session.MatchResultId.Value);
-                }
+                summaries = await _matchPlayerSummaryRepository.GetByMatchResultIdAsync(session.MatchResultId.Value);
             }
 
             var list = summaries.Select(s =>
