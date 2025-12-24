@@ -55,4 +55,12 @@ public class MeetingRepository : IMeetingRepository
     {
         await _client.From<Meeting>().Update(entity, cancellationToken: cancellationToken);
     }
+
+    public async Task DeleteAsync(Guid meetingId, CancellationToken cancellationToken = default)
+    {
+        await _client
+            .From<Meeting>()
+            .Where(m => m.MeetingId == meetingId)
+            .Delete(cancellationToken: cancellationToken);
+    }
 }

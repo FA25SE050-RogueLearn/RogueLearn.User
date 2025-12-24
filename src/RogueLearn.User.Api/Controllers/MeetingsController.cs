@@ -5,6 +5,7 @@ using RogueLearn.User.Application.Features.Meetings.Commands.CreateOrUpdateSumma
 using RogueLearn.User.Application.Features.Meetings.Commands.ProcessArtifactsAndSummarize;
 using RogueLearn.User.Application.Features.Meetings.Commands.UpsertMeeting;
 using RogueLearn.User.Application.Features.Meetings.Commands.UpsertParticipants;
+using RogueLearn.User.Application.Features.Meetings.Commands.DeleteMeeting;
 using RogueLearn.User.Application.Features.Meetings.Queries.GetMeetingDetails;
 using RogueLearn.User.Application.Features.Meetings.DTOs;
 using RogueLearn.User.Application.Features.Meetings.Queries.GetPartyMeetings;
@@ -81,6 +82,14 @@ public class MeetingsController : ControllerBase
     {
         var result = await _mediator.Send(new GetGuildMeetingsQuery(guildId), cancellationToken);
         return Ok(result);
+    }
+
+    [HttpDelete("{meetingId}")]
+    public async Task<ActionResult> DeleteMeeting([FromRoute] Guid meetingId, CancellationToken cancellationToken)
+    {
+        var authUserId = User.GetAuthUserId();
+        await _mediator.Send(new DeleteMeetingCommand(meetingId, authUserId), cancellationToken);
+        return NoContent();
     }
 }
 

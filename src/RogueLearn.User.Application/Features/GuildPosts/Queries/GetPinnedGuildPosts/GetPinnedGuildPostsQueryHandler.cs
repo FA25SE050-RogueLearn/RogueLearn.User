@@ -23,6 +23,7 @@ public class GetPinnedGuildPostsQueryHandler : IRequestHandler<GetPinnedGuildPos
             Attachments = p.Attachments,
             IsPinned = p.IsPinned,
             IsLocked = p.IsLocked,
+            IsAnnouncement = p.IsAnnouncement,
             Status = p.Status,
             CreatedAt = p.CreatedAt,
             UpdatedAt = p.UpdatedAt

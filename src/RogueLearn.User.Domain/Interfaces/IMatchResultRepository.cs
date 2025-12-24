@@ -5,7 +5,7 @@ namespace RogueLearn.User.Domain.Interfaces;
 
 public interface IMatchResultRepository : IGenericRepository<MatchResult>
 {
-    Task<MatchResult?> GetByMatchIdAsync(string matchId, CancellationToken cancellationToken = default);
+    Task<MatchResult?> GetByMatchIdAsync(Guid matchId, CancellationToken cancellationToken = default);
     Task<List<MatchResult>> GetRecentMatchesAsync(int limit = 10, CancellationToken cancellationToken = default);
     Task<List<MatchResult>> GetMatchesByUserAsync(Guid userId, int limit = 10, CancellationToken cancellationToken = default);
 }

@@ -9,9 +9,6 @@ public class MatchPlayerSummary : BaseEntity
     [Column("match_result_id")]
     public Guid MatchResultId { get; set; }
 
-    [Column("session_id")]
-    public Guid? SessionId { get; set; }
-
     [Column("user_id")]
     public Guid? UserId { get; set; }
 
