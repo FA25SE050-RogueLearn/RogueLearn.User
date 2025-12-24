@@ -597,8 +597,7 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
                 var ingestCmd = new IngestXpEventCommand
                 {
                     AuthUserId = summary.UserId.Value,
-                    SourceService = "UserService",
-                    SourceType = SkillRewardSourceType.BossFight.ToString(),
+                    SourceService = SkillRewardSourceType.BossFight.ToString(),
                     SourceId = match.Id,
                     SkillId = skill.Id,
                     Points = points,

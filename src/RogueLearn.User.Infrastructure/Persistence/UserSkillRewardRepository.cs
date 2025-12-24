@@ -1,6 +1,7 @@
 using BuildingBlocks.Shared.Repositories;
 using RogueLearn.User.Domain.Entities;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Enums;
 using Supabase;
 using static Supabase.Postgrest.Constants;
 
@@ -12,24 +13,24 @@ public class UserSkillRewardRepository : GenericRepository<UserSkillReward>, IUs
     {
     }
 
-    public async Task<UserSkillReward?> GetBySourceAsync(Guid authUserId, string sourceService, Guid sourceId, CancellationToken cancellationToken = default)
+    public async Task<UserSkillReward?> GetBySourceAsync(Guid authUserId, SkillRewardSourceType sourceService, Guid sourceId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
             .From<UserSkillReward>()
             .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
-            .Filter("source_service", Operator.Equals, sourceService)
+            .Filter("source_service", Operator.Equals, sourceService.ToString()) // Enum to string
             .Filter("source_id", Operator.Equals, sourceId.ToString())
             .Single(cancellationToken);
 
         return response;
     }
 
-    public async Task<UserSkillReward?> GetBySourceAndSkillAsync(Guid authUserId, string sourceService, Guid sourceId, Guid skillId, CancellationToken cancellationToken = default)
+    public async Task<UserSkillReward?> GetBySourceAndSkillAsync(Guid authUserId, SkillRewardSourceType sourceService, Guid sourceId, Guid skillId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
             .From<UserSkillReward>()
             .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
-            .Filter("source_service", Operator.Equals, sourceService)
+            .Filter("source_service", Operator.Equals, sourceService.ToString()) // Enum to string
             .Filter("source_id", Operator.Equals, sourceId.ToString())
             .Filter("skill_id", Operator.Equals, skillId.ToString())
             .Single(cancellationToken);
@@ -37,12 +38,12 @@ public class UserSkillRewardRepository : GenericRepository<UserSkillReward>, IUs
         return response;
     }
 
-    public async Task<IEnumerable<UserSkillReward>> GetBySourceAllAsync(Guid authUserId, string sourceService, Guid sourceId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserSkillReward>> GetBySourceAllAsync(Guid authUserId, SkillRewardSourceType sourceService, Guid sourceId, CancellationToken cancellationToken = default)
     {
         var response = await _supabaseClient
             .From<UserSkillReward>()
             .Filter("auth_user_id", Operator.Equals, authUserId.ToString())
-            .Filter("source_service", Operator.Equals, sourceService)
+            .Filter("source_service", Operator.Equals, sourceService.ToString()) // Enum to string
             .Filter("source_id", Operator.Equals, sourceId.ToString())
             .Get(cancellationToken);
 

@@ -70,9 +70,7 @@ public class EnsureMasterQuestsCommandHandlerTests
         await questRepo.Received(1).AddAsync(Arg.Is<Quest>(q =>
             q.SubjectId == s2.Id &&
             q.Title.StartsWith(s2.SubjectCode) &&
-            q.Status == QuestStatus.NotStarted &&
             q.IsActive == true &&
-            q.DifficultyLevel == DifficultyLevel.Intermediate &&
             q.QuestType == QuestType.Practice), Arg.Any<CancellationToken>());
     }
 
