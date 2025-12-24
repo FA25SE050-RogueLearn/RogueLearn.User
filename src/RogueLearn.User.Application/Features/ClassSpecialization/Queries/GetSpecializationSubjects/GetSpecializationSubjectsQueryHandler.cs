@@ -17,7 +17,20 @@ public class GetSpecializationSubjectsQueryHandler : IRequestHandler<GetSpeciali
 
     public async Task<List<SpecializationSubjectDto>> Handle(GetSpecializationSubjectsQuery request, CancellationToken cancellationToken)
     {
-        var mappings = await _repository.FindAsync(m => m.ClassId == request.ClassId, cancellationToken);
-        return _mapper.Map<List<SpecializationSubjectDto>>(mappings);
+        // Use the specialized method that joins and returns Subject entities directly
+        var subjects = await _repository.GetSubjectByClassIdAsync(request.ClassId, cancellationToken);
+
+        // Map Subject entities to SpecializationSubjectDto
+        // We do this manually or via mapper configuration update. 
+        // For simplicity and clarity here, manual projection ensures correct mapping.
+        return subjects.Select(s => new SpecializationSubjectDto
+        {
+            Id = s.Id, // Subject ID
+            SubjectId = s.Id,
+            ClassId = request.ClassId, // Contextual ID
+            SubjectCode = s.SubjectCode,
+            SubjectName = s.SubjectName,
+            Semester = s.Semester
+        }).OrderBy(s => s.Semester).ThenBy(s => s.SubjectCode).ToList();
     }
 }

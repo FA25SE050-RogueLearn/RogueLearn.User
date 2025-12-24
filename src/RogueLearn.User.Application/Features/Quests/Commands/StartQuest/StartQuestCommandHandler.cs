@@ -125,9 +125,10 @@ public class StartQuestCommandHandler : IRequestHandler<StartQuestCommand, Start
             var difficultyInfo = _difficultyResolver.ResolveDifficulty(subjectRecord, prerequisiteProficiency);
             calculatedDifficulty = difficultyInfo.ExpectedDifficulty;
         }
-        else if (!string.IsNullOrEmpty(quest.ExpectedDifficulty))
+        else
         {
-            calculatedDifficulty = quest.ExpectedDifficulty;
+            // Fallback for non-academic quests: Default to Standard
+            calculatedDifficulty = "Standard";
         }
 
         // --- RESOLVE CURRENT STEP ID ---

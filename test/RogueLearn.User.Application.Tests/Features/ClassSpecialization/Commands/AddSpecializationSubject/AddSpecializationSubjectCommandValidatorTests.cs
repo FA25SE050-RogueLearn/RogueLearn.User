@@ -15,7 +15,6 @@ public class AddSpecializationSubjectCommandValidatorTests
         {
             ClassId = Guid.NewGuid(),
             SubjectId = Guid.NewGuid(),
-            Semester = 1
      
         };
         var result = v.Validate(cmd);

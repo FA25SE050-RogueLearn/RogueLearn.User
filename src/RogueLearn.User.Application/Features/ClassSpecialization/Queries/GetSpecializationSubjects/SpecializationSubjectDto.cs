@@ -2,15 +2,11 @@ namespace RogueLearn.User.Application.Features.ClassSpecialization.Queries.GetSp
 
 public class SpecializationSubjectDto
 {
+    // Id is the SubjectId now, since we are returning Subject details directly
     public Guid Id { get; set; }
     public Guid ClassId { get; set; }
     public Guid SubjectId { get; set; }
-    // Removed PlaceholderSubjectCode
-    public int Semester { get; set; }
-
-    // NOTE: In the future, you should add these to the DTO and populate them via JOIN
-    // so the Frontend doesn't have to fetch them separately. 
-    // For now, I am keeping the DTO minimal to match your current refactor.
-    // public string SubjectCode { get; set; }
-    // public string SubjectName { get; set; }
+    public string SubjectCode { get; set; } = string.Empty;
+    public string SubjectName { get; set; } = string.Empty;
+    public int? Semester { get; set; }
 }

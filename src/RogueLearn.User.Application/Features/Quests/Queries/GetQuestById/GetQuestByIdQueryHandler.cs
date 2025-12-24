@@ -66,10 +66,10 @@ public class GetQuestByIdQueryHandler : IRequestHandler<GetQuestByIdQuery, Quest
                 targetDifficulty = difficultyInfo.ExpectedDifficulty;
             }
         }
-        else if (!string.IsNullOrEmpty(quest.ExpectedDifficulty))
+        else
         {
-            // Fallback for anonymous or generic requests
-            targetDifficulty = quest.ExpectedDifficulty;
+            // Anonymous or fallback
+            targetDifficulty = "Standard";
         }
 
         // 2. Fetch all steps for this Master Quest

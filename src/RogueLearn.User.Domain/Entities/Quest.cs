@@ -19,10 +19,6 @@ public class Quest : BaseEntity
     [JsonConverter(typeof(StringEnumConverter))]
     public QuestType QuestType { get; set; }
 
-    [Column("difficulty_level")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public DifficultyLevel DifficultyLevel { get; set; }
-
     [Column("quest_status")]
     [JsonConverter(typeof(StringEnumConverter))]
     public QuestStatus Status { get; set; } = QuestStatus.Draft;
@@ -38,13 +34,4 @@ public class Quest : BaseEntity
 
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
-    [Column("is_recommended")]
-    public bool IsRecommended { get; set; } = false;
-
-    [Column("expected_difficulty")]
-    public string ExpectedDifficulty { get; set; } = "Standard";
-
-    [Column("difficulty_reason")]
-    public string? DifficultyReason { get; set; }
-
 }
