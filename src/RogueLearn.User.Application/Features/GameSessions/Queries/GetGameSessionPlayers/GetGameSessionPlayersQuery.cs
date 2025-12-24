@@ -1,5 +1,6 @@
 using MediatR;
 using RogueLearn.User.Domain.Interfaces;
+using RogueLearn.User.Domain.Entities;
 using System.Text.Json;
 
 namespace RogueLearn.User.Application.Features.GameSessions.Queries.GetGameSessionPlayers

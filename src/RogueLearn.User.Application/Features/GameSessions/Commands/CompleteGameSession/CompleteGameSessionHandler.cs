@@ -30,7 +30,7 @@ public sealed class CompleteGameSessionHandler : IRequestHandler<CompleteGameSes
             gameSession.Status = "completed";
             gameSession.CompletedAt = DateTimeOffset.UtcNow;
 
-            var existingMatch = await _matchResultRepository.GetByMatchIdAsync(request.SessionId.ToString(), cancellationToken);
+            var existingMatch = await _matchResultRepository.GetByMatchIdAsync(request.SessionId, cancellationToken);
             if (existingMatch != null)
             {
                 gameSession.MatchResultId = existingMatch.Id;
