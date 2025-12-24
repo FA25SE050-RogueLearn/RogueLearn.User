@@ -14,7 +14,9 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
     private readonly IGameSessionRepository _gameSessionRepository;
     private readonly IMatchPlayerSummaryRepository _matchPlayerSummaryRepository;
     private readonly IUserSkillRewardRepository _userSkillRewardRepository;
-    private readonly ISkillRepository _skillRepository; // Added dependency
+    private readonly ISkillRepository _skillRepository;
+    private readonly ISubjectRepository _subjectRepository;
+    private readonly ISubjectSkillMappingRepository _subjectSkillMappingRepository;
     private readonly ILogger<GetUnityMatchesQueryHandler> _logger;
 
     public GetUnityMatchesQueryHandler(
@@ -22,14 +24,18 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
         IGameSessionRepository gameSessionRepository,
         IMatchPlayerSummaryRepository matchPlayerSummaryRepository,
         IUserSkillRewardRepository userSkillRewardRepository,
-        ISkillRepository skillRepository, // Injected
+        ISkillRepository skillRepository,
+        ISubjectRepository subjectRepository,
+        ISubjectSkillMappingRepository subjectSkillMappingRepository,
         ILogger<GetUnityMatchesQueryHandler> logger)
     {
         _matchResultRepository = matchResultRepository;
         _gameSessionRepository = gameSessionRepository;
         _matchPlayerSummaryRepository = matchPlayerSummaryRepository;
         _userSkillRewardRepository = userSkillRewardRepository;
-        _skillRepository = skillRepository; // Assigned
+        _skillRepository = skillRepository;
+        _subjectRepository = subjectRepository;
+        _subjectSkillMappingRepository = subjectSkillMappingRepository;
         _logger = logger;
     }
 
@@ -85,25 +91,11 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
                     needsQuestions = true;
                 }
 
+                GameSession? session = null;
+
                 if (needsQuestions)
                 {
-                    GameSession? session = null;
-
-                    if (m.Id != Guid.Empty)
-                    {
-                        session = await _gameSessionRepository.GetByMatchResultIdAsync(m.Id, cancellationToken);
-                    }
-
-                    if (session == null && m.MatchId != Guid.Empty)
-                    {
-                        session = await _gameSessionRepository.GetBySessionIdAsync(m.MatchId, cancellationToken);
-                    }
-
-                    if (session == null && m.UserId.HasValue)
-                    {
-                        var recentSessions = await _gameSessionRepository.GetRecentSessionsByUserAsync(m.UserId.Value, 10, cancellationToken);
-                        session = recentSessions.FirstOrDefault();
-                    }
+                    session = await GetSessionForMatchAsync(m, cancellationToken);
 
                     if (session != null && !string.IsNullOrWhiteSpace(session.QuestionPackJson))
                     {
@@ -146,7 +138,11 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
                         }
                         else
                         {
-                            matchData = AttachFallbackComputedXp(matchData, rewardUserId.Value, m.TotalPlayers);
+                            if (session == null)
+                            {
+                                session = await GetSessionForMatchAsync(m, cancellationToken);
+                            }
+                            matchData = await AttachFallbackComputedXpAsync(matchData, rewardUserId.Value, m.TotalPlayers, session, cancellationToken);
                         }
                     }
                     catch (Exception xpEx)
@@ -196,7 +192,7 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
     }
 
     // Fallback: compute XP purely from match data topics when no persisted rewards exist.
-    private static string AttachFallbackComputedXp(string matchData, Guid rewardUserId, int totalPlayers)
+    private async Task<string> AttachFallbackComputedXpAsync(string matchData, Guid rewardUserId, int totalPlayers, GameSession? session, CancellationToken cancellationToken)
     {
         try
         {
@@ -219,45 +215,50 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
             var totalXp = (int)Math.Round(baseXp * resultFactor * teamFactor, MidpointRounding.AwayFromZero);
             if (totalXp <= 0) return matchData;
 
-            var topics = targetSummary["topicBreakdown"] as JsonArray;
-            if (topics == null || topics.Count == 0) return matchData;
-
-            var topicRows = topics
-                .OfType<JsonObject>()
-                .Select(t => new
-                {
-                    topic = t["topic"]?.ToString() ?? "Unknown",
-                    total = ToInt(t["total"])
-                })
-                .Where(t => t.total > 0)
-                .ToList();
-
-            var topicTotal = topicRows.Sum(t => t.total);
-            if (topicTotal <= 0) return matchData;
-
-            var topicPortion = (int)Math.Round(totalXp * 0.6, MidpointRounding.AwayFromZero);
-            var xpArr = new JsonArray();
-            int awardedTotal = 0;
-
-            foreach (var row in topicRows)
+            // Attempt to map using session subject first
+            if (session != null && !string.IsNullOrWhiteSpace(session.Subject))
             {
-                var share = Math.Clamp((double)row.total / topicTotal, 0, 1);
-                var topicXp = (int)Math.Round(topicPortion * share, MidpointRounding.AwayFromZero);
-                if (topicXp <= 0) continue;
-                awardedTotal += topicXp;
-                xpArr.Add(new JsonObject
+                var subject = await _subjectRepository.GetByCodeAsync(session.Subject, cancellationToken);
+                if (subject != null)
                 {
-                    ["skillName"] = row.topic,
-                    ["pointsAwarded"] = topicXp
-                });
+                    var mappings = await _subjectSkillMappingRepository.GetMappingsBySubjectIdsAsync(new[] { subject.Id }, cancellationToken);
+                    if (mappings.Any())
+                    {
+                        var allSkills = await _skillRepository.GetAllAsync(cancellationToken);
+                        var skillMap = allSkills.ToDictionary(s => s.Id, s => s.Name);
+
+                        var xpArr = new JsonArray();
+                        var totalWeight = mappings.Sum(m => m.RelevanceWeight);
+                        if (totalWeight <= 0) totalWeight = mappings.Count();
+
+                        int awardedTotal = 0;
+                        foreach (var mapping in mappings)
+                        {
+                            if (!skillMap.TryGetValue(mapping.SkillId, out var skillName)) continue;
+                            var portion = (double)mapping.RelevanceWeight / (double)totalWeight;
+                            var points = (int)Math.Round(totalXp * portion, MidpointRounding.AwayFromZero);
+                            if (points <= 0) continue;
+
+                            awardedTotal += points;
+                            xpArr.Add(new JsonObject
+                            {
+                                ["skillName"] = skillName,
+                                ["pointsAwarded"] = points
+                            });
+                        }
+
+                        if (xpArr.Count > 0)
+                        {
+                            root["xpRewards"] = xpArr;
+                            root["xpTotal"] = awardedTotal;
+                            return root.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+                        }
+                    }
+                }
             }
 
-            if (xpArr.Count > 0)
-            {
-                root["xpRewards"] = xpArr;
-                root["xpTotal"] = awardedTotal;
-                return root.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
-            }
+            // If no mappings found, return matchData without "fake" topic rewards.
+            return matchData;
         }
         catch
         {
@@ -265,6 +266,29 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
         }
 
         return matchData;
+    }
+
+    private async Task<GameSession?> GetSessionForMatchAsync(MatchResult m, CancellationToken cancellationToken)
+    {
+        GameSession? session = null;
+
+        if (m.Id != Guid.Empty)
+        {
+            session = await _gameSessionRepository.GetByMatchResultIdAsync(m.Id, cancellationToken);
+        }
+
+        if (session == null && m.MatchId != Guid.Empty)
+        {
+            session = await _gameSessionRepository.GetBySessionIdAsync(m.MatchId, cancellationToken);
+        }
+
+        if (session == null && m.UserId.HasValue)
+        {
+            var recentSessions = await _gameSessionRepository.GetRecentSessionsByUserAsync(m.UserId.Value, 10, cancellationToken);
+            session = recentSessions.FirstOrDefault();
+        }
+
+        return session;
     }
 
     private static int ToInt(JsonNode? node)
