@@ -45,7 +45,13 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
 
     public async Task<SubmitUnityMatchResultResponse> Handle(SubmitUnityMatchResultCommand command, CancellationToken cancellationToken)
     {
-        var matchId = string.IsNullOrWhiteSpace(command.MatchId) ? Guid.NewGuid().ToString() : command.MatchId;
+        var matchIdStr = string.IsNullOrWhiteSpace(command.MatchId) ? Guid.NewGuid().ToString() : command.MatchId;
+        if (!Guid.TryParse(matchIdStr, out var matchId))
+        {
+            _logger.LogWarning("[Unity Match] Invalid MatchId GUID '{MatchIdStr}', generated new GUID", matchIdStr);
+            matchId = Guid.NewGuid();
+        }
+
         var result = NormalizeResult(command.Result);
         var scene = string.IsNullOrWhiteSpace(command.Scene) ? "unknown" : command.Scene!;
         var normalizedStart = NormalizeUtc(command.StartUtc == default ? DateTime.UtcNow.AddMinutes(-5) : command.StartUtc);
@@ -55,13 +61,13 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
         MatchResult savedMatch;
         try
         {
-            resolvedSession = await ResolveSessionForMatchAsync(matchId, command.UserId, command.JoinCode, normalizedEnd, cancellationToken);
+            resolvedSession = await ResolveSessionForMatchAsync(matchId.ToString(), command.UserId, command.JoinCode, normalizedEnd, cancellationToken);
             var incomingMatchData = resolvedSession != null
                 ? MergeQuestionPackIntoMatchData(command.RawJson, resolvedSession.QuestionPackJson, resolvedSession.SessionId)
                 : command.RawJson;
 
             MatchResult? existingMatch = null;
-            if (!string.IsNullOrWhiteSpace(matchId))
+            if (matchId != Guid.Empty)
             {
                 try
                 {
@@ -154,18 +160,16 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
         {
             GameSession? session = resolvedSession;
 
-            if (session == null && Guid.TryParse(savedMatch.MatchId, out var sessionGuid))
+            if (session == null)
             {
+                // savedMatch.MatchId is Guid, so it corresponds to sessionGuid if valid
+                var sessionGuid = savedMatch.MatchId;
                 _logger.LogInformation("[Unity Match] Parsed sessionGuid: {SessionGuid}", sessionGuid);
                 session = await _gameSessionRepository.GetBySessionIdAsync(sessionGuid, cancellationToken);
                 if (session != null)
                 {
                     _logger.LogInformation("[Unity Match] Found game session by exact GUID");
                 }
-            }
-            else if (session == null)
-            {
-                _logger.LogInformation("[Unity Match] Could not parse MatchId '{MatchId}' as GUID", savedMatch.MatchId);
             }
 
             if (session == null && savedMatch.UserId.HasValue)
@@ -240,16 +244,7 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
 
         try
         {
-            var sessionIdForSummaries = linkedSession?.SessionId
-                ?? resolvedSession?.SessionId
-                ?? ExtractSessionIdFromMatchData(savedMatch.MatchDataJson);
-
-            if (!sessionIdForSummaries.HasValue && Guid.TryParse(savedMatch.MatchId, out var parsed))
-            {
-                sessionIdForSummaries = parsed;
-            }
-
-            var playerSummaries = ExtractPlayerSummaries(command.RawJson, savedMatch.Id, sessionIdForSummaries, command.UserId);
+            var playerSummaries = ExtractPlayerSummaries(command.RawJson, savedMatch.Id, command.UserId);
 
             await _matchPlayerSummaryRepository.DeleteByMatchResultIdAsync(savedMatch.Id, cancellationToken);
             if (playerSummaries.Count > 0)
@@ -267,7 +262,7 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
         return new SubmitUnityMatchResultResponse
         {
             Success = true,
-            MatchId = savedMatch.MatchId,
+            MatchId = savedMatch.MatchId.ToString(),
             SessionId = linkedSession?.SessionId
         };
     }
@@ -653,7 +648,7 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
 
     private record TopicRow(string Topic, int Total, int Correct);
 
-    private static List<MatchPlayerSummary> ExtractPlayerSummaries(string rawJson, Guid matchResultId, Guid? sessionId, Guid? defaultUserId)
+    private static List<MatchPlayerSummary> ExtractPlayerSummaries(string rawJson, Guid matchResultId, Guid? defaultUserId)
     {
         var results = new List<MatchPlayerSummary>();
         if (string.IsNullOrWhiteSpace(rawJson)) return results;
@@ -681,7 +676,6 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
                 var entity = new MatchPlayerSummary
                 {
                     MatchResultId = matchResultId,
-                    SessionId = sessionId,
                     UserId = ParseGuid(node["user_id"]) ?? defaultUserId ?? rootUserId,
                     ClientId = ParseLong(node["client_id"]),
                     TotalQuestions = totalQuestions,
@@ -701,7 +695,6 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
                 var entity = new MatchPlayerSummary
                 {
                     MatchResultId = matchResultId,
-                    SessionId = sessionId,
                     ClientId = ParseLong(node["playerId"]),
                     UserId = ParseGuid(node["userId"]) ?? defaultUserId ?? rootUserId,
                     TotalQuestions = GetIntFromNode(node, "totalQuestions"),
@@ -727,7 +720,6 @@ public sealed class SubmitUnityMatchResultHandler : IRequestHandler<SubmitUnityM
             results.Add(new MatchPlayerSummary
             {
                 MatchResultId = matchResultId,
-                SessionId = sessionId,
                 UserId = defaultUserId ?? rootUserId,
                 ClientId = null,
                 TotalQuestions = 0,

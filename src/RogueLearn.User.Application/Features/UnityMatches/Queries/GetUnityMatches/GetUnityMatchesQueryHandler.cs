@@ -90,9 +90,9 @@ public class GetUnityMatchesQueryHandler : IRequestHandler<GetUnityMatchesQuery,
                         session = await _gameSessionRepository.GetByMatchResultIdAsync(m.Id, cancellationToken);
                     }
 
-                    if (session == null && Guid.TryParse(m.MatchId, out var sessionGuid))
+                    if (session == null && m.MatchId != Guid.Empty)
                     {
-                        session = await _gameSessionRepository.GetBySessionIdAsync(sessionGuid, cancellationToken);
+                        session = await _gameSessionRepository.GetBySessionIdAsync(m.MatchId, cancellationToken);
                     }
 
                     if (session == null && m.UserId.HasValue)

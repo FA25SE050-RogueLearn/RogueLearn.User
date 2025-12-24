@@ -21,15 +21,6 @@ public class MatchPlayerSummaryRepository : GenericRepository<MatchPlayerSummary
         return response.Models;
     }
 
-    public async Task<List<MatchPlayerSummary>> GetBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
-    {
-        var response = await _supabaseClient
-            .From<MatchPlayerSummary>()
-            .Where(x => x.SessionId == sessionId)
-            .Get(cancellationToken);
-        return response.Models;
-    }
-
     public async Task DeleteByMatchResultIdAsync(Guid matchResultId, CancellationToken cancellationToken = default)
     {
         await _supabaseClient
